@@ -1,3 +1,5 @@
-import LogoLightCore
+// Run with: swift run LogoLightTests
 
-print("No tests yet.")
+let harness = TestHarness()
+statusReaderTests(harness)
+harness.finish()
