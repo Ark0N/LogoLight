@@ -8,6 +8,8 @@ public final class LogoController {
     private let sudo: PasswordlessSudo
     private let isRuleInstalled: @MainActor () -> Bool
     private let verificationTimeout: Duration
+    /// The setting this process last applied, for when the LED can't show it.
+    private var lastApplied: LogoIllumination?
 
     public init(
         reader: LogoStatusReader = LogoStatusReader(),
@@ -23,7 +25,16 @@ public final class LogoController {
         self.verificationTimeout = verificationTimeout
     }
 
-    public func status() -> LogoStatus { reader.read() }
+    public func status() -> LogoStatus {
+        var status = reader.read()
+        // When the LED can't tell us (screen off, lid closed), the NVRAM copy may be out of
+        // date, but a setting we applied ourselves is known to be current.
+        if status.isSupported, status.source != .led, let lastApplied {
+            status.setting = lastApplied
+            status.source = .lastApplied
+        }
+        return status
+    }
 
     public var isPasswordlessEnabled: Bool { isRuleInstalled() }
 
@@ -37,6 +48,7 @@ public final class LogoController {
         } catch where target == .on && CoreBrightnessSetting.isMissingKeyError(error) {
             // Nothing to delete: the setting is already at its default (on).
         }
+        lastApplied = target
         return try await waitForSetting(target)
     }
 
@@ -84,11 +96,12 @@ public final class LogoController {
         try admin.run(script: command.shellString, prompt: prompt)
     }
 
+    /// Waits for the LED to follow the new setting, when the LED can be observed.
     private func waitForSetting(_ target: LogoIllumination) async throws -> LogoStatus {
         let deadline = ContinuousClock.now + verificationTimeout
         while true {
             let current = status()
-            if current.setting == target { return current }
+            if current.source != .led || current.setting == target { return current }
             if ContinuousClock.now >= deadline { throw LogoLightError.notApplied(expected: target) }
             try await Task.sleep(for: .milliseconds(100))
         }

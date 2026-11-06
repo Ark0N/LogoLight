@@ -1,19 +1,24 @@
 import Foundation
 import LogoLightCore
 
-/// A simulated PROLED MacBook Pro: the `LEBacklightMode` default, its NVRAM mirror,
-/// the logo's PWM device, and the ways a command can reach root.
-final class SimulatedMac: RegistryReading, @unchecked Sendable {
+/// A simulated PROLED MacBook Pro, modelled on how the real one behaves: the LED follows
+/// the `LEBacklightMode` default immediately, but the NVRAM copy keeps its value from boot.
+final class SimulatedMac: HardwareReading, @unchecked Sendable {
     /// The root `com.apple.CoreBrightness` `LEBacklightMode` value, `nil` when deleted.
     var backlightMode: Int?
     var hasLogo = true
-    /// When false, the NVRAM mirror ignores changes (simulates corebrightnessd not responding).
+    var displayAwake = true
+    /// When false, corebrightnessd ignores changes to the default.
     var daemonResponds = true
-    private var mirroredSetting = "true"
+    /// What corebrightnessd is currently applying.
+    private var appliedOn: Bool
+    /// The NVRAM copy, written at boot and not again during the session.
+    let nvramCopy: String
 
     init(backlightMode: Int? = nil) {
         self.backlightMode = backlightMode
-        mirroredSetting = backlightMode == 0 ? "false" : "true"
+        appliedOn = backlightMode != 0
+        nvramCopy = appliedOn ? "true" : "false"
     }
 
     /// Applies a command as root, the way `defaults` would.
@@ -31,17 +36,19 @@ final class SimulatedMac: RegistryReading, @unchecked Sendable {
         default:
             return // e.g. the sudoers install script
         }
-        if daemonResponds { mirroredSetting = backlightMode == 0 ? "false" : "true" }
+        if daemonResponds { appliedOn = backlightMode != 0 }
     }
 
     func nvramValue(forKey key: String) -> Data? {
-        hasLogo && key == LogoHardware.nvramKey ? Data(mirroredSetting.utf8) : nil
+        hasLogo && key == LogoHardware.nvramKey ? Data(nvramCopy.utf8) : nil
     }
 
     func serviceProperties(named name: String) -> [String: Any]? {
         guard hasLogo, name == LogoHardware.pwmDeviceName else { return nil }
-        return ["enabled": mirroredSetting == "true", "high-period": 201, "low-period": 759]
+        return ["enabled": appliedOn && displayAwake, "high-period": 201, "low-period": 759]
     }
+
+    func isBuiltInDisplayAwake() -> Bool? { displayAwake }
 }
 
 @MainActor
@@ -90,7 +97,7 @@ private struct Fixture {
         admin = FakeAdminShell(mac: mac)
         sudo = FakeSudo(mac: mac, allowed: sudoAllows ?? ruleInstalled)
         controller = LogoController(
-            reader: LogoStatusReader(registry: mac),
+            reader: LogoStatusReader(hardware: mac),
             admin: admin,
             sudo: sudo,
             isRuleInstalled: { ruleInstalled },
@@ -107,6 +114,8 @@ func controllerTests(_ t: TestHarness) async {
         let f = Fixture()
         let status = try await f.controller.set(.off)
         t.expectEqual(status.setting, .off)
+        t.expectEqual(status.source, .led)
+        t.expectEqual(status.isLit, false)
         t.expectEqual(f.mac.backlightMode, 0)
         t.expectEqual(f.admin.scripts, [CoreBrightnessSetting.command(for: .off).shellString])
         t.expect(f.sudo.commands.isEmpty, "sudo shouldn't be tried without the rule")
@@ -165,6 +174,26 @@ func controllerTests(_ t: TestHarness) async {
         f.mac.daemonResponds = false
         do { try await f.controller.set(.off); t.expect(false, "should throw") }
         catch { t.expectEqual(error as? LogoLightError, .notApplied(expected: .off)) }
+    }
+
+    await t.test("reports the new setting even though the NVRAM copy is stale") {
+        let f = Fixture()
+        try await f.controller.set(.off)
+        t.expectEqual(f.mac.nvramCopy, "true")
+        t.expectEqual(f.controller.status().setting, .off)
+    }
+
+    await t.test("trusts the setting it applied while the screen is off") {
+        let f = Fixture()
+        f.mac.displayAwake = false
+        let status = try await f.controller.set(.off)
+        t.expectEqual(status.setting, .off)
+        t.expectEqual(status.source, .lastApplied)
+        t.expectEqual(f.controller.status().setting, .off)
+
+        f.mac.displayAwake = true
+        t.expectEqual(f.controller.status().source, .led)
+        t.expectEqual(f.controller.status().setting, .off)
     }
 
     await t.test("refuses to run on a Mac without an illuminated logo") {
