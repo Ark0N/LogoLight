@@ -1,3 +1,3 @@
 import LogoLightCore
 
-print("LogoLight \(LogoLightCore.version)")
+print("LogoLight")
