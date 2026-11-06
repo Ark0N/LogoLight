@@ -27,15 +27,21 @@ LogoLight runs exactly those commands. There's no brightness control: while it's
 macOS sets the brightness automatically from the screen brightness and ambient light.
 The setting applies to every user account, and also in macOS Recovery.
 
-**Reading the state needs no password.** `corebrightnessd` mirrors the setting into the
-`bklb-backlight-enabled` NVRAM variable, and the logo's LED is driven by the
-`bklb-backlight` PWM device. LogoLight reads both from the I/O Registry, so it can show
-the setting and the LED's live output level (its PWM duty cycle):
+**Reading the state needs no password.** The logo's LED is driven by the `bklb-backlight`
+PWM device, which LogoLight reads from the I/O Registry:
 
 ```sh
-nvram bklb-backlight-enabled                                        # true / false
 ioreg -r -n bklb-backlight@0 | grep -E '"(enabled|high-period|low-period)"'
 ```
+
+While the screen is on, the logo is lit exactly when the setting is on, and `enabled`
+changes the moment the setting does. `high-period / (high-period + low-period)` is the
+LED's current output level, which LogoLight shows in the menu.
+
+`corebrightnessd` also stores the setting in the `bklb-backlight-enabled` NVRAM variable
+(`nvram bklb-backlight-enabled`), which is how it applies in macOS Recovery. That copy isn't
+updated as soon as the setting changes, so LogoLight only uses it when the LED can't tell,
+with the screen off or the lid closed. In that case, it prefers the setting it applied itself.
 
 **Changing the setting needs root.** By default LogoLight asks with the standard macOS
 administrator dialog. macOS then remembers the authorization for five minutes.
