@@ -25,7 +25,7 @@ final class SimulatedMac: RegistryReading, @unchecked Sendable {
             guard backlightMode != nil else {
                 throw LogoLightError.commandFailed(
                     exitCode: 1,
-                    message: "The domain/default pair of (com.apple.CoreBrightness, LEBacklightMode) does not exist")
+                    message: "Error: Domain 'com.apple.CoreBrightness' not found.\nDefaults have not been changed.")
             }
             backlightMode = nil
         default:

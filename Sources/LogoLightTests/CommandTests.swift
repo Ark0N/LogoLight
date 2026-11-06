@@ -27,16 +27,32 @@ func commandTests(_ t: TestHarness) {
         t.expectEqual(result.split(separator: "\0", omittingEmptySubsequences: false).dropLast().map(String.init), tricky)
     }
 
-    t.test("recognises defaults' 'key does not exist' error as benign") {
-        let missingKey = LogoLightError.commandFailed(
-            exitCode: 1,
-            message: "The domain/default pair of (com.apple.CoreBrightness, LEBacklightMode) does not exist")
-        let missingDomain = LogoLightError.commandFailed(exitCode: 1, message: "Domain (com.apple.CoreBrightness) not found.")
-        t.expect(CoreBrightnessSetting.isMissingKeyError(missingKey))
-        t.expect(CoreBrightnessSetting.isMissingKeyError(missingDomain))
+    t.test("recognises defaults' 'nothing to delete' errors as benign") {
+        let benign = [
+            // macOS 27
+            "Error: Could not find key 'LEBacklightMode' in domain 'com.apple.CoreBrightness'.\nDefaults have not been changed.",
+            "Error: Domain 'com.apple.CoreBrightness' not found.\nDefaults have not been changed.",
+            // Earlier macOS
+            "The domain/default pair of (com.apple.CoreBrightness, LEBacklightMode) does not exist",
+            "Domain (com.apple.CoreBrightness) not found.",
+        ]
+        for message in benign {
+            t.expect(CoreBrightnessSetting.isMissingKeyError(LogoLightError.commandFailed(exitCode: 1, message: message)),
+                     message)
+        }
+    }
+
+    t.test("treats other failures as real errors") {
+        let failures = [
+            "sudo: a password is required",
+            "sudo: /usr/bin/defaults: command not found",
+            "Error: Domain 'com.example.other' not found.",
+        ]
+        for message in failures {
+            t.expect(!CoreBrightnessSetting.isMissingKeyError(LogoLightError.commandFailed(exitCode: 1, message: message)),
+                     message)
+        }
         t.expect(!CoreBrightnessSetting.isMissingKeyError(LogoLightError.cancelled))
-        t.expect(!CoreBrightnessSetting.isMissingKeyError(
-            LogoLightError.commandFailed(exitCode: 1, message: "sudo: a password is required")))
     }
 
     t.test("escapes AppleScript string literals") {

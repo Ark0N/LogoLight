@@ -41,7 +41,13 @@ public enum CoreBrightnessSetting {
     /// the logo is already at its default (on).
     public static func isMissingKeyError(_ error: Error) -> Bool {
         guard case let LogoLightError.commandFailed(_, message) = error else { return false }
-        return message.contains("does not exist") || message.contains("not found")
+        let missingKeyMessages = [
+            "Could not find key '\(key)'",          // macOS 27
+            "Domain '\(domain)' not found",         // macOS 27
+            "(\(domain), \(key)) does not exist",   // earlier macOS
+            "Domain (\(domain)) not found",         // earlier macOS
+        ]
+        return missingKeyMessages.contains { message.contains($0) }
     }
 }
 
