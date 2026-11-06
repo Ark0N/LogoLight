@@ -16,8 +16,7 @@ public protocol PasswordlessSudo: Sendable {
 
 /// Shows the system administrator dialog via AppleScript's `do shell script … with administrator privileges`.
 ///
-/// It runs in-process (not via `osascript`) so the dialog names this app, and macOS
-/// keeps the authorization for five minutes, so repeated toggles don't prompt each time.
+/// It runs in-process (not via `osascript`) so the dialog names this app.
 public struct AppleScriptAdminShell: AdminShell {
     public init() {}
 

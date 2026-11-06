@@ -43,8 +43,8 @@ LED's current output level, which LogoLight shows in the menu.
 updated as soon as the setting changes, so LogoLight only uses it when the LED can't tell,
 with the screen off or the lid closed. In that case, it prefers the setting it applied itself.
 
-**Changing the setting needs root.** By default LogoLight asks with the standard macOS
-administrator dialog. macOS then remembers the authorization for five minutes.
+**Changing the setting needs root.** By default LogoLight asks for your password with the
+standard macOS administrator dialog each time. To skip that, turn on **Toggle Without Password**.
 
 ### Toggle Without Password
 
