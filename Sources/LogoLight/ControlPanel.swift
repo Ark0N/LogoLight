@@ -15,22 +15,23 @@ struct PanelState {
     var footer = ""
 }
 
-/// The iOS Settings-style panel at the top of the menu: a switch for the logo and a brightness
-/// slider, then a switch for each effect. Everything below the logo switch is greyed out while
-/// the logo is off.
+/// The iOS Settings-style panel at the top of the menu: a live view of the logo, a switch for it
+/// and a brightness slider, then a switch for each effect. Everything below the logo switch is
+/// greyed out while the logo is off.
 @MainActor
 final class ControlPanel: NSView {
     var onLogoSwitched: ((Bool) -> Void)?
     var onBrightnessChanged: ((Double) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
 
-    private static let width: CGFloat = 300
-    private static let inset: CGFloat = 12
-    private static let rowHeight: CGFloat = 40
+    private static let width: CGFloat = 216
+    private static let inset: CGFloat = 8
+    private static let rowHeight: CGFloat = 36
     /// Where row text starts inside a card.
     private static let textColumn: CGFloat = 44
 
     private let stack = NSStackView()
+    private let preview = LogoPreview()
     private let logoTile = IconTile(symbol: "lightbulb.fill", color: .systemOrange)
     private let logoLabel = NSTextField(labelWithString: "Apple Logo")
     private let logoSwitch = NSSwitch()
@@ -58,8 +59,14 @@ final class ControlPanel: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Shows how brightly the logo is glowing right now, from 0 to 1.
+    func showGlow(_ glow: Double) {
+        preview.show(glow: glow)
+    }
+
     func update(_ state: PanelState) {
         self.state = state
+        preview.isHidden = !state.isSupported
         let isOn = state.isSupported && state.isOn
         let canAdjust = isOn && state.canAnimate && !state.isBusy
 
@@ -107,6 +114,8 @@ final class ControlPanel: NSView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.widthAnchor.constraint(equalToConstant: Self.width),
         ])
+
+        addFullWidth(preview)
 
         // The logo: on/off and brightness.
         logoSwitch.target = self
@@ -250,6 +259,64 @@ final class ControlPanel: NSView {
     fileprivate static func symbol(_ name: String, size: CGFloat) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: size, weight: .medium))
+    }
+}
+
+/// A live view of the logo: a dark MacBook lid with the logo glowing on it.
+private final class LogoPreview: NSView {
+    private let logo = CALayer()
+    private let logoSize = NSSize(width: 44, height: 44)
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor(white: 0.14, alpha: 1).cgColor
+        heightAnchor.constraint(equalToConstant: 74).isActive = true
+
+        let symbol = NSImage(systemSymbolName: "apple.logo", accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "lightbulb.fill", accessibilityDescription: nil)
+        logo.contents = symbol?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: logoSize.height, weight: .regular)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [.white])))
+        logo.contentsGravity = .resizeAspect
+        logo.shadowColor = NSColor.white.cgColor
+        logo.shadowOffset = .zero
+        logo.shadowRadius = 10
+        layer?.addSublayer(logo)
+        show(glow: 0)
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.image)
+        setAccessibilityLabel("Live view of the Apple logo")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        withoutAnimation {
+            logo.frame = NSRect(x: bounds.midX - logoSize.width / 2, y: bounds.midY - logoSize.height / 2,
+                                width: logoSize.width, height: logoSize.height)
+        }
+    }
+
+    func show(glow: Double) {
+        withoutAnimation {
+            logo.opacity = Float(0.08 + 0.92 * glow) // an unlit logo is still faintly visible on the lid
+            logo.shadowOpacity = Float(glow)
+        }
+    }
+
+    private func withoutAnimation(_ changes: () -> Void) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        changes()
+        CATransaction.commit()
     }
 }
 
@@ -427,15 +494,15 @@ final class LogoSlider: NSView {
 enum PanelRenderer {
     static func render(to folder: String) {
         let on = PanelState(isSupported: true, isOn: true, canAnimate: true, effect: .heartbeat, brightness: 0.6,
-                            footer: "Heartbeat effect · adapts to ambient light")
+                            footer: "Heartbeat · adapts to light")
         var off = on
         off.isOn = false
-        off.footer = "Off for all users, including in macOS Recovery"
+        off.footer = "Off for all users"
         var fallback = on
         fallback.canAnimate = false
-        fallback.footer = "Adapts to screen brightness and ambient light"
+        fallback.footer = "Adapts to ambient light"
         var unsupported = PanelState()
-        unsupported.footer = "Requires a MacBook Pro with PROLED XDR Display"
+        unsupported.footer = "Needs a MacBook Pro with PROLED XDR Display"
 
         let states = [("on", on), ("off", off), ("fallback", fallback), ("unsupported", unsupported)]
         for (name, state) in states {
@@ -448,6 +515,7 @@ enum PanelRenderer {
     private static func write(_ state: PanelState, appearance: NSAppearance.Name, to path: String) {
         let panel = ControlPanel()
         panel.update(state)
+        panel.showGlow(state.isOn ? 0.75 : 0)
         let window = NSWindow(contentRect: panel.bounds, styleMask: .borderless, backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
         window.backgroundColor = appearance == .darkAqua ? NSColor(white: 0.2, alpha: 1) : NSColor(white: 0.9, alpha: 1)

@@ -19,6 +19,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var isBusy = false
     private var backgroundRefresh: Timer?
     private var liveRefresh: Timer?
+    private var liveView: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
 
     private static let effectDefaultsKey = "Effect"
@@ -108,11 +109,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         RunLoop.main.add(timer, forMode: .eventTracking)
         liveRefresh = timer
+
+        // The live view reads the real logo on every frame, so it's only drawn while it's visible.
+        panel.showGlow(controller.liveGlow)
+        let frames = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.panel.showGlow(self.controller.liveGlow)
+            }
+        }
+        RunLoop.main.add(frames, forMode: .eventTracking)
+        liveView = frames
     }
 
     func menuDidClose(_ menu: NSMenu) {
         liveRefresh?.invalidate()
         liveRefresh = nil
+        liveView?.invalidate()
+        liveView = nil
         statusItem.menu = nil
     }
 
@@ -159,17 +173,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private var detailText: String {
-        guard status.isSupported else { return "Requires a MacBook Pro with PROLED XDR Display" }
+        guard status.isSupported else { return "Needs a MacBook Pro with PROLED XDR Display" }
         switch status.setting {
         case .off:
-            return "Off for all users, including in macOS Recovery"
+            return "Off for all users"
         case .on where status.isLit == false:
             return "Dark while the display is off"
         case .on where controller.effect != .none:
-            return "\(controller.effect.title) effect · adapts to ambient light"
+            return "\(controller.effect.title) · adapts to light"
         case .on:
-            guard let level = status.outputLevel else { return "Adapts to screen brightness and ambient light" }
-            return "Glowing at \(Int((level * 100).rounded()))% · adapts to ambient light"
+            guard let level = status.outputLevel else { return "Adapts to ambient light" }
+            return "Glowing at \(Int((level * 100).rounded()))% · adapts to light"
         case nil:
             return ""
         }
