@@ -1,5 +1,6 @@
 import AppKit
 import LogoLightCore
+import WidgetKit
 
 /// The menu bar icon and its menu, which starts with the control panel.
 ///
@@ -44,6 +45,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let displayReader = LogoStatusReader()
     /// Whether the built-in display was awake at the last screen change (`nil` if unknown).
     private var wasBuiltInDisplayAwake: Bool?
+    /// Answers the Control Center control (only in the app bundle, which has the control).
+    private var controlServer: ControlLinkServer?
+    /// What the controls were last told to show, so they're only reloaded when that changes.
+    private var controlState: ControlLink.State?
+    /// A reload of the controls is due shortly (see `updateControl(_:)`).
+    private var isControlReloadPending = false
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
@@ -78,6 +85,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         readMenuSettings()
         refresh()
         scheduleRefresh(every: 10)
+
+        // (A debug build run from .build has no bundle ID, and no control.)
+        if let bundleID = Bundle.main.bundleIdentifier {
+            controlServer = ControlLinkServer(appBundleID: bundleID) { [weak self] request in
+                self?.handleControl(request) ?? ControlLink.State(isOn: false, isAvailable: false)
+            }
+            // A control placed while the app wasn't running shows its last value until it's reloaded.
+            updateControl(panelState)
+        }
     }
 
     // MARK: - Menu
@@ -233,6 +249,50 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.state = isPasswordlessEnabled ? .on : .off
         passwordlessItem.isEnabled = status.isSupported && !isBusy
         launchAtLoginItem.state = isLaunchAtLoginEnabled ? .on : .off
+        updateControl(state)
+    }
+
+    private func controlState(_ state: PanelState) -> ControlLink.State {
+        ControlLink.State(isOn: state.isOn, isAvailable: state.isSupported, canAdjust: state.showsAdjustments,
+                          brightness: state.brightness)
+    }
+
+    /// Has the Control Center controls show what the menu shows, when that changes. (They ask over
+    /// `ControlLink` when they're reloaded.) Reloads are a moment late and coalesced, so a slider
+    /// being dragged doesn't reload them on every step.
+    private func updateControl(_ state: PanelState) {
+        let control = controlState(state)
+        guard controlServer != nil, control != controlState else { return }
+        controlState = control
+        guard !isControlReloadPending else { return }
+        isControlReloadPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.isControlReloadPending = false
+                if #available(macOS 26, *) { ControlCenter.shared.reloadAllControls() }
+            }
+        }
+    }
+
+    /// A request from a Control Center control, handled as the menu's switch and slider would,
+    /// and answered as soon as the change has started.
+    private func handleControl(_ request: ControlLink.Request) -> ControlLink.State {
+        switch request {
+        case .state:
+            refresh()
+        case .turnOn, .turnOff:
+            // Only a change: switching to what the switch already shows would fade the logo out and
+            // back in, and restart an effect. (A control can ask for that when its value is stale.)
+            let turnsOn = request == .turnOn
+            if status.isSupported, panelState.isOn != turnsOn { setLogo(turnsOn ? .on : .off) }
+        case .brighter, .dimmer:
+            // Dimmer does nothing while the logo is off; Brighter turns it on, at the new brightness.
+            guard panelState.showsAdjustments, request == .brighter || panelState.isOn else { break }
+            setBrightness(ControlLink.brightness(after: request, from: controller.brightness))
+            if !panelState.isOn { setLogo(.on) }
+            updateMenu()
+        }
+        return controlState(panelState)
     }
 
     private func updateIcon(_ state: PanelState) {
@@ -298,6 +358,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func setBrightness(_ brightness: Double) {
         controller.setBrightness(brightness)
         UserDefaults.standard.set(brightness, forKey: Self.brightnessDefaultsKey)
+        // So Brighter and Dimmer show the new value (reloads are coalesced while the slider moves).
+        updateControl(panelState)
     }
 
     private func chooseEffect(_ effect: LogoEffect) {

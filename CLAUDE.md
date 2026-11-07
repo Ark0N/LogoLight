@@ -13,13 +13,23 @@ make app       # build/LogoLight.app, ad-hoc signed, hardened runtime
 make install   # copy to /Applications, (re)launch
 ```
 
-- **Command Line Tools only, no Xcode.** XCTest and swift-testing aren't available, so the tests
-  are an executable target with a tiny harness (`Sources/LogoLightTests/Harness.swift`). Add new
-  suites to `Sources/LogoLightTests/main.swift`.
+- **The app builds with the Command Line Tools alone.** XCTest and swift-testing aren't available
+  there, so the tests are an executable target with a tiny harness
+  (`Sources/LogoLightTests/Harness.swift`). Add new suites to `Sources/LogoLightTests/main.swift`.
+  Only the Control Center control (`Controls/`) needs Xcode 26+ (this MacBook has Xcode 27.2):
+  `build-app.sh` builds it with `swiftc` and Xcode's `appintentsmetadataprocessor`, the way Xcode
+  builds a widget extension, and leaves it out when that tool or the macOS 26 SDK is missing.
 - Swift 6 language mode with strict concurrency. Everything UI- and hardware-facing is
   `@MainActor`, and Timer and notification closures use `MainActor.assumeIsolated`.
 - The app bundle is assembled by `scripts/build-app.sh` (there's no Xcode project).
   `Resources/Info.plist` is a template with `LSUIElement` (no Dock icon).
+- The Control Center controls (Backlight, Brighter, Dimmer: WidgetKit has no slider template for
+  apps, only toggles and buttons) are one extension. It's sandboxed (the system ignores extensions
+  that aren't), and reaches the running app through `ControlLink` (a Mach port named
+  `<bundle ID>.control`, the one name its entitlements let it look up); only the app touches the
+  logo. `ControlLink.swift` is compiled
+  into both, so it mustn't use the rest of LogoLightCore. A debug build run from `.build` has no
+  bundle ID and serves no port.
 
 ## Which Mac
 
@@ -90,8 +100,8 @@ runs but says the logo isn't available. So:
   SIGN_IDENTITY="Developer ID Application: NAME (TEAMID)" NOTARY_PROFILE=logolight make dist
   ```
   This builds, signs with a timestamp, notarizes, staples and zips into `dist/`.
-  `scripts/notarize.sh` has the details. It hasn't been run with a real identity yet;
-  the MacBook it was written on has no signing certificate.
+  `scripts/notarize.sh` has the details. This MacBook has the Developer ID identity (team
+  CGMJ6YKL5G) and the `logolight` notarytool profile.
 - **The Mac App Store isn't an option** as the app stands. It relies on private API
   (`CoreBrightness`, App Review guideline 2.5.1), and Mac App Store apps must be sandboxed. The
   fallback path runs `defaults` as root through an admin dialog and can install a sudoers rule,
@@ -100,11 +110,12 @@ runs but says the logo isn't available. So:
 - The direct-control path was verified working with the hardened runtime (ad-hoc), with no
   entitlements needed.
 
-## Open decisions (the user's call)
+## Decisions (the user's call)
 
-- **Bundle ID**: still the placeholder `io.github.logolight.LogoLight` (`BUNDLE_ID` in
-  `scripts/build-app.sh`). Pick the real one before the first signed release; changing it later
-  resets the saved preferences and the Launch at Login registration.
+- **Bundle ID**: `app.logolight.LogoLight`, after the user's domain, logolight.app (chosen
+  2026-11-07, replacing the placeholder `io.github.logolight.LogoLight`; the user's settings were
+  copied over with `defaults export`/`import`). Don't change it after the first release: that
+  resets the saved preferences and Launch at Login, and orphans placed Control Center controls.
 - **License**: none yet. That's fine while the repo is private.
 
 ## Status
@@ -204,6 +215,23 @@ changed).
 - Closing the lid with an external display attached pauses an effect, and opening it resumes
   it; connecting an external display with the lid open changes nothing, also after a sleep and
   wake during which a display was unplugged.
+
+**The Control Center control** (2026-11-07, build 88): built, registered (`pluginkit -mAvvv -p
+com.apple.widgetkit-extension` lists `app.logolight.LogoLight.Controls`), and its port checked
+against the installed app with a small client built from `ControlLink.swift`: state, off and on
+were answered in 2-3 ms, and the logo followed. A sandboxed test client could look the port up
+with the entitlement and couldn't without it. Not yet seen by the user: the control in Control
+Center's Edit Controls (under LogoLight, "Backlight"), a tap, and the control following the
+menu's switch. Update: the user placed Backlight and tapped it; the log shows
+`SetBacklightIntent.perform()` running in the extension and the logo turned off. Brighter and
+Dimmer (added after) were checked through the port only. After review: sends are serialized in
+the extension (CF shares one remote port per name, and an invalidate lost other callers'
+answers), a request that reached the app but wasn't answered isn't sent again (the app may be
+showing the password dialog), a request for the state the switch already shows does nothing
+(it used to fade the logo out and in), a tap the fallback path drops while busy fails as "busy",
+and the slider reloads the controls (coalesced). chronod logs "purging instead because we shouldn't cache it ... isApple? false"
+for this extension, as it did for every ad-hoc and Developer ID probe; that may only mean it
+fetches the control's description when the gallery is opened.
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only

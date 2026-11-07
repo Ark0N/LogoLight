@@ -14,8 +14,12 @@ A small macOS menu bar app that controls the illuminated Apple logo on the back 
 - **Brightness** slider. The logo still adapts to ambient light, scaled by the slider
 - **Effects**: Breathe, Pulse and Heartbeat, one at a time, using the LED's own hardware fades.
   They peak at the chosen brightness
+- **Control Center controls** (macOS 26 or later), which can also go in the menu bar: a
+  **Backlight** switch, and **Brighter** and **Dimmer** buttons that step the brightness by 10%.
+  In Control Center, choose Edit Controls and add them from LogoLight. (Apple only lets apps add
+  switches and buttons there, not sliders like Display and Sound.)
 - **Launch at Login**
-- No Xcode needed to build: just the Command Line Tools
+- The app builds with just the Command Line Tools; the Control Center control needs Xcode
 
 ## How it works
 
@@ -67,6 +71,16 @@ if it's missing or `corebrightnessd` doesn't take a change, falls back to runnin
 documented command as root (see below). Brightness and effects need direct control, and are
 hidden without it.
 
+### The Control Center controls
+
+The controls are a WidgetKit extension inside the app (`Controls/`). Extensions must be sandboxed,
+so it can't reach `corebrightnessd` itself, and only the app may change the logo anyway, since
+the app also holds the brightness and plays effects. The app serves a Mach port named after its
+bundle ID (`app.logolight.LogoLight.control`), and the extension is allowed to look up just that
+name. A tap asks the app to flip its switch (as Option-click does) or to step its slider; if LogoLight
+isn't running, it's opened in the background first. Brighter also turns the logo on if it's
+off; Dimmer does nothing then. The app reloads the controls when its switch or slider changes.
+
 ### Reading the state
 
 The setting is read from `corebrightnessd` (`LEBacklightMode`). The logo's `bklb-backlight` PWM
@@ -108,8 +122,10 @@ installs it again.)
 ## Requirements
 
 - A MacBook Pro with PROLED XDR Display (on other Macs the menu says the logo isn't available)
-- macOS 14 or later to build and run (the PROLED models ship with macOS 27)
-- Xcode or the Command Line Tools (`xcode-select --install`)
+- macOS 14 or later to build and run (the PROLED models ship with macOS 27); the Control
+  Center control needs macOS 26
+- Xcode or the Command Line Tools (`xcode-select --install`). Without Xcode 26 or later, the
+  app is built without the Control Center control (it needs Xcode's App Intents tools)
 
 ## Build and install
 
@@ -151,6 +167,7 @@ the logo back on without the app:
 | `Sources/LogoLightCore` | `LogoController`; direct control, brightness and effects (`LightEmitter`, `LogoEffect`); reading the state (I/O Registry); the documented command, the admin dialog and the sudoers rule; what the menu shows (`PanelState`) |
 | `Sources/LogoLight` | The AppKit menu bar app, including the control panel (`ControlPanel.swift`) |
 | `Sources/LogoLightTests` | The test suite (`swift run LogoLightTests`) |
+| `Controls` | The Control Center controls, an extension built by `scripts/build-app.sh` |
 | `Resources/Info.plist` | App bundle metadata (template) |
 | `scripts/build-app.sh` | Builds and signs `LogoLight.app` |
 | `scripts/notarize.sh` | Notarizes, staples and zips a Developer ID build (`make dist`) |
