@@ -38,7 +38,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var isPasswordlessEnabled = false
     /// The menu bar icon's symbol and description, so it's only replaced when they change.
     private var iconSymbol: (name: String, description: String)?
-    private var workspaceObservers: [NSObjectProtocol] = []
+    private var observers: [NSObjectProtocol] = []
+    /// Reads whether the built-in display is awake, for screen changes.
+    private let displayReader = LogoStatusReader()
+    /// Whether the built-in display was awake at the last screen change (`nil` if unknown).
+    private var wasBuiltInDisplayAwake: Bool?
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
@@ -57,7 +61,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         let saved = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
         controller.setEffect(saved ?? .none)
-        observeSleepAndWake()
+        observeDisplay()
 
         if let button = statusItem.button {
             button.target = self
@@ -278,25 +282,41 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         controller.restoreNormalLighting()
     }
 
-    /// Effects pause while the display or the Mac sleeps, and resume on wake.
-    private func observeSleepAndWake() {
-        let center = NSWorkspace.shared.notificationCenter
+    /// Effects pause while the display or the Mac sleeps, or the built-in display goes away (the lid
+    /// closed with an external display), and resume when it's back.
+    private func observeDisplay() {
+        let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
-            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.controller.displayDidSleep() }
             })
         }
         for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
-            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                // Give corebrightnessd a moment to relight the logo for the display first.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    MainActor.assumeIsolated {
-                        self?.controller.displayDidWake()
-                        self?.refresh()
-                    }
-                }
+            observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scheduleWake() }
             })
         }
+        wasBuiltInDisplayAwake = displayReader.isDisplayAwake()
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.screensDidChange() }
+        })
+    }
+
+    /// A display was added, removed or changed. Only the built-in display going or coming back counts,
+    /// so connecting an external display doesn't restart an effect.
+    private func screensDidChange() {
+        guard let isAwake = displayReader.isDisplayAwake() else { return }
+        defer { wasBuiltInDisplayAwake = isAwake }
+        guard let wasAwake = wasBuiltInDisplayAwake, wasAwake != isAwake else { return }
+        if isAwake { scheduleWake() } else { controller.displayDidSleep() }
+    }
+
+    /// Handles a wake once, a second after the last notification of it: a system wake posts more than
+    /// one, and corebrightnessd relights the logo for the display itself first.
+    private func scheduleWake() {
+        controller.scheduleWake(after: 1) { [weak self] in self?.refresh() }
     }
 
     @objc private func togglePasswordless() {
