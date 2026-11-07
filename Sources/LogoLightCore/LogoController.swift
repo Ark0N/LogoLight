@@ -152,8 +152,36 @@ public final class LogoController {
     public func setEffect(_ effect: LogoEffect) {
         guard let animator else { return }
         animator.select(effect)
+        animator.stopMorse() // the effect takes over from a Morse message
         guard !isSwitching else { return }
         if isLitAndAwake { animator.resume() } else { animator.pause() }
+    }
+
+    // MARK: - Morse code
+
+    /// The Morse message being sent, if any.
+    public var morse: MorseMessage? { animator?.morse }
+
+    /// Sends `text` in Morse, once or (`loops`) until `stopMorse()` or an effect is chosen. It needs the
+    /// logo on and the display awake, as effects do; a loop resumes after a wake or the logo being turned
+    /// back on, but a message sent once is dropped when it's interrupted. Returns whether it started.
+    @discardableResult
+    public func playMorse(_ text: String, loops: Bool) -> Bool {
+        guard let animator, !isSwitching, isLitAndAwake else { return false }
+        return animator.startMorse(MorseMessage(text: text, loops: loops))
+    }
+
+    /// Stops a Morse message, going back to the chosen effect or brightness.
+    public func stopMorse() {
+        guard let animator, animator.morse != nil else { return }
+        animator.stopMorse()
+        if !isSwitching, isLitAndAwake { animator.resume() } else { animator.pause() }
+    }
+
+    /// Called when a Morse message ends by itself (sent once and done, or interrupted).
+    public var onMorseEnded: (@MainActor () -> Void)? {
+        get { animator?.onMorseEnded }
+        set { animator?.onMorseEnded = newValue }
     }
 
     /// How bright the logo is (or how bright effects peak), from 0 (dimmest) to 1 (normal).
@@ -312,15 +340,15 @@ public final class LogoController {
         }
         knownSetting = .on // so the live view shows the fade in
         if fade > 0, isDisplayAwake {
-            // An effect takes over from dark, starting with a rising step.
-            if effect != .none { return .applied }
+            // An effect or a Morse loop takes over from dark, starting with a rising step.
+            if effect != .none || morse != nil { return .applied }
             let level = animator?.level ?? 1
             await switchFade(to: level, over: fade, emitter: emitter)
             if isDisplayAwake {
                 // Below full it's now held at the level; at full it goes back to normal.
                 if level >= 1 { emitter.restore(displayAwake: true) }
                 // An effect or brightness chosen during the fade still needs applying.
-                return effect == .none && animator?.level == level ? .appliedAtLevel : .applied
+                return effect == .none && morse == nil && animator?.level == level ? .appliedAtLevel : .applied
             }
         }
         emitter.restore(displayAwake: isDisplayAwake)

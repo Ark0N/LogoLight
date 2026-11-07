@@ -75,7 +75,13 @@ public final class LogoAnimator {
 
     /// The chosen effect. It keeps its value while paused (e.g. the logo is off or the display sleeps).
     public private(set) var effect: LogoEffect = .none
-    /// Whether an effect is playing.
+    /// The Morse message being sent, if any. While it's set it takes the place of the effect, which
+    /// keeps its value and comes back when the message is done or stopped.
+    public private(set) var morse: MorseMessage?
+    /// Called when `morse` ends by itself: a message sent once has finished, or was interrupted (the
+    /// logo turned off, the display slept). Not called for `stopMorse()`.
+    public var onMorseEnded: (@MainActor () -> Void)?
+    /// Whether an effect (or a Morse message) is playing.
     public private(set) var isPlaying = false {
         didSet { updateActivity() }
     }
@@ -119,12 +125,38 @@ public final class LogoAnimator {
     /// dark (e.g. just turned on), a fall when it's lit (e.g. relit by a wake).
     public func resume() {
         cancel()
-        if effect == .none {
+        if let morse {
+            playMorse(morse)
+        } else if effect == .none {
             adjustBrightness(over: transitionDuration)
         } else {
             let isDark = (emitter.fadeLevel ?? 1) < level / 2
             play(effect.cycle(startingLit: isDark))
         }
+    }
+
+    /// Sends `message` in Morse, replacing the effect until it's done (once) or stopped (a loop). Call
+    /// only while the logo is lit and the display is awake, as for `resume()`. Returns false, changing
+    /// nothing, if the message has no character Morse can send.
+    @discardableResult
+    public func startMorse(_ message: MorseMessage) -> Bool {
+        guard MorseCode.canSend(message.text) else { return false }
+        morse = message
+        resume()
+        return true
+    }
+
+    /// Forgets the Morse message, without starting anything else: the caller resumes, or not.
+    public func stopMorse() {
+        morse = nil
+    }
+
+    private func playMorse(_ message: MorseMessage) {
+        // From dark, with a word gap first, so the first dot can't be mistaken for the logo going out.
+        let isDark = (emitter.fadeLevel ?? 1) < 0.05
+        let leadIn = isDark ? [] : [FadeStep(lit: false, fade: 0.3, hold: 7 * MorseCode.unit)]
+        // At full brightness: both ends are plain hardware fades, with no easing to stretch the timing.
+        play(MorseCode.steps(for: message.text), leadIn: leadIn, repeats: message.loops, peak: 1)
     }
 
     /// Applies a new brightness. A playing effect picks it up at its next step.
@@ -139,16 +171,28 @@ public final class LogoAnimator {
     /// display went to sleep.
     public func pause() {
         cancel()
+        endMorseUnlessLooping()
     }
 
     /// Stops animating and hands the logo back to the system, fully lit, e.g. before quitting.
     /// The chosen effect and brightness are kept.
     public func reset() {
         cancel()
+        endMorseUnlessLooping()
         emitter.restore(displayAwake: isDisplayAwake())
     }
 
-    private func play(_ cycle: [FadeStep]) {
+    /// A message sent once has ended without being stopped: let the owner know.
+    private func endMorseUnlessLooping() {
+        guard let morse, !morse.loops else { return }
+        self.morse = nil
+        onMorseEnded?()
+    }
+
+    /// Plays `leadIn` once, then `cycle`, over and over or (`repeats: false`) once. Lit steps go to
+    /// `peak`, or the chosen brightness without one. A cycle played once that runs to its end resumes
+    /// what was there before (the effect or the brightness), after clearing a Morse message.
+    private func play(_ cycle: [FadeStep], leadIn: [FadeStep] = [], repeats: Bool = true, peak: Double? = nil) {
         isPlaying = true
         let cycleHold = cycle.reduce(0) { $0 + $1.hold }
         task = Task { [weak self] in
@@ -156,15 +200,16 @@ public final class LogoAnimator {
             // is taken from the holds that follow, as far as they go, so the cycle keeps its length:
             // Heartbeat's short holds can't absorb its beats' easing, but its rest can.
             var owed = 0.0
+            var steps = leadIn + cycle
             playing: while true {
-                for step in cycle {
+                for step in steps {
                     guard let self, !Task.isCancelled else { return }
                     // The display can go away without a sleep notification, e.g. when the lid is
                     // closed with an external display attached. Stop until the next wake.
                     guard self.isDisplayAwake() else { break playing }
                     do {
-                        let took = try await self.emitter.timedFade(to: step.lit ? self.level : 0, over: step.fade,
-                                                                    sleep: self.sleep)
+                        let took = try await self.emitter.timedFade(to: step.lit ? peak ?? self.level : 0,
+                                                                    over: step.fade, sleep: self.sleep)
                         owed = min(owed + max(0, took - step.fade), cycleHold)
                         let hold = max(0, step.hold - owed)
                         owed -= step.hold - hold
@@ -173,7 +218,19 @@ public final class LogoAnimator {
                         break playing
                     }
                 }
+                guard repeats else {
+                    // Done. (Cancelled at the last moment: whoever cancelled has taken over.)
+                    guard let self, !Task.isCancelled else { return }
+                    if self.morse?.loops == false {
+                        self.morse = nil
+                        self.onMorseEnded?()
+                    }
+                    self.resume() // replaces this task, which then ends as a cancelled one
+                    return
+                }
+                steps = cycle
             }
+            if let self, !Task.isCancelled { self.endMorseUnlessLooping() }
             self?.taskDidEnd()
         }
     }

@@ -16,6 +16,8 @@ public struct PanelState: Equatable, Sendable {
     public var showsAdjustments: Bool
     public var effect: LogoEffect
     public var brightness: Double
+    /// The Morse message being sent, if any.
+    public var morse: MorseMessage?
     /// The only text in the panel: why everything is disabled, on a Mac without the logo.
     public var message: String?
     /// The menu bar icon (an SF Symbols name), and what it means.
@@ -25,7 +27,7 @@ public struct PanelState: Equatable, Sendable {
     /// `requested` is the setting asked for while a switch is under way, which the panel and the icon show
     /// straight away, so the rest of the panel follows the switch at once instead of when the fade ends.
     public init(status: LogoStatus, requested: LogoIllumination? = nil, canControlDirectly: Bool,
-                effect: LogoEffect, brightness: Double, isBusy: Bool = false) {
+                effect: LogoEffect, brightness: Double, isBusy: Bool = false, morse: MorseMessage? = nil) {
         let setting = requested ?? status.setting
         isSupported = status.isSupported
         isOn = status.isSupported && setting != .off
@@ -33,6 +35,7 @@ public struct PanelState: Equatable, Sendable {
         showsAdjustments = status.isSupported && canControlDirectly
         self.effect = effect
         self.brightness = brightness
+        self.morse = canControlDirectly ? morse : nil
         message = status.isSupported ? nil : "Needs a MacBook Pro with PROLED XDR Display"
         (symbolName, symbolDescription) = switch (status.isSupported, setting) {
         case (false, _): ("lightbulb.slash", "No illuminated logo on this Mac")
@@ -48,4 +51,8 @@ public struct PanelState: Equatable, Sendable {
     /// Whether the brightness and the effects can be changed: only while the logo is (or is being
     /// turned) on. Otherwise they're greyed out, and keep their values for when it's back on.
     public var canAdjust: Bool { showsAdjustments && isOn }
+
+    /// Whether the play button shows stop (a message is being sent once), and the loop button.
+    public var isSendingOnce: Bool { morse?.loops == false }
+    public var isLooping: Bool { morse?.loops == true }
 }
