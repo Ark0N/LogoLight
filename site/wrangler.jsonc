@@ -8,7 +8,12 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
+  // www serves the same site; the pages' canonical link points at the apex.
   "routes": [
-    { "pattern": "logolight.app", "custom_domain": true }
-  ]
+    { "pattern": "logolight.app", "custom_domain": true },
+    { "pattern": "www.logolight.app", "custom_domain": true }
+  ],
+  // Only the custom domains: no *.workers.dev address, and no per-version preview addresses.
+  "workers_dev": false,
+  "preview_urls": false
 }
