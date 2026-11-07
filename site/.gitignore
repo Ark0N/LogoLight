@@ -2,3 +2,5 @@
 .wrangler/
 # The notarized build (make dist), served as the download; not kept in git.
 public/LogoLight.zip
+# The videos from scripts/make-media.swift (not on the site, see the script).
+media/

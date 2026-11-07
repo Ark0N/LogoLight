@@ -104,7 +104,12 @@ runs but says the logo isn't available. So:
   `scripts/notarize.sh` has the details. This MacBook has the Developer ID identity (team
   CGMJ6YKL5G) and the `logolight` notarytool profile. First run 2026-11-07 (1.0.0, build 94):
   Accepted, "Ready for distribution", no issues, stapled; `spctl` says Notarized Developer ID.
-  The zip goes to `site/public/LogoLight.zip` (not in git) for the website's download.
+  The zip goes to `site/public/LogoLight.zip` (not in git) for the website's download. The build
+  for release is 1.0.0 build 103 (commit 6d5e0f8, notarized 17:17, no issues); tag it `v1.0.0`
+  when the repo goes public.
+- `scripts/make-media.swift` makes the README's GIFs (`docs/media/`) and videos (`site/media/`,
+  not uploaded: Safari needs Range requests for `<video>`, which static assets don't answer)
+  from the live view's renders, with the effects' real timing. Re-run it after tuning effects.
 - **The Mac App Store isn't an option** as the app stands. It relies on private API
   (`CoreBrightness`, App Review guideline 2.5.1), and Mac App Store apps must be sandboxed. The
   fallback path runs `defaults` as root through an admin dialog and can install a sudoers rule,

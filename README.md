@@ -24,6 +24,22 @@
 
 For the **MacBook Pro with PROLED XDR Display**, the model with the illuminated logo on its lid.
 
+## See it glow
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/media/breathe.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo slowly fades out and back in (Breathe)."><br><b>Breathe</b></td>
+    <td align="center"><img src="docs/media/pulse.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo fades out and back in at a steady pace (Pulse)."><br><b>Pulse</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/media/heartbeat.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo beats twice, then rests (Heartbeat)."><br><b>Heartbeat</b></td>
+    <td align="center"><img src="docs/media/on-off.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo fades out, stays dark, then fades back in (the Backlight switch)."><br><b>On and off</b></td>
+  </tr>
+</table>
+
+Drawn by LogoLight's own live view, with the effects' real timing (`swift scripts/make-media.swift`
+makes them again).
+
 ## Features
 
 - **Backlight switch** at the top of the menu, or **Option-click** the menu bar icon to toggle.
