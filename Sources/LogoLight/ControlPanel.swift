@@ -42,6 +42,10 @@ final class ControlPanel: NSView {
     private let effectsCard = Card()
     private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
 
+    /// How the brightness and the effects look while the logo is off.
+    private static let greyedOutAlpha: CGFloat = 0.4
+    /// How long they take to grey out or come back when the logo is switched.
+    private static let greyingDuration = 0.22
 
     /// `finish` is the colour of this Mac's case, which the live view copies.
     init(finish: MacFinish = .spaceBlack) {
@@ -64,11 +68,10 @@ final class ControlPanel: NSView {
         preview.isHidden = !state.isSupported
         let animated = window?.isVisible == true
 
-        // While busy, the switch keeps showing what was just asked for. It only looks disabled while
-        // a password is needed; a direct change just ignores clicks until it's done.
-        if !state.isBusy { logoSwitch.setOn(state.isOn, animated: animated) }
-        logoSwitch.isEnabled = state.isSupported && !(state.isBusy && !state.showsAdjustments)
-        logoSwitch.acceptsInput = !state.isBusy
+        // The switch shows what was asked for, even while the logo is still fading. It only looks
+        // disabled while a password is needed.
+        logoSwitch.setOn(state.isOn, animated: animated)
+        logoSwitch.isEnabled = state.canSwitch
         logoLabel.textColor = state.isSupported ? .labelColor : .tertiaryLabelColor
         logoTile.isDimmed = !state.isSupported
 
@@ -77,23 +80,34 @@ final class ControlPanel: NSView {
         effectsHeaderContainer.isHidden = !state.showsAdjustments
         effectsCard.isHidden = !state.showsAdjustments
 
-        let canAdjust = state.canAdjust
         if !brightnessSlider.isTracking { brightnessSlider.value = state.brightness }
-        brightnessSlider.isEnabled = canAdjust
-        for icon in [dimIcon, brightIcon] {
-            icon.contentTintColor = canAdjust ? .secondaryLabelColor : .quaternaryLabelColor
-        }
-
+        brightnessSlider.isEnabled = state.canAdjust
         for row in effectRows {
             row.toggle.setOn(row.effect == state.effect, animated: animated)
-            row.toggle.isEnabled = canAdjust
-            row.label.textColor = canAdjust ? .labelColor : .tertiaryLabelColor
-            row.tile.isDimmed = !canAdjust
+            row.toggle.acceptsInput = state.canAdjust
         }
+        greyOutAdjustments(!state.canAdjust, animated: animated)
 
         footerLabel.stringValue = state.message ?? ""
         footerContainer.isHidden = state.message == nil
         resizeToFit()
+    }
+
+    /// Greys out the brightness and the effects, or brings them back, as one fade of their rows
+    /// (the controls in them don't change their own look).
+    private func greyOutAdjustments(_ greyedOut: Bool, animated: Bool) {
+        let alpha = greyedOut ? Self.greyedOutAlpha : 1
+        let views = [brightnessRow, effectsCard.rows]
+        guard views.contains(where: { $0.alphaValue != alpha }) else { return }
+        guard animated else {
+            for view in views { view.alphaValue = alpha }
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.greyingDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            for view in views { view.animator().alphaValue = alpha }
+        }
     }
 
     // MARK: - Layout
@@ -120,6 +134,7 @@ final class ControlPanel: NSView {
 
         dimIcon.image = Self.symbol("sun.min.fill", size: 11)
         brightIcon.image = Self.symbol("sun.max.fill", size: 15)
+        for icon in [dimIcon, brightIcon] { icon.contentTintColor = .secondaryLabelColor }
         brightnessSlider.setAccessibilityLabel("Brightness")
         brightnessSlider.onChange = { [weak self] in self?.onBrightnessChanged?($0) }
         layOutBrightnessRow()
@@ -350,7 +365,8 @@ private final class LogoPreview: NSView {
 
 /// A rounded, slightly raised group of rows, like a section in iOS Settings.
 private final class Card: NSView {
-    private let rows = NSStackView()
+    /// The rows, without the card's background (e.g. to fade them).
+    let rows = NSStackView()
 
     init() {
         super.init(frame: .zero)
@@ -434,7 +450,8 @@ private final class IconTile: NSView {
 final class LogoSlider: NSView {
     /// 0…1.
     var value = 1.0 { didSet { needsDisplay = true } }
-    var isEnabled = true { didSet { needsDisplay = true } }
+    /// Whether it takes input. It looks the same either way: the panel greys out its whole row.
+    var isEnabled = true
     var onChange: ((Double) -> Void)?
     private(set) var isTracking = false
 
@@ -455,18 +472,18 @@ final class LogoSlider: NSView {
 
         var filled = track
         filled.size.width = knobX - track.minX
-        (isEnabled ? NSColor.controlAccentColor : NSColor.tertiaryLabelColor).setFill()
+        NSColor.controlAccentColor.setFill()
         NSBezierPath(roundedRect: filled, xRadius: trackHeight / 2, yRadius: trackHeight / 2).fill()
 
         let knob = NSRect(x: knobX - radius, y: bounds.midY - radius, width: Self.knobDiameter, height: Self.knobDiameter)
             .insetBy(dx: 1, dy: 1)
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(isEnabled ? 0.3 : 0.12)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
         shadow.shadowBlurRadius = 2.5
         shadow.shadowOffset = NSSize(width: 0, height: -0.5)
         shadow.set()
-        (isEnabled ? NSColor.white : NSColor(white: 0.92, alpha: 1)).setFill()
+        NSColor.white.setFill()
         NSBezierPath(ovalIn: knob).fill()
         NSGraphicsContext.restoreGraphicsState()
         NSColor.black.withAlphaComponent(0.06).setStroke()

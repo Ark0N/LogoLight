@@ -17,8 +17,8 @@ final class LogoSwitch: NSControl {
     /// Whether the switch is on. A click or a drag flips it (animated) before the action is sent.
     private(set) var isOn = false
 
-    /// When false, clicks are ignored without the switch looking disabled, e.g. while the change it
-    /// asked for is still being applied.
+    /// When false, clicks are ignored without the switch looking disabled, e.g. while the panel
+    /// greys out its whole row instead.
     var acceptsInput = true
 
     override var isEnabled: Bool {
@@ -186,6 +186,6 @@ final class LogoSwitch: NSControl {
     override func accessibilityRole() -> NSAccessibility.Role? { .checkBox }
     override func accessibilitySubrole() -> NSAccessibility.Subrole? { .switch }
     override func accessibilityValue() -> Any? { NSNumber(value: isOn ? 1 : 0) }
-    override func isAccessibilityEnabled() -> Bool { isEnabled }
+    override func isAccessibilityEnabled() -> Bool { isEnabled && acceptsInput }
     override func accessibilityPerformPress() -> Bool { flipByUser() }
 }

@@ -43,9 +43,30 @@ func panelStateTests(_ t: TestHarness) {
         t.expect(!state.canAdjust)
     }
 
-    t.test("while a change is under way, the brightness and effects are greyed out") {
-        let state = PanelState(status: status(.on), canControlDirectly: true, effect: .none, brightness: 1, isBusy: true)
+    t.test("the switch can be used, unless a password is pending or the Mac has no logo") {
+        let ready = PanelState(status: status(.on), canControlDirectly: false, effect: .none, brightness: 1)
+        t.expect(ready.canSwitch)
+        let waiting = PanelState(status: status(.on), canControlDirectly: false, effect: .none, brightness: 1, isBusy: true)
+        t.expect(!waiting.canSwitch)
+        t.expect(!PanelState(status: .unsupported, canControlDirectly: true, effect: .none, brightness: 1).canSwitch)
+    }
+
+    t.test("turning on shows on at once: the brightness and effects light up before the fade ends") {
+        let state = PanelState(status: status(.off), requested: .on, canControlDirectly: true, effect: .pulse,
+                               brightness: 1)
+        t.expect(state.isOn)
+        t.expect(state.canAdjust)
+        t.expect(state.canSwitch, "the switch keeps taking flips")
+        t.expectEqual(state.symbolName, "lightbulb.fill")
+    }
+
+    t.test("turning off shows off at once: the brightness and effects grey out before the fade ends") {
+        let state = PanelState(status: status(.on), requested: .off, canControlDirectly: true, effect: .pulse,
+                               brightness: 1)
+        t.expect(!state.isOn)
         t.expect(!state.canAdjust)
+        t.expectEqual(state.effect, .pulse)
+        t.expectEqual(state.symbolName, "lightbulb.slash")
     }
 
     t.test("a Mac without the logo says why, with the logo off and nothing to adjust") {

@@ -7,9 +7,10 @@ import Foundation
 public struct PanelState: Equatable, Sendable {
     /// Whether this Mac has the illuminated logo.
     public var isSupported: Bool
-    /// Whether the logo switch shows on. An unknown setting counts as on.
+    /// Whether the logo switch shows on: the setting asked for while a switch is under way, otherwise
+    /// the current one. An unknown setting counts as on.
     public var isOn: Bool
-    /// A change is under way (e.g. waiting for the password dialog).
+    /// Waiting for a password or `sudo` (the fallback path, which can't take another change meanwhile).
     public var isBusy: Bool
     /// Whether the brightness and the effects are shown. They need direct control.
     public var showsAdjustments: Bool
@@ -21,16 +22,19 @@ public struct PanelState: Equatable, Sendable {
     public var symbolName: String
     public var symbolDescription: String
 
-    public init(status: LogoStatus, canControlDirectly: Bool, effect: LogoEffect, brightness: Double,
-                isBusy: Bool = false) {
+    /// `requested` is the setting asked for while a switch is under way, which the panel and the icon show
+    /// straight away, so the rest of the panel follows the switch at once instead of when the fade ends.
+    public init(status: LogoStatus, requested: LogoIllumination? = nil, canControlDirectly: Bool,
+                effect: LogoEffect, brightness: Double, isBusy: Bool = false) {
+        let setting = requested ?? status.setting
         isSupported = status.isSupported
-        isOn = status.isSupported && status.setting != .off
+        isOn = status.isSupported && setting != .off
         self.isBusy = isBusy
         showsAdjustments = status.isSupported && canControlDirectly
         self.effect = effect
         self.brightness = brightness
         message = status.isSupported ? nil : "Needs a MacBook Pro with PROLED XDR Display"
-        (symbolName, symbolDescription) = switch (status.isSupported, status.setting) {
+        (symbolName, symbolDescription) = switch (status.isSupported, setting) {
         case (false, _): ("lightbulb.slash", "No illuminated logo on this Mac")
         case (true, .off): ("lightbulb.slash", "Logo illumination off")
         case (true, .on): ("lightbulb.fill", "Logo illumination on")
@@ -38,7 +42,10 @@ public struct PanelState: Equatable, Sendable {
         }
     }
 
-    /// Whether the brightness and the effects can be changed. Otherwise they're greyed out, and keep
-    /// their values for when the logo is back on.
-    public var canAdjust: Bool { showsAdjustments && isOn && !isBusy }
+    /// Whether the logo switch takes clicks. It looks disabled otherwise.
+    public var canSwitch: Bool { isSupported && !isBusy }
+
+    /// Whether the brightness and the effects can be changed: only while the logo is (or is being
+    /// turned) on. Otherwise they're greyed out, and keep their values for when it's back on.
+    public var canAdjust: Bool { showsAdjustments && isOn }
 }

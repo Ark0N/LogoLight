@@ -16,7 +16,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let launchAtLoginItem = NSMenuItem()
 
     private var status = LogoStatus.unsupported
+    /// Waiting for a password or `sudo` (the fallback path).
     private var isBusy = false
+    /// The setting the switch asked for, while it's being applied. The panel and the icon show it
+    /// straight away, rather than the setting, which only changes after the fade.
+    private var requestedSetting: LogoIllumination?
+    /// A flip made while a direct switch is being applied: the latest one, applied next.
+    private var queuedSetting: LogoIllumination?
+    private var switchTask: Task<Void, Never>?
     private var backgroundRefresh: Timer?
     private var liveRefresh: Timer?
     private var liveView: Timer?
@@ -61,7 +68,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
 
         panelItem.view = panel
-        panel.onLogoSwitched = { [weak self] isOn in self?.setLogo(on: isOn) }
+        panel.onLogoSwitched = { [weak self] isOn in self?.setLogo(isOn ? .on : .off) }
         panel.onBrightnessChanged = { [weak self] in self?.setBrightness($0) }
         panel.onEffectChosen = { [weak self] in self?.chooseEffect($0) }
 
@@ -138,8 +145,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private var panelState: PanelState {
-        PanelState(status: status, canControlDirectly: controller.canControlDirectly, effect: controller.effect,
-                   brightness: controller.brightness, isBusy: isBusy)
+        PanelState(status: status, requested: requestedSetting, canControlDirectly: controller.canControlDirectly,
+                   effect: controller.effect, brightness: controller.brightness, isBusy: isBusy)
     }
 
     private func updateIcon() {
@@ -165,12 +172,49 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     // MARK: - Actions
 
-    @objc private func toggleLogo() {
-        perform { [controller] in try await controller.toggle() }
+    /// Option-click: flips what the switch shows.
+    private func toggleLogo() {
+        setLogo((requestedSetting ?? controller.status().setting ?? .on).toggled)
     }
 
-    private func setLogo(on isOn: Bool) {
-        perform { [controller] in try await controller.set(isOn ? .on : .off) }
+    /// Turns the logo on or off. The switch shows it at once, and the rest of the panel follows.
+    ///
+    /// With direct control the switch stays usable while the logo fades. A flip made meanwhile is
+    /// applied when the fade is done (only the latest, and only if it differs from what was just
+    /// applied). Without direct control a password may be needed, and the switch is disabled until
+    /// that's done.
+    private func setLogo(_ target: LogoIllumination) {
+        guard controller.canControlDirectly else {
+            guard !isBusy else { return }
+            requestedSetting = target
+            perform { [controller] in try await controller.set(target) }
+            return
+        }
+        requestedSetting = target
+        refresh()
+        guard switchTask == nil else {
+            queuedSetting = target
+            return
+        }
+        switchTask = Task { [weak self] in await self?.switchDirectly(to: target) }
+    }
+
+    private func switchDirectly(to target: LogoIllumination) async {
+        var next: LogoIllumination? = target
+        while let target = next {
+            do {
+                try await controller.set(target)
+            } catch LogoLightError.cancelled {
+                // The user closed the password dialog (corebrightnessd didn't take the change).
+            } catch {
+                show(error, title: "LogoLight couldn't make the change")
+            }
+            next = queuedSetting == target ? nil : queuedSetting
+            queuedSetting = nil
+        }
+        switchTask = nil
+        requestedSetting = nil
+        refresh()
     }
 
     private func setBrightness(_ brightness: Double) {
@@ -235,6 +279,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         Task { @MainActor in
             defer {
                 isBusy = false
+                if switchTask == nil { requestedSetting = nil }
                 refresh()
             }
             do {
