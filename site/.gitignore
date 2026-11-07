@@ -1,0 +1,4 @@
+# Wrangler's local cache
+.wrangler/
+# The notarized build (make dist), served as the download; not kept in git.
+public/LogoLight.zip

@@ -1,0 +1,14 @@
+// LogoLight's website, https://logolight.app: a Worker with static assets only (no Worker code).
+// Everything served is in ./public. Response headers are in public/_headers.
+{
+  "name": "logolight",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "logolight.app", "custom_domain": true }
+  ]
+}

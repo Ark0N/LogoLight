@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LogoLight: control the glowing Apple logo on your MacBook Pro</title>
+  <meta name="description" content="LogoLight is a free menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display. Turn it on and off, set its brightness, or let it breathe, pulse or beat like a heart.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0c0c0e" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://logolight.app/">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="favicon.png" type="image/png" sizes="64x64">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LogoLight">
+  <meta property="og:url" content="https://logolight.app/">
+  <meta property="og:title" content="LogoLight: control the glowing Apple logo on your MacBook Pro">
+  <meta property="og:description" content="A free menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display. Turn it on and off, set its brightness, or let it breathe, pulse or beat like a heart.">
+  <meta property="og:image" content="https://logolight.app/og.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="LogoLight's app icon and name, beside the top of its menu: the Backlight switch, the live view of the lid with the Apple logo glowing, and the brightness slider.">
+  <meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <!-- Icons for the inline SVGs below. -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+      <symbol id="i-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2.5-6 4 13 3.5-10 2 3h5"/></symbol>
+      <symbol id="i-option" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5h5.5l7 11H21M14 6.5h7"/></symbol>
+      <symbol id="i-login" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/><path d="M3 12h11M10.5 8.5 14 12l-3.5 3.5"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="16.5" r="3.5"/><path d="M10 14 20 4M16.5 7.5l2.5 2.5M14 10l2 2"/></symbol>
+      <symbol id="i-toggles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="3.5"/><circle cx="17.5" cy="7.5" r="1.5" fill="currentColor"/><rect x="3" y="13" width="18" height="7" rx="3.5"/><circle cx="6.5" cy="16.5" r="1.5" fill="currentColor"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+      <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.6.8-.6 1.7 0 2.5M12 3.5c-.6.8-.6 1.7 0 2.5"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-check" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.4 4.7 9 10 3"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="2.6" height="10" rx="1"/><rect x="9.4" y="3" width="2.6" height="10" rx="1"/></symbol>
+      <symbol id="i-play" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.2v9.6a.8.8 0 0 0 1.2.7l7.6-4.8a.8.8 0 0 0 0-1.4L6.2 2.5A.8.8 0 0 0 5 3.2z"/></symbol>
+      <!-- Generic menu bar glyphs for the scene around the real menu. -->
+      <symbol id="g-battery" viewBox="0 0 27 13"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2"/><rect x="2.4" y="2.4" width="16" height="8.2" rx="1.8" fill="currentColor"/><path d="M25 4.4c.9.3 1.5 1.1 1.5 2.1s-.6 1.8-1.5 2.1z" fill="currentColor" fill-opacity=".45"/></symbol>
+      <symbol id="g-wifi" viewBox="0 0 18 13"><path d="M9 12.6 6.6 10a3.4 3.4 0 0 1 4.8 0z" fill="currentColor"/><path d="M4.4 7.8a6.6 6.6 0 0 1 9.2 0l-1.3 1.3a4.8 4.8 0 0 0-6.6 0z" fill="currentColor"/><path d="M2.2 5.6a9.7 9.7 0 0 1 13.6 0l1.3-1.3A11.5 11.5 0 0 0 .9 4.3z" fill="currentColor"/></symbol>
+      <symbol id="g-controls" viewBox="0 0 17 13"><rect x=".7" y=".7" width="15.6" height="5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="13.6" cy="3.2" r="1.6" fill="currentColor"/><rect x=".7" y="7.3" width="15.6" height="5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="3.4" cy="9.8" r="1.6" fill="currentColor"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <img src="images/app-icon-128.png" width="28" height="28" alt="">
+        <span>LogoLight</span>
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <ul>
+          <li class="nav-wide"><a href="#effects">Effects</a></li>
+          <li class="nav-wide"><a href="#menu">Menu</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li class="nav-mid"><a href="https://github.com/Ark0N/LogoLight">GitHub</a></li>
+          <li><a class="nav-cta" href="#download">Download</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">For MacBook Pro with PROLED XDR Display</p>
+          <h1 id="hero-title">The logo on your lid, your&nbsp;way.</h1>
+          <p class="lead">LogoLight is a free menu bar app for the illuminated Apple logo on the back of your MacBook&nbsp;Pro. Turn it off, dim it, or let it breathe, pulse or beat like a&nbsp;heart.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="/LogoLight.zip">
+              <svg aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
+              Download free
+            </a>
+            <a class="btn-link" href="#effects">See it glow<svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a>
+          </div>
+          <ul class="facts" role="list">
+            <li><svg aria-hidden="true" focusable="false"><use href="#i-shield"/></svg>Signed with a Developer ID and notarized by Apple</li>
+            <li><svg aria-hidden="true" focusable="false"><use href="#i-code"/></svg><span>Free and open source, <a href="https://github.com/Ark0N/LogoLight">on GitHub</a></span></li>
+          </ul>
+        </div>
+
+        <figure class="scene">
+          <div class="screen-frame">
+            <!-- The menu is a real render of LogoLight's panel (LOGOLIGHT_RENDER_PANEL, see PanelRenderer), with the
+                 live view unlit; the menu bar, the menu's frame and its two plain items are drawn here, as the app shows
+                 them. The live view's light (LOGOLIGHT_RENDER_LIGHT) is laid over the lid and faded with Breathe's timing. -->
+            <div class="screen" role="img" aria-label="LogoLight's menu, open below its icon in the menu bar. At the top, the Backlight switch is on. Below it, the live view of the lid, with the Apple logo glowing and slowly breathing, then the brightness slider near full, and of the effects Breathe, Pulse and Heartbeat, Breathe is on. Then Launch at Login, checked, and Quit LogoLight.">
+              <div class="menubar">
+                <span class="status status-open">
+                  <img class="status-icon" src="images/menubar-icon.png" width="12" height="17" alt="">
+                  <span class="menu">
+                    <span class="menu-panel">
+                      <picture>
+                        <source srcset="images/menu-breathe-dark.png" media="(prefers-color-scheme: dark)">
+                        <img src="images/menu-breathe-light.png" width="850" height="1575" alt="" fetchpriority="high">
+                      </picture>
+                      <span class="glow anim-breathe">
+                        <img class="halo" src="images/lid-light-696.png" width="696" height="492" alt="">
+                        <img src="images/lid-shape-696.png" width="696" height="492" alt="">
+                      </span>
+                    </span>
+                    <span class="menu-sep"></span>
+                    <span class="menu-item"><svg class="menu-check" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>Launch at Login</span>
+                    <span class="menu-sep"></span>
+                    <span class="menu-item">Quit LogoLight</span>
+                  </span>
+                </span>
+                <svg class="glyph glyph-battery" aria-hidden="true" focusable="false"><use href="#g-battery"/></svg>
+                <svg class="glyph glyph-wifi" aria-hidden="true" focusable="false"><use href="#g-wifi"/></svg>
+                <svg class="glyph glyph-controls" aria-hidden="true" focusable="false"><use href="#g-controls"/></svg>
+                <span class="clock">Sat 9:41</span>
+              </div>
+            </div>
+            <label class="pause">
+              <input type="checkbox">
+              <svg class="pause-icon" aria-hidden="true" focusable="false"><use href="#i-pause"/></svg>
+              <svg class="play-icon" aria-hidden="true" focusable="false"><use href="#i-play"/></svg>
+              <span class="visually-hidden">Pause the animation</span>
+            </label>
+          </div>
+          <figcaption>LogoLight's menu, with Breathe on. Its live view follows the real&nbsp;logo.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="stage">
+      <section class="stage-part" id="effects" aria-labelledby="effects-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Effects</p>
+            <h2 id="effects-title">Breathe. Pulse. Heartbeat.</h2>
+            <p>Three ways for the logo to come alive, made from the light's own hardware fades. Each one peaks at the brightness you set, and pauses while the logo is off or the display sleeps. Try them&nbsp;here.</p>
+          </div>
+
+          <div class="play">
+            <!-- LogoLight's live view at 14x (LOGOLIGHT_RENDER_SCALE, _GLOWS=0, _LIGHT): the lid unlit, with the logo's
+                 light over it. The light's group and its glow both fade to the level, as the live view draws it.
+                 The controls below pick the effect (timings from LogoEffect.cycle) and the level, without scripts. -->
+            <figure class="big-lid">
+              <span class="lid" role="img" aria-label="LogoLight's live view, enlarged: the lid of the MacBook Pro, with the Apple logo glowing at the effect and brightness chosen below.">
+                <img src="images/lid-black-1624.png" srcset="images/lid-black-696.png 696w, images/lid-black-1160.png 1160w, images/lid-black-1624.png 1624w" sizes="min(100vw - 32px, 760px)" width="1624" height="1148" alt="" loading="lazy" decoding="async">
+                <span class="glow">
+                  <img class="halo" src="images/lid-light-1624.png" srcset="images/lid-light-696.png 696w, images/lid-light-1160.png 1160w, images/lid-light-1624.png 1624w" sizes="min(100vw - 32px, 760px)" width="1624" height="1148" alt="" loading="lazy" decoding="async">
+                  <img src="images/lid-shape-1624.png" srcset="images/lid-shape-696.png 696w, images/lid-shape-1160.png 1160w, images/lid-shape-1624.png 1624w" sizes="min(100vw - 32px, 760px)" width="1624" height="1148" alt="" loading="lazy" decoding="async">
+                </span>
+              </span>
+              <figcaption>LogoLight's live view, enlarged</figcaption>
+            </figure>
+
+            <div class="controls">
+              <fieldset class="segmented">
+                <legend>Effect</legend>
+                <div class="segments">
+                  <label><input type="radio" name="effect" id="fx-none"><span>None</span></label>
+                  <label><input type="radio" name="effect" id="fx-breathe" checked><span>Breathe</span></label>
+                  <label><input type="radio" name="effect" id="fx-pulse"><span>Pulse</span></label>
+                  <label><input type="radio" name="effect" id="fx-heartbeat"><span>Heartbeat</span></label>
+                </div>
+              </fieldset>
+              <fieldset class="segmented">
+                <legend>Brightness</legend>
+                <div class="segments">
+                  <label><input type="radio" name="level" id="lv-25"><span>25%</span></label>
+                  <label><input type="radio" name="level" id="lv-50"><span>50%</span></label>
+                  <label><input type="radio" name="level" id="lv-75"><span>75%</span></label>
+                  <label><input type="radio" name="level" id="lv-100" checked><span>100%</span></label>
+                </div>
+              </fieldset>
+            </div>
+
+            <div class="fx-notes">
+              <p class="fx-note fx-note-none">No effect: the logo holds steady at your brightness, and still adapts to the light around&nbsp;you.</p>
+              <p class="fx-note fx-note-breathe"><strong>Breathe</strong> Slow and soft, like an old Mac's sleep&nbsp;light.</p>
+              <p class="fx-note fx-note-pulse"><strong>Pulse</strong> A steady, quicker rise and&nbsp;fall.</p>
+              <p class="fx-note fx-note-heartbeat"><strong>Heartbeat</strong> Two quick beats, then a&nbsp;rest.</p>
+              <p class="motion-note">Reduce Motion is on, so the effects aren't animated&nbsp;here.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stage-part" id="live-view" aria-labelledby="live-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Live view</p>
+            <h2 id="live-title">Your lid, live, in its own&nbsp;finish.</h2>
+            <p>The menu shows your lid as it is right now, read from the hardware on every frame while the menu is open, so it follows effects, the slider and changes made elsewhere. And it's drawn in your Mac's own finish, space black or&nbsp;silver.</p>
+          </div>
+
+          <ul class="finishes" role="list">
+            <li>
+              <figure>
+                <span class="lid" role="img" aria-label="The live view in space black, with the Apple logo glowing.">
+                  <img src="images/lid-black-1160.png" srcset="images/lid-black-696.png 696w, images/lid-black-1160.png 1160w" sizes="(min-width: 640px) min(46vw, 500px), calc(100vw - 32px)" width="1160" height="820" alt="" loading="lazy" decoding="async">
+                  <span class="glow">
+                    <img class="halo" src="images/lid-light-1160.png" srcset="images/lid-light-696.png 696w, images/lid-light-1160.png 1160w" sizes="(min-width: 640px) min(46vw, 500px), calc(100vw - 32px)" width="1160" height="820" alt="" loading="lazy" decoding="async">
+                    <img src="images/lid-shape-1160.png" srcset="images/lid-shape-696.png 696w, images/lid-shape-1160.png 1160w" sizes="(min-width: 640px) min(46vw, 500px), calc(100vw - 32px)" width="1160" height="820" alt="" loading="lazy" decoding="async">
+                  </span>
+                </span>
+                <figcaption>Space black</figcaption>
+              </figure>
+            </li>
+            <li>
+              <figure>
+                <span class="lid" role="img" aria-label="The live view in silver, with the Apple logo glowing.">
+                  <img src="images/lid-silver-1160.png" srcset="images/lid-silver-696.png 696w, images/lid-silver-1160.png 1160w" sizes="(min-width: 640px) min(46vw, 500px), calc(100vw - 32px)" width="1160" height="820" alt="" loading="lazy" decoding="async">
+                  <span class="glow">
+                    <img class="halo" src="images/lid-light-1160.png" srcset="images/lid-light-696.png 696w, images/lid-light-1160.png 1160w" sizes="(min-width: 640px) min(46vw, 500px), calc(100vw - 32px)" width="1160" height="820" alt="" loading="lazy" decoding="async">
+                    <img src="images/lid-shape-1160.png" srcset="images/lid-shape-696.png 696w, images/lid-shape-1160.png 1160w" sizes="(min-width: 640px) min(46vw, 500px), calc(100vw - 32px)" width="1160" height="820" alt="" loading="lazy" decoding="async">
+                  </span>
+                </span>
+                <figcaption>Silver</figcaption>
+              </figure>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <section class="section" id="menu" aria-labelledby="menu-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">The menu</p>
+          <h2 id="menu-title">Everything in one small menu.</h2>
+          <p>Click LogoLight in the menu bar and it's all there. Turn the logo off, and the controls below its switch grey out, keeping their settings for when it's back.</p>
+        </div>
+
+        <div class="menu-pair">
+          <figure class="menu-shot">
+            <span class="menu menu-alone">
+              <picture>
+                <source srcset="images/menu-on-dark.png" media="(prefers-color-scheme: dark)">
+                <img src="images/menu-on-light.png" width="850" height="1575" alt="LogoLight's menu with the logo on: the Backlight switch on, the live view of the lid with the Apple logo glowing, the brightness slider at three quarters, and no effect switched on." loading="lazy" decoding="async">
+              </picture>
+            </span>
+            <figcaption>On, at three quarters</figcaption>
+          </figure>
+          <figure class="menu-shot">
+            <span class="menu menu-alone">
+              <picture>
+                <source srcset="images/menu-off-dark.png" media="(prefers-color-scheme: dark)">
+                <img src="images/menu-off-light.png" width="850" height="1575" alt="LogoLight's menu with the logo off: the Backlight switch is off, the live view of the lid is dark, and the slider and effect switches below it are greyed out, keeping their settings." loading="lazy" decoding="async">
+              </picture>
+            </span>
+            <figcaption>Off, the rest greyed out</figcaption>
+          </figure>
+        </div>
+
+        <ul class="trio" role="list">
+          <li class="feature">
+            <span class="tile tile-orange"><svg aria-hidden="true" focusable="false"><use href="#i-power"/></svg></span>
+            <h3>On and off</h3>
+            <p>Flip the Backlight switch, and the logo fades out, or back in, smoothly, usually without a password.</p>
+          </li>
+          <li class="feature">
+            <span class="tile tile-blue"><svg aria-hidden="true" focusable="false"><use href="#i-sun"/></svg></span>
+            <h3>Brightness</h3>
+            <p>Drag the slider, and the logo follows it, then holds at the level you chose. It still adapts to the light around you, scaled to your setting.</p>
+          </li>
+          <li class="feature">
+            <span class="tile tile-pink"><svg aria-hidden="true" focusable="false"><use href="#i-wave"/></svg></span>
+            <h3>Effects</h3>
+            <p>Breathe, Pulse or Heartbeat, one at a time. Switch one off and the logo holds steady again.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="more" aria-labelledby="more-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">And more</p>
+          <h2 id="more-title">Small things, done right.</h2>
+        </div>
+
+        <ul class="cards" role="list">
+          <li class="card feature card-cc" data-feature="control-center">
+            <div class="cc-copy">
+              <span class="tile tile-blue"><svg aria-hidden="true" focusable="false"><use href="#i-toggles"/></svg></span>
+              <h3>In Control Center, too</h3>
+              <p>Put LogoLight's <strong>Backlight</strong> switch in Control Center, or straight into the menu bar: in Control Center, click Edit Controls, search for LogoLight and drag it&nbsp;in.</p>
+              <p class="fine">Control Center offers apps no sliders, so brightness stays in LogoLight's menu.</p>
+            </div>
+            <!-- The real Control Center screenshot (docs/control-center.png, the README's), with the card spanning the
+                 row and the picture beside the text. For separate light and dark pictures, save them as
+                 images/control-center-light.png and images/control-center-dark.png and add
+                 <source srcset="images/control-center-dark.png" media="(prefers-color-scheme: dark)"> in a <picture>. -->
+            <figure class="cc-shot">
+              <img src="images/control-center.png" width="1440" height="1289" alt="Control Center on a Mac, with LogoLight's Backlight button at the top. Beside it, an arrow from the word Backlight, and LogoLight's live view of the lid with the logo lit and dark, for on and off. Below, the steps to add it: open Control Center, click Edit Controls, search for LogoLight and drag Backlight in, with an arrow to the Edit Controls button." loading="lazy" decoding="async">
+            </figure>
+          </li>
+          <li class="card feature">
+            <span class="tile tile-indigo"><svg aria-hidden="true" focusable="false"><use href="#i-option"/></svg></span>
+            <h3>Option-click to toggle</h3>
+            <p>Hold <kbd>⌥ Option</kbd> and click LogoLight in the menu bar to switch the logo on or off, without opening the menu.</p>
+          </li>
+          <li class="card feature">
+            <span class="tile tile-green"><svg aria-hidden="true" focusable="false"><use href="#i-login"/></svg></span>
+            <h3>Launch at Login</h3>
+            <p>LogoLight can start when you log in, and it remembers your brightness and effect.</p>
+          </li>
+          <li class="card feature">
+            <span class="tile tile-teal"><svg aria-hidden="true" focusable="false"><use href="#i-key"/></svg></span>
+            <h3>A password once, at most</h3>
+            <p>LogoLight usually switches the logo with no password at all. If it can't switch the logo directly, it asks for your administrator password once: it turns on <strong>Disable Password</strong> at the same time, and doesn't ask again.</p>
+            <p class="fine">In that case, LogoLight can only turn the logo on and off: brightness and effects need direct control.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="download" aria-labelledby="download-title">
+      <div class="wrap offer">
+        <img class="offer-icon" src="images/app-icon-256.png" width="112" height="112" alt="">
+        <h2 id="download-title">Free to download.</h2>
+        <p class="offer-text">Every feature is free. If you enjoy LogoLight, you can say thanks with a&nbsp;coffee.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/LogoLight.zip">
+            <svg aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
+            Download LogoLight
+          </a>
+          <!-- The support link, also in the README's Support section. Donations state no amount. -->
+          <a class="btn btn-secondary" href="https://buymeacoffee.com/arkon" rel="noopener">
+            <svg aria-hidden="true" focusable="false"><use href="#i-cup"/></svg>
+            Buy me a coffee
+          </a>
+        </div>
+        <ol class="steps" role="list" aria-label="Installing">
+          <li>Unzip LogoLight.zip, if your browser hasn't already.</li>
+          <li>Move LogoLight to your Applications folder.</li>
+          <li>Open it. LogoLight lives in the menu bar.</li>
+        </ol>
+        <p class="fine">Requires a MacBook Pro with PROLED XDR Display. Signed with a Developer ID and notarized by Apple.</p>
+        <p class="fine">Rather build it yourself? The source is <a href="https://github.com/Ark0N/LogoLight">on GitHub</a>, under the MIT license.</p>
+      </div>
+    </section>
+
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="wrap faq-wrap">
+        <div class="section-head">
+          <h2 id="faq-title">Questions</h2>
+        </div>
+
+        <div class="faq">
+          <details>
+            <summary><h3>Why isn't it on the App Store?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
+            <div class="answer">
+              <p>LogoLight works with the part of macOS that drives the logo, through system interfaces that Mac App Store apps aren't allowed to use. Store apps also have to run in a sandbox, which would shut LogoLight out completely.</p>
+              <p>So it's offered here instead, signed with a Developer ID and notarized by Apple.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><h3>Is it safe?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
+            <div class="answer">
+              <p>LogoLight is signed with a Developer ID and notarized by Apple, which means Apple has checked it for malicious software.</p>
+              <p>It usually needs no password. If LogoLight can't switch the logo directly, it asks for one once, in the standard macOS dialog, and installs a small rule (in <code>/etc/sudoers.d</code>) that lets your user account run exactly two commands without a password: Apple's documented commands to turn the logo off and back on. Nothing else. The rule is checked before it's installed, so it can't break <code>sudo</code>, and unchecking <strong>Disable Password</strong> removes it.</p>
+              <p>And the whole source is <a href="https://github.com/Ark0N/LogoLight">on GitHub</a>, so anyone can check what it does.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><h3>Which Macs does it work on?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
+            <div class="answer">
+              <p>The MacBook Pro with PROLED XDR Display, the model with the illuminated Apple logo on the back of the lid. On other Macs, LogoLight opens but tells you the logo isn't available.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><h3>How do I uninstall it?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
+            <div class="answer">
+              <ol>
+                <li>If <strong>Disable Password</strong> is checked, uncheck it first. That removes the password rule.</li>
+                <li>Turn off <strong>Launch at Login</strong> if you turned it on.</li>
+                <li>Quit LogoLight and move it from Applications to the Trash.</li>
+              </ol>
+              <p>Quitting stops any effect and returns the logo to its normal brightness. If you turned the logo off, it stays off. To turn it back on without LogoLight, run <code>sudo defaults delete com.apple.CoreBrightness LEBacklightMode</code> in Terminal.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><h3>Is it really free?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
+            <div class="answer">
+              <p>Yes. Download it and use every feature for free. If you enjoy it, you can buy me a coffee, but it doesn't unlock anything; it just says thanks.</p>
+              <p>It's open source, too: the code is <a href="https://github.com/Ark0N/LogoLight">on GitHub</a> under the MIT license, so you can read it, change it or build it yourself.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p class="brand">
+        <img src="images/app-icon-128.png" width="24" height="24" alt="">
+        <span>LogoLight</span>
+      </p>
+      <p>A menu bar app for the MacBook Pro with PROLED XDR Display. Open source, <a href="https://github.com/Ark0N/LogoLight">on GitHub</a>. This site sets no cookies and has no analytics.</p>
+      <p>LogoLight is not affiliated with or endorsed by Apple Inc. Apple, the Apple logo and MacBook Pro are trademarks of Apple Inc., registered in the U.S. and other countries.</p>
+    </div>
+  </footer>
+</body>
+</html>

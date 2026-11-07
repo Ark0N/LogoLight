@@ -1,0 +1,33 @@
+# Cloudflare Workers static assets: response headers by path.
+# The site loads nothing from elsewhere: no scripts, no inline styles, no fonts or images from other hosts.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
+  Cross-Origin-Opener-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Pictures and icons are kept for a day, so a visit doesn't check each one again. A picture replaced under the
+# same name can show for up to a day afterwards. The pages and style.css are checked on every visit (the default),
+# so a new page never meets an old stylesheet.
+/images/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/favicon.ico
+  Cache-Control: public, max-age=86400
+
+/favicon.png
+  Cache-Control: public, max-age=86400
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400
+
+/og.jpg
+  Cache-Control: public, max-age=86400
+
+# The notarized build (make dist). Always download it rather than open it in the browser.
+/LogoLight.zip
+  Content-Disposition: attachment; filename="LogoLight.zip"
