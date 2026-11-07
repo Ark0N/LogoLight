@@ -21,7 +21,7 @@ dist:
 	scripts/build-app.sh
 	scripts/notarize.sh
 
-## run: build and open the app
+## run: build and open the app (pkill quits LogoLight cleanly, returning the logo to normal)
 run: app
 	-pkill -x LogoLight
 	open $(APP)
