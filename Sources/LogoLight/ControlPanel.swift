@@ -42,6 +42,9 @@ final class ControlPanel: NSView {
     private let effectsCard = Card()
     private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
 
+    /// What the panel shows now. `nil` until the first update, which always applies.
+    private var state: PanelState?
+
     /// How the brightness and the effects look while the logo is off.
     private static let greyedOutAlpha: CGFloat = 0.4
     /// How long they take to grey out or come back when the logo is switched.
@@ -65,6 +68,9 @@ final class ControlPanel: NSView {
     }
 
     func update(_ state: PanelState) {
+        guard state != self.state else { return }
+        let old = self.state
+        self.state = state
         preview.isHidden = !state.isSupported
         let animated = window?.isVisible == true
 
@@ -90,7 +96,11 @@ final class ControlPanel: NSView {
 
         footerLabel.stringValue = state.message ?? ""
         footerContainer.isHidden = state.message == nil
-        resizeToFit()
+        // Only these change the panel's height.
+        if old?.isSupported != state.isSupported || old?.showsAdjustments != state.showsAdjustments
+            || old?.message != state.message {
+            resizeToFit()
+        }
     }
 
     /// Greys out the brightness and the effects, or brings them back, as one fade of their rows
@@ -574,7 +584,6 @@ enum PanelRenderer {
         window.backgroundColor = appearance == .darkAqua ? NSColor(white: 0.2, alpha: 1) : NSColor(white: 0.9, alpha: 1)
         window.isOpaque = true
         window.contentView = panel
-        panel.update(state)
         window.setContentSize(panel.frame.size)
         window.displayIfNeeded()
         reportTruncatedLabels(in: panel, path: path)

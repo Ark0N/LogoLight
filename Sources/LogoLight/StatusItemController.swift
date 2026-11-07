@@ -27,10 +27,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var isMenuOpen = false
     /// What's waiting for the menu to close (see `whenMenuClosed(_:)`).
     private var afterMenuCloses: [@MainActor () -> Void] = []
-    private var backgroundRefresh: Timer?
-    private var liveRefresh: Timer?
+    /// Picks up changes made elsewhere, e.g. from Terminal: every 10 s, or every second while the
+    /// menu is open.
+    private var refreshTimer: Timer?
     /// Redraws the live view at the display's frame rate while the menu is open.
     private var glowLink: CADisplayLink?
+    /// Launch at Login and the sudoers rule, read when the menu opens and after they're changed,
+    /// rather than on every refresh.
+    private var isLaunchAtLoginEnabled = false
+    private var isPasswordlessEnabled = false
+    /// The menu bar icon's symbol and description, so it's only replaced when they change.
+    private var iconSymbol: (name: String, description: String)?
     private var workspaceObservers: [NSObjectProtocol] = []
 
     private static let effectDefaultsKey = "Effect"
@@ -59,11 +66,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         }
 
+        readMenuSettings()
         refresh()
-        // Pick up changes made elsewhere, e.g. from Terminal.
-        backgroundRefresh = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
+        scheduleRefresh(every: 10)
     }
 
     // MARK: - Menu
@@ -114,13 +119,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
+        readMenuSettings()
         refresh()
-        // Keep the panel current while the menu is open.
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        RunLoop.main.add(timer, forMode: .eventTracking)
-        liveRefresh = timer
+        scheduleRefresh(every: 1)
 
         // The live view reads the real logo on every frame, in step with the display, so it's only
         // drawn while it's visible. (`.common` includes the menu's event-tracking mode.)
@@ -136,8 +137,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        liveRefresh?.invalidate()
-        liveRefresh = nil
+        scheduleRefresh(every: 10)
         // The link keeps its target alive until it's invalidated.
         glowLink?.invalidate()
         glowLink = nil
@@ -165,8 +165,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func refresh() {
         status = controller.status()
-        updateIcon()
         updateMenu()
+    }
+
+    /// Runs `refresh()` every `interval` seconds, replacing the previous timer. It runs in the menu's
+    /// event-tracking mode too.
+    private func scheduleRefresh(every interval: TimeInterval) {
+        refreshTimer?.invalidate()
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+    }
+
+    private func readMenuSettings() {
+        isLaunchAtLoginEnabled = LaunchAtLogin.isEnabled
+        isPasswordlessEnabled = controller.isPasswordlessEnabled
     }
 
     private var panelState: PanelState {
@@ -174,25 +189,30 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                    effect: controller.effect, brightness: controller.brightness, isBusy: isBusy)
     }
 
-    private func updateIcon() {
-        guard let button = statusItem.button else { return }
+    /// Brings the icon, the panel and the menu items up to date with the last status and the choices.
+    private func updateMenu() {
         let state = panelState
+        updateIcon(state)
+        panel.update(state)
+
+        // Only needed when the logo can't be controlled directly; kept visible if a rule is
+        // already installed, so it can be removed.
+        passwordlessItem.isHidden = controller.canControlDirectly && !isPasswordlessEnabled
+        passwordlessItem.state = isPasswordlessEnabled ? .on : .off
+        passwordlessItem.isEnabled = status.isSupported && !isBusy
+        launchAtLoginItem.state = isLaunchAtLoginEnabled ? .on : .off
+    }
+
+    private func updateIcon(_ state: PanelState) {
+        guard let button = statusItem.button,
+              iconSymbol?.name != state.symbolName || iconSymbol?.description != state.symbolDescription
+        else { return }
+        iconSymbol = (state.symbolName, state.symbolDescription)
         let image = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: state.symbolDescription)
         image?.isTemplate = true
         button.image = image
         button.appearsDisabled = !state.isSupported
         button.toolTip = "LogoLight: \(state.symbolDescription)\nOption-click to toggle"
-    }
-
-    private func updateMenu() {
-        panel.update(panelState)
-
-        // Only needed when the logo can't be controlled directly; kept visible if a rule is
-        // already installed, so it can be removed.
-        passwordlessItem.isHidden = controller.canControlDirectly && !controller.isPasswordlessEnabled
-        passwordlessItem.state = controller.isPasswordlessEnabled ? .on : .off
-        passwordlessItem.isEnabled = status.isSupported && !isBusy
-        launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
     }
 
     // MARK: - Actions
@@ -293,6 +313,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } catch {
             report(error, title: "Couldn't change Launch at Login")
         }
+        isLaunchAtLoginEnabled = LaunchAtLogin.isEnabled
         updateMenu()
     }
 
@@ -308,6 +329,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 defer {
                     isBusy = false
                     if switchTask == nil { requestedSetting = nil }
+                    // The rule may have been added or removed.
+                    isPasswordlessEnabled = controller.isPasswordlessEnabled
                     refresh()
                 }
                 do {
