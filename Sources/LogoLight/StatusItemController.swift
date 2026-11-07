@@ -274,6 +274,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         case .turnOn, .turnOff:
             // Only a change: switching to what the switch already shows would fade the logo out and
             // back in, and restart an effect. (A control can ask for that when its value is stale.)
+            // Compared with the setting as it is now, not as the last refresh (up to 10 s ago) saw it.
+            refresh()
             let turnsOn = request == .turnOn
             if status.isSupported, panelState.isOn != turnsOn { setLogo(turnsOn ? .on : .off) }
         }
