@@ -36,8 +36,9 @@ runs but says the logo isn't available. So:
 - Anything that changes what the LED does must be checked on the MacBook before it's called
   done, with `tools/livecheck`. Say so explicitly if it wasn't.
 - To see the panel anywhere, without touching the logo or the screen, draw it to PNGs in each
-  state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`
-  (switches render grey there, since the window isn't active).
+  state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`.
+  The switches are `LogoSwitch`, drawn by the app: AppKit's `NSSwitch` draws grey inside a menu until
+  the menu's window becomes key, a moment after it opens, which looked slow.
   `LOGOLIGHT_OPEN_MENU=1 .build/debug/LogoLight` opens the real menu. Quit LogoLight first, and
   don't use it while the user is working: it interrupts them, and the menu won't stay open.
 

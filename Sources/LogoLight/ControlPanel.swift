@@ -34,7 +34,7 @@ final class ControlPanel: NSView {
     private let preview = LogoPreview()
     private let logoTile = IconTile(symbol: "lightbulb.fill", color: .systemOrange)
     private let logoLabel = NSTextField(labelWithString: "Apple Logo")
-    private let logoSwitch = NSSwitch()
+    private let logoSwitch = LogoSwitch()
     private let brightnessSeparator = Separator()
     private let brightnessRow = NSView()
     private let dimIcon = NSImageView()
@@ -45,7 +45,7 @@ final class ControlPanel: NSView {
     private var footerContainer = NSView()
     private var effectsHeaderContainer = NSView()
     private let effectsCard = Card()
-    private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: NSSwitch)] = []
+    private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
 
     private var state = PanelState()
 
@@ -70,9 +70,13 @@ final class ControlPanel: NSView {
         let isOn = state.isSupported && state.isOn
         let canAdjust = isOn && state.canAnimate && !state.isBusy
 
-        // While busy, the switch keeps showing what was just asked for.
-        if !state.isBusy { logoSwitch.state = isOn ? .on : .off }
-        logoSwitch.isEnabled = state.isSupported && !state.isBusy
+        let animated = window?.isVisible == true
+
+        // While busy, the switch keeps showing what was just asked for. It only looks disabled while
+        // a password is needed; a direct change just ignores clicks until it's done.
+        if !state.isBusy { logoSwitch.setOn(isOn, animated: animated) }
+        logoSwitch.isEnabled = state.isSupported && !(state.isBusy && !state.canAnimate)
+        logoSwitch.acceptsInput = !state.isBusy
         logoLabel.textColor = state.isSupported ? .labelColor : .tertiaryLabelColor
         logoTile.isDimmed = !state.isSupported
 
@@ -89,7 +93,7 @@ final class ControlPanel: NSView {
         }
 
         for row in effectRows {
-            row.toggle.state = row.effect == state.effect ? .on : .off
+            row.toggle.setOn(row.effect == state.effect, animated: animated)
             row.toggle.isEnabled = canAdjust
             row.label.textColor = canAdjust ? .labelColor : .tertiaryLabelColor
             row.tile.isDimmed = !canAdjust
@@ -148,7 +152,7 @@ final class ControlPanel: NSView {
         for effect in LogoEffect.allCases where effect != .none {
             let tile = IconTile(symbol: Self.symbolName(for: effect), color: Self.color(for: effect))
             let label = NSTextField(labelWithString: effect.title)
-            let toggle = NSSwitch()
+            let toggle = LogoSwitch()
             toggle.target = self
             toggle.action = #selector(effectSwitchChanged(_:))
             toggle.setAccessibilityLabel(effect.title)
@@ -160,10 +164,9 @@ final class ControlPanel: NSView {
         addFullWidth(effectsCard)
     }
 
-    private func row(tile: IconTile, label: NSTextField, toggle: NSSwitch) -> NSView {
+    private func row(tile: IconTile, label: NSTextField, toggle: LogoSwitch) -> NSView {
         label.font = .systemFont(ofSize: 13)
         label.lineBreakMode = .byTruncatingTail
-        toggle.controlSize = .regular
 
         let row = NSView()
         for view in [tile, label, toggle] {
@@ -226,13 +229,13 @@ final class ControlPanel: NSView {
     // MARK: - Actions
 
     @objc private func logoSwitchChanged() {
-        onLogoSwitched?(logoSwitch.state == .on)
+        onLogoSwitched?(logoSwitch.isOn)
     }
 
-    @objc private func effectSwitchChanged(_ sender: NSSwitch) {
+    @objc private func effectSwitchChanged(_ sender: LogoSwitch) {
         guard let row = effectRows.first(where: { $0.toggle === sender }) else { return }
-        let effect: LogoEffect = sender.state == .on ? row.effect : .none
-        for other in effectRows where other.toggle !== sender { other.toggle.state = .off }
+        let effect: LogoEffect = sender.isOn ? row.effect : .none
+        for other in effectRows where other.toggle !== sender { other.toggle.setOn(false, animated: true) }
         onEffectChosen?(effect)
     }
 
