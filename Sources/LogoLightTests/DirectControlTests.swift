@@ -150,6 +150,26 @@ func effectTests(_ t: TestHarness) async {
         t.expect(f.daemon.lit)
     }
 
+    await t.test("choosing None just after an effect's fall began stays at the brightness") {
+        for brightness in [0.5, 1] {
+            let f = Fixture(direct: true, timeDriven: true)
+            let level = LogoAnimator.level(forBrightness: brightness)
+            f.daemon.setHeld(at: level, state: level < 1 ? 1 : 2)
+            f.controller.setBrightness(brightness)
+            await settle()
+            f.clock.budget = 0 // the effect stops at its first sleep, and its fall carries on
+            f.controller.setEffect(.breathe)
+            await settle()
+            t.expectEqual(f.daemon.state, 1)
+            f.daemon.elapse(0.005)
+            f.clock.budget = .max
+            f.controller.setEffect(.none)
+            await settle()
+            f.daemon.elapse(10)
+            t.expect(abs(f.daemon.level - level) < 0.005, "brightness \(brightness): \(level) became \(f.daemon.level)")
+        }
+    }
+
     t.test("restoreNormalLighting resets the fade and relights the logo") {
         let f = Fixture(direct: true)
         f.controller.setEffect(.breathe)

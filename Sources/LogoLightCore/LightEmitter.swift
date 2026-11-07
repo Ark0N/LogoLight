@@ -180,7 +180,10 @@ public final class LightEmitter {
         let target = min(max(level, 0), 1)
         // Unknown: assume the far end, so the fade goes all the way.
         let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
-        guard abs(target - current) >= 0.005 else { return }
+        guard abs(target - current) >= 0.005 else {
+            stay(at: target, over: duration)
+            return
+        }
 
         let lit = target > current
         let end: Double = lit ? 1 : 0
@@ -207,6 +210,26 @@ public final class LightEmitter {
             waited += Self.pollInterval
         }
         turnRound(from: lit) // and hold it there
+    }
+
+    /// Keeps the logo at a target it has (about) reached. A fade may still be under way, e.g. from
+    /// an effect step that was cancelled, and it would carry the logo on past the target.
+    private func stay(at target: Double, over duration: Double) {
+        if target <= 0.001 || target >= 0.999 {
+            // A fade toward an end stops there by itself.
+            let lit = target >= 0.999
+            if isHeadingLit != lit {
+                setFadeDuration(duration)
+                setLit(lit)
+            }
+        } else if let heading = isHeadingLit {
+            turnRound(from: heading)
+        } else {
+            // Heading unknown: each write is either ignored or starts a fade too slow to see.
+            setFadeDuration(Self.holdDuration)
+            setLit(false)
+            setLit(true)
+        }
     }
 
     /// Back to normal: fully lit (when the display is on), with the automatic fade duration.
