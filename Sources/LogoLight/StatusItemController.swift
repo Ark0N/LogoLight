@@ -16,7 +16,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let launchAtLoginItem = NSMenuItem()
 
     private var status = LogoStatus.unsupported
-    /// Waiting for a password or `sudo` (the fallback path).
+    /// Waiting for a password or `sudo` (the fallback path), or for the menu to close before a
+    /// password dialog.
     private var isBusy = false
     /// The setting the switch asked for, while it's being applied. The panel and the icon show it
     /// straight away, rather than the setting, which only changes after the fade.
@@ -171,7 +172,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.cancelTracking()
     }
 
-    /// Just before a password dialog: closes the menu if it's open, and returns once it has.
+    /// Just before a password dialog: closes the menu if it's open, and returns once it has. The
+    /// controller calls it (`willPromptForPassword`) only when the dialog will really be shown.
     private func closeMenuForPasswordDialog() async {
         guard isMenuOpen else { return }
         // Meanwhile the switch looks disabled, as on the fallback path. A direct switch that has
@@ -181,7 +183,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             isBusy = true
             updateMenu()
         }
-        await withCheckedContinuation { continuation in whenMenuClosed { continuation.resume() } }
+        // Again if it was opened in the moment before this resumed.
+        while isMenuOpen {
+            await withCheckedContinuation { continuation in whenMenuClosed { continuation.resume() } }
+        }
         if marksBusy {
             isBusy = false
             updateMenu()
@@ -254,7 +259,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// With direct control the switch stays usable while the logo fades. A flip made meanwhile is
     /// applied when the fade is done (only the latest, and only if it differs from what was just
     /// applied). Without direct control a password may be needed, and the switch is disabled until
-    /// that's done.
+    /// that's done. The menu closes only if the password dialog is shown: with the sudoers rule, it
+    /// stays open.
     private func setLogo(_ target: LogoIllumination) {
         guard controller.canControlDirectly else {
             guard !isBusy else { return }
@@ -345,13 +351,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Unchecking removes the rule and remembers that, so the next password doesn't install it again.
     /// Checking it installs the rule; the password dialog's prompt says what it's for.
     @objc private func togglePasswordless() {
+        // Both always show the dialog. (Choosing the item has closed the menu already.)
         if controller.isPasswordlessEnabled {
             perform { [weak self, controller] in
+                await self?.closeMenuForPasswordDialog()
                 try controller.disablePasswordless()
                 self?.setKeepsPassword(true)
             }
         } else {
             perform { [weak self, controller] in
+                await self?.closeMenuForPasswordDialog()
                 self?.setKeepsPassword(false)
                 try await controller.enablePasswordless()
             }
@@ -373,29 +382,28 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         updateMenu()
     }
 
-    /// Runs a privileged operation, which may ask for a password, once the menu has closed. Then
-    /// refreshes and reports any error.
+    /// Runs a privileged operation, which may ask for a password, then refreshes and reports any
+    /// error. It starts at once, with the switch disabled: the menu is closed just before a password
+    /// dialog (`closeMenuForPasswordDialog()`), so `sudo` alone leaves it open.
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) {
         guard !isBusy else { return }
         isBusy = true
         updateMenu()
-        whenMenuClosed { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                defer {
-                    isBusy = false
-                    if switchTask == nil { requestedSetting = nil }
-                    // The rule may have been added or removed.
-                    isPasswordlessEnabled = controller.isPasswordlessEnabled
-                    refresh()
-                }
-                do {
-                    try await operation()
-                } catch LogoLightError.cancelled {
-                    // The user closed the password dialog.
-                } catch {
-                    report(error, title: "LogoLight couldn't make the change")
-                }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                isBusy = false
+                if switchTask == nil { requestedSetting = nil }
+                // The rule may have been added or removed.
+                isPasswordlessEnabled = controller.isPasswordlessEnabled
+                refresh()
+            }
+            do {
+                try await operation()
+            } catch LogoLightError.cancelled {
+                // The user closed the password dialog.
+            } catch {
+                report(error, title: "LogoLight couldn't make the change")
             }
         }
     }

@@ -169,7 +169,10 @@ run `tools/livecheck` and watch the logo):
 - After a flip, the switch stays usable and the rows grey out or come back at once. Flip
   quickly back and forth during a fade: only the last flip should be applied after it, and
   on-off-on shouldn't blink the logo (`tools/livecheck` can't flip the panel's switch).
-- A password dialog or an error alert closes the menu first.
+- A password dialog or an error alert closes the menu first, including when corebrightnessd
+  rejects a direct switch and it falls back to the dialog (`willPromptForPassword`). Without
+  direct control, a flip that `sudo` makes (the rule is installed) leaves the menu open, with the
+  switch disabled until it's done.
 - `pkill LogoLight` now quits cleanly (the logo returns to normal), and the make targets wait
   for it to exit before opening the new build. One that's blocked (a password dialog is open)
   can't take the signal until it's answered, so after 2 s they kill it instead (checked with a
