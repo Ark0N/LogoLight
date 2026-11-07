@@ -395,6 +395,37 @@ func brightnessTests(_ t: TestHarness) async {
         f.controller.restoreNormalLighting()
     }
 
+    await t.test("handles a scheduled wake once, after the delay, however often it's asked for") {
+        let f = Fixture(direct: true)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.mac.displayAwake = true
+        let wakes = Counter()
+        f.controller.scheduleWake(after: 1) { wakes.count += 1 }
+        f.controller.scheduleWake(after: 1) { wakes.count += 1 }
+        t.expectEqual(f.daemon.keyboardState, 1) // not yet
+        await settle()
+        t.expectEqual(wakes.count, 1)
+        t.expectEqual(f.daemon.keyboardState, 2)
+        t.expect(f.clock.slept.contains(1), "should wait with the injected sleep")
+    }
+
+    await t.test("the display sleeping again cancels a scheduled wake") {
+        let f = Fixture(direct: true)
+        f.controller.setEffect(.pulse)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.mac.displayAwake = true
+        let wakes = Counter()
+        f.controller.scheduleWake(after: 1) { wakes.count += 1 }
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        await settle()
+        t.expectEqual(wakes.count, 0)
+        t.expect(!f.controller.animator!.isAnimating)
+        t.expectEqual(f.daemon.keyboardState, 1)
+    }
+
     t.test("doesn't relight the keyboard on a wake that leaves the display off") {
         let f = Fixture(direct: true)
         f.mac.displayAwake = false
@@ -634,6 +665,11 @@ func switchingTests(_ t: TestHarness) async {
         t.expectEqual(f.daemon.fadeDuration, 0)
         t.expect(!f.controller.animator!.isAnimating)
     }
+}
+
+@MainActor
+private final class Counter {
+    var count = 0
 }
 
 /// Does something once, part way through an operation: during the first sleep that matches.

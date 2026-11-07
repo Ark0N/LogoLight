@@ -18,6 +18,8 @@ public final class LogoController {
     private var lastApplied: LogoIllumination?
     /// The switch's fade in progress, so the display sleeping can cut it short.
     private var switchFadeTask: Task<Void, Error>?
+    /// A wake waiting to be handled (see `scheduleWake(after:then:)`).
+    private var pendingWake: Task<Void, Never>?
 
     /// Plays effects and holds the brightness. `nil` when the logo can't be controlled directly.
     public let animator: LogoAnimator?
@@ -156,6 +158,8 @@ public final class LogoController {
 
     /// Call when the display or the Mac goes to sleep.
     public func displayDidSleep() {
+        pendingWake?.cancel()
+        pendingWake = nil
         animator?.pause()
         switchFadeTask?.cancel()
         // So corebrightnessd's own fades (when the display sleeps and wakes) work normally,
@@ -165,7 +169,23 @@ public final class LogoController {
         emitter?.displayDidChange(isAwake: false)
     }
 
-    /// Call when the display wakes up.
+    /// Handles a wake after `delay` seconds (using the injected sleep). Another call before then restarts the
+    /// wait, and `displayDidSleep()` cancels it. `completion` runs after a wake is handled.
+    ///
+    /// A system wake posts more than one notification, and corebrightnessd relights the logo
+    /// itself first, so the wake is handled once, a moment later.
+    public func scheduleWake(after delay: Double, then completion: @escaping @MainActor () -> Void) {
+        pendingWake?.cancel()
+        pendingWake = Task { [weak self, sleep] in
+            do { try await sleep(delay) } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            pendingWake = nil
+            displayDidWake()
+            completion()
+        }
+    }
+
+    /// Call when the display wakes up, to handle it straight away.
     public func displayDidWake() {
         guard isDisplayAwake else { return }
         emitter?.displayDidChange(isAwake: true)
