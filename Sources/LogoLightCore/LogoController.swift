@@ -16,6 +16,8 @@ public final class LogoController {
     private let sleep: LogoAnimator.Sleep
     /// The setting this process last applied, for when the hardware can't show it.
     private var lastApplied: LogoIllumination?
+    /// The setting as of the last `status()` or switch, so the live view needn't read it every frame.
+    private var knownSetting: LogoIllumination?
     /// The switch's fade in progress, so the display sleeping can cut it short.
     private var switchFadeTask: Task<Void, Error>?
     /// A wake waiting to be handled (see `scheduleWake(after:then:)`).
@@ -80,6 +82,7 @@ public final class LogoController {
             status.setting = lastApplied
             status.source = .lastApplied
         }
+        knownSetting = status.setting
         return status
     }
 
@@ -149,11 +152,14 @@ public final class LogoController {
     }
 
     /// How brightly the logo is glowing at this moment, from 0 (dark) to 1 (fully lit), for a live
-    /// view. It's read from the hardware on every call, so it follows effects and changes made
-    /// elsewhere, and it's scaled about like the brightness slider rather than in raw light output.
+    /// view. The fade level is read from the hardware on every call, so it follows effects and
+    /// changes made elsewhere. The on/off setting comes from the last `status()` (refresh it now
+    /// and then), or is read when that isn't known yet. It's scaled about like the brightness
+    /// slider rather than in raw light output.
     public var liveGlow: Double {
         guard let emitter else { return status().isLit == true ? 1 : 0 }
-        guard emitter.setting == .on, let level = emitter.fadeLevel else { return 0 }
+        if knownSetting == nil { knownSetting = emitter.setting }
+        guard knownSetting == .on, let level = emitter.fadeLevel else { return 0 }
         return min(max(level, 0), 1).squareRoot()
     }
 
@@ -268,6 +274,7 @@ public final class LogoController {
         if target == .off {
             if fade > 0 { await switchFade(to: 0, over: fade, emitter: emitter) }
             let applied = emitter.setSetting(.off) && emitter.setting == .off
+            if applied { knownSetting = .off }
             // Back to normal. While the setting is off, relighting has no visible effect.
             emitter.restore(displayAwake: isDisplayAwake)
             return applied ? .applied : .notApplied
@@ -279,6 +286,7 @@ public final class LogoController {
             emitter.restore(displayAwake: isDisplayAwake)
             return .notApplied
         }
+        knownSetting = .on // so the live view shows the fade in
         if fade > 0, isDisplayAwake {
             // An effect takes over from dark, starting with a rising step.
             if effect != .none { return .applied }

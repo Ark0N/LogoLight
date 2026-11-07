@@ -124,6 +124,8 @@ final class FakeDaemon: LightEmitterService {
     /// When false, changes are accepted but have no effect.
     var appliesChanges = true
     var log: [String] = []
+    /// Every key read, in order.
+    var keysRead: [String] = []
 
     var lit: Bool { level >= 0.999 }
     var isHolding: Bool { fadeDuration >= 1e6 }
@@ -161,6 +163,7 @@ final class FakeDaemon: LightEmitterService {
     }
 
     func value(forKey key: String) -> Any? {
+        keysRead.append(key)
         switch key {
         case "LEBacklightMode": return NSNumber(value: mode)
         case "DisplayLogicalState": return NSNumber(value: lastStateSent)

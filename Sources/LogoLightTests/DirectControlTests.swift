@@ -571,6 +571,27 @@ func brightnessTests(_ t: TestHarness) async {
         t.expectEqual(f.controller.liveGlow, 0)
     }
 
+    t.test("the live glow reads only the fade level, once the setting is known") {
+        let f = Fixture(direct: true)
+        _ = f.controller.status()
+        f.daemon.keysRead.removeAll()
+        _ = f.controller.liveGlow
+        _ = f.controller.liveGlow
+        t.expectEqual(f.daemon.keysRead, ["LEPWMState", "LEPWMState"])
+    }
+
+    await t.test("the live glow follows the logo fading in as it's turned on") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        t.expectEqual(f.controller.liveGlow, 0)
+        var glow = 0.0
+        let midway = Midway()
+        midway.run(f, when: { _ in f.daemon.mode == 2 && f.daemon.level > 0.1 }) { glow = f.controller.liveGlow }
+        try await f.controller.set(.on)
+        t.expect(midway.ran)
+        t.expect(glow > 0.3, "showed \(glow) while fading in")
+    }
+
     t.test("the live glow still works without direct control") {
         t.expectEqual(Fixture().controller.liveGlow, 1)
         t.expectEqual(Fixture(backlightMode: 0).controller.liveGlow, 0)
