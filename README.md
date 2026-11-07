@@ -68,14 +68,15 @@ hidden without it.
 
 ### Reading the state
 
-The setting is read from `corebrightnessd` (`LEBacklightMode`). The menu's output level comes
-from the logo's `bklb-backlight` PWM device in the I/O Registry:
+The setting is read from `corebrightnessd` (`LEBacklightMode`). The logo's `bklb-backlight` PWM
+device in the I/O Registry shows whether the LED is lit, and how brightly:
 
 ```sh
 ioreg -r -n bklb-backlight@0 | grep -E '"(enabled|high-period|low-period)"'
 ```
 
-`high-period / (high-period + low-period)` is the LED's current output level. Without
+`high-period / (high-period + low-period)` is the LED's current output level. (The menu doesn't
+show it: the live view uses the fade level instead, which is on the slider's scale.) Without
 direct control, LogoLight reads the setting from `enabled` while the screen is on. It doesn't
 rely on the `bklb-backlight-enabled` NVRAM variable, which `corebrightnessd` only reads at
 startup and which isn't updated as soon as the setting changes.

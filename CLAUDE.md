@@ -36,9 +36,11 @@ runs but says the logo isn't available. So:
 - Anything that changes what the LED does must be checked on the MacBook before it's called
   done, with `tools/livecheck`. Say so explicitly if it wasn't.
 - To see the panel anywhere, without touching the logo or the screen, draw it to PNGs in each
-  state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`.
+  state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`. It
+  prints any label that doesn't fit, so check its output after changing the layout.
   The switches are `LogoSwitch`, drawn by the app: AppKit's `NSSwitch` draws grey inside a menu until
-  the menu's window becomes key, a moment after it opens, which looked slow.
+  the menu's window becomes key, a moment after it opens, which looked slow. What the panel shows
+  and greys out is worked out in `PanelState` (LogoLightCore), which has tests.
   `LOGOLIGHT_OPEN_MENU=1 .build/debug/LogoLight` opens the real menu. Quit LogoLight first, and
   don't use it while the user is working: it interrupts them, and the menu won't stay open.
 
@@ -113,11 +115,20 @@ so it looks like an iOS app, keep it simple", then specified: "one slider for tu
 the other sliders get greyed out, when its on then the other sliders are for the different
 effects". So "slider" meant iOS-style switches: one for the logo and one per effect (at most one
 on), all greyed out while the logo is off, keeping their state. The Brightness slider is the one
-real slider, and greys out with them. The user then asked for the whole menu to be "much more
+real slider, and greys out with them (one 0.22 s fade of their rows, as soon as the switch is
+flipped, not when the logo's fade ends). The user then asked for the whole menu to be "much more
 narrower", then "a little bit more narrow" and "remove the about logolight option"
-and "the Q shortcut it terrible off to the right side". It's 180 points wide, the least the logo's
-row allowed while it was labelled "Apple Logo" (the user then renamed it "Backlight"); the menu has no About item and no ⌘Q, whose shortcut column alone would make
-it 190. The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
+and "the Q shortcut it terrible off to the right side". The menu has no About item and no ⌘Q,
+whose shortcut column alone would make it 190 points wide. The panel is 180 wide, measured:
+- The widest row is Heartbeat's: the text column starts at 40, the label needs 61 (13 pt), then
+  at least 4, the switch 54 and 8 to the card's edge, so 167; plus the 6-point margins, 179.
+  "Backlight" (the user renamed "Apple Logo") needs 56.5, Breathe 47.5, Pulse 33.
+- The menu's own items need 143 ("Launch at Login", "Quit LogoLight"), or 153 with
+  "Disable Password", so the panel sets the menu's width.
+- The switches are the size of a regular `NSSwitch` on macOS 27, measured from one drawn
+  offscreen: a 54 × 24 track with a 32 × 20 capsule knob.
+
+The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
 its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
 Launch Services' device types). They also asked for a live view "so fully synced up": `LogoPreview` shows
 `LogoController.liveGlow`, read from the hardware on each frame (a display link, at 60 Hz) while
@@ -146,9 +157,24 @@ run `tools/livecheck` and watch the logo):
   it on the MacBook, the controller has to be given no emitter, since corebrightnessd normally
   takes every change.
 
+**Changed since the last look at the real menu** (drawn offscreen only; open the menu with
+`LOGOLIGHT_OPEN_MENU` when the user isn't working):
+- The switches are NSSwitch-sized, with a capsule knob that can also be dragged. Check that
+  they're blue on the very first frame, and that a drag works inside the menu.
+- The menu opens on mouse-down. Check a quick click, press-drag-release onto an item, and that
+  Option-click toggles the logo without the menu flashing.
+- After a flip, the switch stays usable and the rows grey out or come back at once. Flip
+  quickly back and forth during a fade: only the last flip should be applied after it, and
+  on-off-on shouldn't blink the logo (`tools/livecheck` can't flip the panel's switch).
+- A password dialog or an error alert closes the menu first.
+- `pkill LogoLight` now quits cleanly (the logo returns to normal), and the make targets wait
+  for it to exit before opening the new build.
+- Closing the lid with an external display attached pauses an effect, and opening it resumes
+  it; connecting an external display with the lid open changes nothing.
+
 **Not yet verified:**
-- The live view animating in the real menu. It has only been seen drawn offscreen, and
-  `liveGlow` was checked through `tools/livecheck`.
+- The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
+  been seen drawn offscreen, and `liveGlow` was checked through `tools/livecheck`.
 - A real display sleep and wake (not just calling the handlers): with a held brightness, the
   logo should come back at that level, and the keyboard should go dark and relight.
 - The `DisplaySelect` route in `docs/corebrightnessd.md`, which might replace holding a fade with a
