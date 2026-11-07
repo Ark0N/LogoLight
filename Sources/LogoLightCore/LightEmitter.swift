@@ -183,31 +183,74 @@ public final class LightEmitter {
     /// (see `fade(following:over:sleep:)`) before it's started again instead.
     static let followSlack = 2.0
 
+    /// How long a new fade takes to start moving. `corebrightnessd` moves the logo in frames,
+    /// about every 17.5 ms, and a restarted fade first moved 18–20 ms after it was started
+    /// (measured; see docs/corebrightnessd.md, "Easing onto a level").
+    static let startLatency = 0.018
+
+    /// The share of the way to a level after which the fade hands over to an ease-out onto it.
+    static let landingStart = 0.7
+
+    /// The most fades an ease-out onto a level starts. Each one flips `DisplayLogicalState`, and
+    /// every Blank dims the keyboard a little, although it's told Unblank straight after: 4–6 of
+    /// them dipped it from 0.197 to about 0.17, which doesn't show, but 70 dipped it to 0.13.
+    static let maxLandingSegments = 6
+
+    /// How many of the latest polls give the logo's speed when it hands over to the ease-out:
+    /// 70 ms, about 4 of the daemon's frames.
+    private static let speedPolls = 8
+
     /// Fades the logo to `level` (0 dark … 1 fully lit) over about `duration` seconds, and holds
     /// it there until the next change. The logo still adapts to ambient light, scaled by the level.
+    ///
+    /// A level in between is eased onto at the end, which takes a little longer than `duration`
+    /// (see `fade(following:over:sleep:)`).
     public func fade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws {
-        try await fade(following: { level }, over: duration, sleep: sleep)
+        _ = try await run(following: { level }, over: duration, sleep: sleep)
+    }
+
+    /// Like `fade(to:over:sleep:)`, and returns how long it took, from the time it slept. It's
+    /// longer than `duration` when the fade eases onto a level in between.
+    public func timedFade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws -> Double {
+        try await run(following: { level }, over: duration, sleep: sleep).time
     }
 
     /// Like `fade(to:over:sleep:)`, but reads the target again on every poll, e.g. while a slider
-    /// is dragged. While it keeps moving the same way, the fade carries on and stops where it
-    /// passes the latest target, instead of stopping and starting again from rest each time.
-    /// It stops short when the target turns round, reaches 0 or 1, or runs too far ahead for
-    /// this fade to catch up in time, so that a new fade can take over. A followed target the
-    /// fast fade was about to pass can be missed by a poll's travel, so that counts as stopping
-    /// short too (when it's more than 0.02 off): a new fade from rest lands precisely.
+    /// is dragged. While it keeps moving the same way, the fade carries on and follows the latest
+    /// target, instead of stopping and starting again from rest each time. It stops short when
+    /// the target turns round, reaches 0 or 1, or runs too far ahead for this fade to catch up in
+    /// time, so that a new fade can take over. A followed target the fast fade was about to pass
+    /// can be missed by a poll's travel, so that counts as stopping short too (when it's more than
+    /// 0.02 off): a new fade from rest lands precisely.
+    ///
+    /// A fade is cut short to stop at a level in between, so it would stop at speed. Instead, once
+    /// the target has settled (unchanged for two polls) and the logo has covered 70% of the way to
+    /// it, a few short fades ease it on, slowing to a stop (see `land(from:on:speed:following:sleep:)`).
+    /// If the target changes meanwhile, it stops short.
     ///
     /// Returns the target the logo was stopped at, or `nil` if it stopped short.
     @discardableResult
     public func fade(following level: () -> Double, over duration: Double,
                      sleep: LogoAnimator.Sleep) async throws -> Double? {
+        try await run(following: level, over: duration, sleep: sleep).target
+    }
+
+    /// What a fade did: the target it stopped the logo at (`nil` if it stopped short), and how
+    /// long it took (the time it slept).
+    private struct Outcome {
+        var target: Double?
+        var time: Double
+    }
+
+    private func run(following level: () -> Double, over duration: Double,
+                     sleep: LogoAnimator.Sleep) async throws -> Outcome {
         let first = min(max(level(), 0), 1)
         var target = first
         // Unknown: assume the far end, so the fade goes all the way.
         let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
         guard abs(target - current) >= 0.005 else {
             stay(at: target, over: duration)
-            return target
+            return Outcome(target: target, time: 0)
         }
 
         let lit = target > current
@@ -232,9 +275,22 @@ public final class LightEmitter {
         if isAllTheWay {
             try await sleep(duration)
             try Task.checkCancellation()
-            return target
+            return Outcome(target: target, time: duration)
         }
         var waited = 0.0
+        // Where the logo was when the target last changed, and how many polls ago that was.
+        var origin = current
+        var steadyPolls = 0
+        // The latest polls, for the logo's speed.
+        var recent: [(time: Double, level: Double)] = []
+        // Only a followed target is tried again: the next fade's target doesn't change, so the
+        // adjust loop always ends.
+        func stopped(at target: Double, time: Double) -> Outcome {
+            if target != first, let held = fadeLevel, abs(held - target) > 0.02 {
+                return Outcome(target: nil, time: time)
+            }
+            return Outcome(target: target, time: time)
+        }
         while let now = fadeLevel, waited < fadeTime {
             let latest = min(max(level(), 0), 1)
             if latest != target {
@@ -243,20 +299,99 @@ public final class LightEmitter {
                 guard isAhead, abs(latest - end) >= 0.001, reachedIn - waited <= Self.followSlack * duration
                 else {
                     turnRound(from: lit)
-                    return nil
+                    return Outcome(target: nil, time: waited)
                 }
                 target = latest
+                origin = now
+                steadyPolls = 0
             }
             if lit ? now >= target : now <= target { break }
+            recent.append((waited, now))
+            if recent.count > Self.speedPolls { recent.removeFirst() }
+            if steadyPolls >= 2, abs(now - origin) >= Self.landingStart * abs(target - origin) {
+                var speed = 0.0
+                if let a = recent.first, let b = recent.last, b.time > a.time {
+                    speed = (b.level - a.level) / (b.time - a.time)
+                }
+                let landing = try await land(from: now, on: target, speed: speed, following: level, sleep: sleep)
+                let time = waited + landing.time
+                return landing.reached ? stopped(at: target, time: time) : Outcome(target: nil, time: time)
+            }
             try await sleep(Self.pollInterval)
             try Task.checkCancellation()
             waited += Self.pollInterval
+            steadyPolls += 1
         }
         turnRound(from: lit) // and hold it there
-        // Only a followed target is tried again: the next fade's target doesn't change, so the
-        // adjust loop always ends.
-        if target != first, let held = fadeLevel, abs(held - target) > 0.02 { return nil }
-        return target
+        return stopped(at: target, time: waited)
+    }
+
+    /// Eases the logo from `start` onto `target`, out of a fade that's moving at `speed` (per
+    /// second), and holds it there. This is the hybrid that was measured on the MacBook (see
+    /// docs/corebrightnessd.md, "Easing onto a level"): it stopped at 10–17% of the move's top
+    /// speed, where cutting the fade short stopped at 44–89%.
+    ///
+    /// The logo follows the ease-out `1 - (1 - u)²` over `2 · distance / speed`, which starts at
+    /// the fade's speed, kept between 0.15 and 1.2 s. That's split into a fixed few segments, so
+    /// the keyboard doesn't visibly dim (see `maxLandingSegments`). Each segment starts a new
+    /// fade, from rest, long enough to cover its part of the way by the segment's end, after the
+    /// start latency. A fade only starts on a change of direction, so it's turned round first
+    /// when it's already heading that way.
+    ///
+    /// Stops at the target if the logo gets there early. If the target changes, it holds the logo
+    /// where it is and stops short. Returns whether it got there, and the time it took.
+    private func land(from start: Double, on target: Double, speed: Double, following level: () -> Double,
+                      sleep: LogoAnimator.Sleep) async throws -> (reached: Bool, time: Double) {
+        let distance = target - start
+        let length = abs(speed) > 0.01 ? min(max(2 * abs(distance) / abs(speed), 0.15), 1.2) : 0.3
+        let count = length < 0.4 ? 4 : Self.maxLandingSegments
+        let segment = max(0.05, length / Double(count))
+        let isPast = { (now: Double) in distance > 0 ? now >= target : now <= target }
+        // Holding it again would only cost writes.
+        func stop() { if !lastDurationWasHold { hold() } }
+        var time = 0.0
+        segments: for i in 1...count {
+            guard let now = fadeLevel, !isPast(now) else { break }
+            let u = Double(i) / Double(count)
+            let delta = start + distance * (1 - (1 - u) * (1 - u)) - now
+            let up = delta > 0
+            let toEnd = up ? 1 - now : now
+            if abs(delta) >= 0.0005, toEnd > 1e-4 {
+                if isHeadingLit == nil || isHeadingLit == up { turnRound(from: up) }
+                let share = FadeCurve.springTime(toReach: abs(delta) / toEnd)
+                setFadeDuration(max(0.001, segment - Self.startLatency) / share)
+                setLit(up)
+            } else {
+                stop() // close enough for now, so the last segment's fade doesn't carry it on
+            }
+            var left = segment
+            while left > 1e-9 {
+                let step = min(Self.pollInterval, left)
+                try await sleep(step)
+                try Task.checkCancellation()
+                left -= step
+                time += step
+                if min(max(level(), 0), 1) != target {
+                    stop()
+                    return (false, time)
+                }
+                guard let now = fadeLevel, !isPast(now) else { break segments }
+            }
+        }
+        stop()
+        return (true, time)
+    }
+
+    /// Stops the logo where it is.
+    private func hold() {
+        if let heading = isHeadingLit {
+            turnRound(from: heading)
+        } else {
+            // Heading unknown: each write is either ignored or starts a fade too slow to see.
+            setFadeDuration(Self.holdDuration)
+            setLit(false)
+            setLit(true)
+        }
     }
 
     /// Keeps the logo at a target it has (about) reached. A fade may still be under way, e.g. from
@@ -271,13 +406,8 @@ public final class LightEmitter {
                 setFadeDuration(duration)
                 setLit(lit)
             }
-        } else if let heading = isHeadingLit {
-            turnRound(from: heading)
         } else {
-            // Heading unknown: each write is either ignored or starts a fade too slow to see.
-            setFadeDuration(Self.holdDuration)
-            setLit(false)
-            setLit(true)
+            hold()
         }
     }
 
@@ -298,6 +428,25 @@ public final class LightEmitter {
 public enum FadeCurve {
     static let progress: [Double] = [0, 0.04, 0.13, 0.24, 0.37, 0.48, 0.57, 0.66, 0.74, 0.79, 0.84,
                                      0.88, 0.91, 0.93, 0.95, 0.97, 0.98, 0.99, 0.995, 1, 1]
+
+    /// The critically damped spring fitted to the table: the share of the way a fade has covered
+    /// after `s` of its duration.
+    public static func springProgress(_ s: Double) -> Double {
+        let k = 6.51
+        return s <= 0 ? 0 : 1 - (1 + k * s) * exp(-k * s)
+    }
+
+    /// The fraction of a fade's duration the spring takes to cover `fraction` of the way. Unlike
+    /// `timeFraction(toReach:)` it's smooth for the short distances of an ease-out's segments.
+    public static func springTime(toReach fraction: Double) -> Double {
+        let goal = min(max(fraction, 0), 0.999)
+        var low = 0.0, high = 3.0
+        for _ in 0..<50 {
+            let middle = (low + high) / 2
+            if springProgress(middle) < goal { low = middle } else { high = middle }
+        }
+        return max(1e-4, (low + high) / 2)
+    }
 
     /// The fraction of a fade's duration it takes to cover `fraction` of the way.
     public static func timeFraction(toReach fraction: Double) -> Double {

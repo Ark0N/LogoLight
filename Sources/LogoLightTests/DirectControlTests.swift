@@ -343,7 +343,10 @@ func brightnessTests(_ t: TestHarness) async {
             f.controller.setBrightness(from)
             await settle()
             f.daemon.log.removeAll()
+            f.daemon.timeline.removeAll()
+            var lastChange = 0.0
             for i in 1...60 {
+                lastChange = f.daemon.time
                 f.controller.setBrightness(from + (to - from) * Double(i) / 60)
                 // A 60th of a second passes. While the logo fades, its own polls pass the time.
                 let next = f.clock.now + 1.0 / 60
@@ -357,9 +360,12 @@ func brightnessTests(_ t: TestHarness) async {
             t.expect(abs(f.daemon.level - target) <= 0.01, "\(from) to \(to): ended at \(f.daemon.level), not \(target)")
             t.expect(f.daemon.isHolding)
             // Every new fade (and every hold) is a direction flip. Restarting at each step, as
-            // this used to, took 14 or 15.
-            let flips = f.daemon.log.filter { $0 == "blank" || $0 == "unblank" }.count
-            t.expect(flips <= 6, "\(from) to \(to): \(flips) flips")
+            // this used to, took 14 or 15 during the drag. Once the slider stops, easing onto
+            // the level adds two a segment (at most 6) and the hold.
+            let flips = f.daemon.timeline.filter { $0.entry == "blank" || $0.entry == "unblank" }
+            let during = flips.filter { $0.time <= lastChange }.count
+            t.expect(during <= 6, "\(from) to \(to): \(during) flips during the drag")
+            t.expect(flips.count - during <= 2 * 6 + 1, "\(from) to \(to): \(flips.count - during) flips after it")
         }
     }
 

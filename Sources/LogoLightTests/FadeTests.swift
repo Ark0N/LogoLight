@@ -17,6 +17,61 @@ private func pass(_ f: Fixture, _ seconds: Double) async throws {
     }
 }
 
+/// The logo's motion, as the time-driven fake traced it (every millisecond).
+private struct Motion {
+    let trace: [(time: Double, level: Double)]
+
+    init(_ trace: [(time: Double, level: Double)]?) {
+        self.trace = trace ?? []
+    }
+
+    /// The level at `time`: the last sample at or before it.
+    func level(at time: Double) -> Double {
+        var low = 0, high = trace.count
+        while low < high {
+            let middle = (low + high) / 2
+            if trace[middle].time <= time + 1e-9 { low = middle + 1 } else { high = middle }
+        }
+        return low == 0 ? trace.first?.level ?? 0 : trace[low - 1].level
+    }
+
+    /// The average speed over `window` seconds up to `time`.
+    func speed(before time: Double, over window: Double) -> Double {
+        abs(level(at: time) - level(at: time - window)) / window
+    }
+
+    /// When the logo last moved before `time`.
+    func stop(before time: Double = .infinity) -> Double {
+        var last = trace.first?.time ?? 0
+        for (previous, sample) in zip(trace, trace.dropFirst()) where sample.time < time {
+            if abs(sample.level - previous.level) > 1e-7 { last = sample.time }
+        }
+        return last
+    }
+
+    /// The fastest it moved between `start` and `end`, over one of the daemon's frames (17.5 ms).
+    func peakSpeed(from start: Double = 0, to end: Double = .infinity) -> Double {
+        trace.filter { $0.time >= start + 0.0175 && $0.time <= end }
+            .map { speed(before: $0.time, over: 0.0175) }.max() ?? 0
+    }
+}
+
+/// Settles the logo at one brightness, then moves the slider to another in one change (as a
+/// click does), and lets it settle again. The fixture's daemon has the move's trace and writes.
+@MainActor
+private func click(from: Double, to: Double) async throws -> Fixture {
+    let f = Fixture(direct: true, timeDriven: true)
+    f.controller.setBrightness(from)
+    await settle()
+    try await pass(f, 0.5)
+    f.daemon.trace = []
+    f.daemon.timeline.removeAll()
+    f.controller.setBrightness(to)
+    await settle()
+    try await pass(f, 1.5)
+    return f
+}
+
 /// Does something once, during the `n`th sleep that matches a condition, after its time has passed.
 @MainActor
 private final class AtSleep {
@@ -238,5 +293,134 @@ func stoppingTests(_ t: TestHarness) async {
         t.expect(!after.isEmpty && !after.contains("unblank"), "relit: \(Array(after))")
         t.expect(after.allSatisfy { !$0.hasPrefix("fade=") || $0 == "fade=1000000000.0" || $0 == "fade=0.0" },
                  "started a fade: \(Array(after))")
+    }
+}
+
+@MainActor
+func landingTests(_ t: TestHarness) async {
+    print("\nFades: easing onto a level")
+
+    t.test("the spring's inverse gives the share of a fade it takes to cover a share of the way") {
+        for share in [0.0005, 0.01, 0.1, 0.5, 0.9, 0.99] {
+            let s = FadeCurve.springTime(toReach: share)
+            t.expect(abs(FadeCurve.springProgress(s) - share) < 1e-6, "\(share): \(s)")
+        }
+        // The spring's top speed is at 0.154 of the fade.
+        t.expect(abs(FadeCurve.springTime(toReach: FadeCurve.springProgress(0.154)) - 0.154) < 1e-6)
+    }
+
+    await t.test("slider clicks both ways ease onto the level, and stop slowly") {
+        for (from, to) in [(1.0, 0.5), (0.5, 0.9), (0.9, 0.4), (0.3, 0.8), (0.8, 0.2), (0.2, 0.3), (0.6, 0.55)] {
+            let f = try await click(from: from, to: to)
+            let target = LogoAnimator.level(forBrightness: to)
+            let motion = Motion(f.daemon.trace)
+            let stop = motion.stop()
+            let peak = motion.peakSpeed()
+            let atStop = motion.speed(before: stop, over: 0.06)
+            let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
+            let flips = f.daemon.timeline.filter { $0.entry == "blank" || $0.entry == "unblank" }
+            let label = "\(from) to \(to)"
+            t.expect(abs(f.daemon.level - target) <= 0.01, "\(label): held at \(f.daemon.level), not \(target)")
+            t.expect(f.daemon.isHolding, "\(label): not held")
+            t.expect(atStop < 0.25 * peak, "\(label): \(atStop)/s in the last 60 ms, peak \(peak)/s")
+            // The stretched fade, then at most 6 segments. Each starts with a turn-round, and
+            // the hold ends it.
+            t.expect(fades.count >= 2, "\(label): didn't ease on")
+            t.expect(fades.count <= 1 + 6, "\(label): \(fades.count) fades")
+            t.expect(flips.count <= 2 + 2 * 6 + 1, "\(label): \(flips.count) flips")
+        }
+    }
+
+    await t.test("moves to full brightness stay one plain fade") {
+        let f = try await click(from: 0.5, to: 1)
+        let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
+        t.expectEqual(fades.map(\.entry), ["fade=0.25"])
+        t.expect(f.daemon.lit && !f.daemon.isHolding)
+    }
+
+    await t.test("a drag follows without easing on until the slider stops") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.9)
+        await settle()
+        try await pass(f, 0.5)
+        f.daemon.timeline.removeAll()
+        var lastChange = 0.0
+        for i in 1...45 {
+            lastChange = f.daemon.time
+            f.controller.setBrightness(0.9 - 0.6 * Double(i) / 45)
+            try await pass(f, 1.0 / 60)
+        }
+        await settle()
+        try await pass(f, 1.5)
+        let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
+        let during = fades.filter { $0.time <= lastChange }.count
+        // Following carries one fade along (a couple when it can't keep up); easing on would
+        // start several, then stop short at the next change.
+        t.expect(during <= 3, "\(during) fades during the drag")
+        t.expect(fades.count - during >= 2, "didn't ease on at the end")
+        let target = LogoAnimator.level(forBrightness: 0.3)
+        t.expect(abs(f.daemon.level - target) <= 0.01, "held at \(f.daemon.level), not \(target)")
+    }
+
+    await t.test("a change while easing on stops it, and the logo goes to the new level") {
+        for change in 1...4 {
+            let f = Fixture(direct: true, timeDriven: true)
+            f.controller.setBrightness(0.9)
+            await settle()
+            try await pass(f, 0.5)
+            f.daemon.timeline.removeAll()
+            f.daemon.trace = []
+            f.controller.setBrightness(0.4)
+            // Wait for the `change`th segment of the ease-out.
+            let fades = { f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" } }
+            while fades().count < 1 + change, f.controller.animator!.isAnimating { await Task.yield() }
+            t.expect(fades().count == 1 + change, "only \(fades().count - 1) segments")
+            let changedAt = (time: f.daemon.time, level: f.daemon.level)
+            f.controller.setBrightness(0.6)
+            await settle()
+            try await pass(f, 1.5)
+            let target = LogoAnimator.level(forBrightness: 0.6)
+            t.expect(!f.controller.animator!.isAnimating, "after segment \(change): still fading")
+            t.expect(abs(f.daemon.level - target) <= 0.01, "after segment \(change): held at \(f.daemon.level), not \(target)")
+            // It turns toward the new level at once, instead of finishing the old one first.
+            let lowest = f.daemon.trace!.filter { $0.time >= changedAt.time }.map(\.level).min() ?? 0
+            t.expect(lowest > changedAt.level - 0.02, "after segment \(change): went on from \(changedAt.level) to \(lowest)")
+        }
+    }
+
+    await t.test("an effect's peak below full eases on, and the effect keeps its rhythm") {
+        for effect in [LogoEffect.breathe, .pulse, .heartbeat] {
+            let f = Fixture(direct: true, timeDriven: true)
+            f.controller.setBrightness(0.5)
+            await settle()
+            try await pass(f, 0.5)
+            f.daemon.trace = []
+            f.daemon.timeline.removeAll()
+            f.controller.setEffect(effect)
+            let period = effect.cycle.reduce(0) { $0 + $1.fade + $1.hold }
+            try await pass(f, 4.5 * period)
+            f.controller.restoreNormalLighting()
+            // Each cycle's last fall (a plain fade all the way, at the step's own duration).
+            let fall = effect.cycle.last { !$0.lit }!
+            let falls = f.daemon.timeline.filter { $0.entry == "fade=\(fall.fade)" }.map(\.time)
+            let cycles = zip(falls, falls.dropFirst()).map { $1 - $0 }
+            let motion = Motion(f.daemon.trace)
+            let stops = falls.dropFirst().map { motion.stop(before: $0 - 0.0001) }
+            // The speed in the last 60 ms before each peak's stop, against the fastest the logo
+            // moved in the cycle before it.
+            let ratios = stops.map { stop in
+                motion.speed(before: stop, over: 0.06) / motion.peakSpeed(from: stop - period, to: stop)
+            }
+            t.expect(cycles.count >= 3, "\(effect): \(cycles.count) cycles")
+            t.expect(ratios.allSatisfy { $0 < 0.25 }, "\(effect): stopped at \(ratios) of the peak")
+            if effect == .heartbeat {
+                // Its holds after the beats (0.05 s) can't make up for easing on (about 0.2 s
+                // a beat), so at this brightness it beats about 0.26 s slower than at full.
+                t.expect(cycles.allSatisfy { $0 >= period - 0.1 && $0 <= period + 0.3 },
+                         "\(effect): cycles of \(cycles), not about \(period)")
+            } else {
+                t.expect(cycles.allSatisfy { abs($0 - period) <= 0.1 }, "\(effect): cycles of \(cycles), not \(period)")
+            }
+        }
     }
 }
