@@ -417,7 +417,7 @@ strong {
 /* Hero */
 
 .hero {
-  padding-block: clamp(28px, 5vw, 64px) clamp(56px, 7vw, 96px);
+  padding-block: clamp(12px, 1.5vw, 20px) clamp(56px, 7vw, 96px);
 }
 
 .hero-grid {
