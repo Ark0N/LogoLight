@@ -102,7 +102,9 @@ runs but says the logo isn't available. So:
   ```
   This builds, signs with a timestamp, notarizes, staples and zips into `dist/`.
   `scripts/notarize.sh` has the details. This MacBook has the Developer ID identity (team
-  CGMJ6YKL5G) and the `logolight` notarytool profile.
+  CGMJ6YKL5G) and the `logolight` notarytool profile. First run 2026-11-07 (1.0.0, build 94):
+  Accepted, "Ready for distribution", no issues, stapled; `spctl` says Notarized Developer ID.
+  The zip goes to `site/public/LogoLight.zip` (not in git) for the website's download.
 - **The Mac App Store isn't an option** as the app stands. It relies on private API
   (`CoreBrightness`, App Review guideline 2.5.1), and Mac App Store apps must be sandboxed. The
   fallback path runs `defaults` as root through an admin dialog and can install a sudoers rule,

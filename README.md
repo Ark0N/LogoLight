@@ -1,24 +1,60 @@
-# LogoLight
+<p align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="LogoLight's icon: a dark lid with a soft light glowing at its centre">
+</p>
 
-A small macOS menu bar app that controls the illuminated Apple logo on the back of the
-**MacBook Pro with PROLED XDR Display**: on and off, brightness, and glowing effects.
+<h1 align="center">LogoLight</h1>
 
-<img src="docs/menu.png" width="170" alt="The LogoLight panel: a Backlight switch at the top, then a live view of the glowing logo on the lid, then a brightness slider, then a switch each for the Breathe, Pulse and Heartbeat effects, with Heartbeat on.">
+<p align="center">
+  The illuminated logo on the back of your MacBook Pro, your way:<br>
+  turn it off, dim it, or let it breathe, pulse or beat like a heart. Right from the menu bar.
+</p>
 
-- An iOS-style panel at the top of the menu: the logo's switch first, then a live view of the
-  lid and the brightness slider, then the effects. The slider and effects grey out while the logo
-  is off
-- A **live view** of the logo, read from the hardware on every frame of the display while the
-  menu is open, so it follows effects, the slider and changes made elsewhere
-- **Backlight** switch, or **Option-click** the icon to toggle. The logo fades out and in
-  smoothly, and no password is needed
+<p align="center">
+  <a href="https://logolight.app"><b>Download at logolight.app</b></a>
+  &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open source (MIT)
+  &nbsp;·&nbsp; <a href="https://buymeacoffee.com/arkon">Buy me a coffee</a>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/menu-dark.png">
+    <img src="docs/menu-light.png" width="255" alt="LogoLight's menu: a Backlight switch at the top, then a live view of the glowing logo on the lid, then a brightness slider, then a switch each for the Breathe, Pulse and Heartbeat effects, with Heartbeat on.">
+  </picture>
+</p>
+
+For the **MacBook Pro with PROLED XDR Display**, the model with the illuminated logo on its lid.
+
+## Features
+
+- **Backlight switch** at the top of the menu, or **Option-click** the menu bar icon to toggle.
+  The logo fades out and in smoothly, and no password is needed
+- A **live view** of your lid, in its own finish (space black or silver), read from the hardware
+  on every frame of the display while the menu is open, so it follows effects, the slider and
+  changes made elsewhere
 - **Brightness** slider. The logo still adapts to ambient light, scaled by the slider
 - **Effects**: Breathe, Pulse and Heartbeat, one at a time, using the LED's own hardware fades.
   They peak at the chosen brightness
-- A **Control Center control**, Backlight, which can also go in the menu bar (macOS 26 or later):
-  in Control Center, choose Edit Controls and add it from LogoLight
+- **Control Center**: a Backlight control, which can also go in the menu bar (macOS 26 or later)
 - **Launch at Login**
-- The app builds with just the Command Line Tools; the Control Center control needs Xcode
+- Without direct control, a password is needed **once at most** (see
+  [the fallback](#fallback-the-documented-command))
+
+## Install
+
+1. Download LogoLight from [logolight.app](https://logolight.app). It's signed with a Developer
+   ID and notarized by Apple.
+2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
+
+Or [build it from source](#build-from-source).
+
+### Add it to Control Center
+
+1. Click Control Center in the menu bar, then **Edit Controls** at the bottom.
+2. Search for **LogoLight**.
+3. Drag **Backlight** into Control Center, or straight into the menu bar.
+
+Apple only lets apps add switches and buttons to Control Center, so the brightness slider stays
+in LogoLight's own menu.
 
 ## How it works
 
@@ -127,7 +163,7 @@ installs it again.)
 - Xcode or the Command Line Tools (`xcode-select --install`). Without Xcode 26 or later, the
   app is built without the Control Center control (it needs Xcode's App Intents tools)
 
-## Build and install
+## Build from source
 
 ```sh
 make test      # run the tests
