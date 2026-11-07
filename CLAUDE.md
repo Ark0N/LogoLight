@@ -115,8 +115,8 @@ effects". So "slider" meant iOS-style switches: one for the logo and one per eff
 on), all greyed out while the logo is off, keeping their state. The Brightness slider is the one
 real slider, and greys out with them. The user then asked for the whole menu to be "much more
 narrower", then "a little bit more narrow" and "remove the about logolight option"
-and "the Q shortcut it terrible off to the right side". It's 180 points wide, the least the
-"Apple Logo" row allows; the menu has no About item and no ⌘Q, whose shortcut column alone would make
+and "the Q shortcut it terrible off to the right side". It's 180 points wide, the least the logo's
+row allowed while it was labelled "Apple Logo" (the user then renamed it "Backlight"); the menu has no About item and no ⌘Q, whose shortcut column alone would make
 it 190. The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
 its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
 Launch Services' device types). They also asked for a live view "so fully synced up": `LogoPreview` shows

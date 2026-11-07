@@ -24,7 +24,7 @@ final class ControlPanel: NSView {
     var onBrightnessChanged: ((Double) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
 
-    /// As narrow as the rows allow: "Apple Logo" (69 pt at 13 pt) still fits between its tile and switch.
+    /// Narrow, with room for the longest label ("Heartbeat", 61 pt at 13 pt) between its tile and switch.
     /// The menu's own items need only 143.
     private static let width: CGFloat = 180
     private static let inset: CGFloat = 6
@@ -38,7 +38,7 @@ final class ControlPanel: NSView {
     private let stack = NSStackView()
     private let preview: LogoPreview
     private let logoTile = IconTile(symbol: "lightbulb.fill", color: .systemOrange)
-    private let logoLabel = NSTextField(labelWithString: "Apple Logo")
+    private let logoLabel = NSTextField(labelWithString: "Backlight")
     private let logoSwitch = LogoSwitch()
     private let brightnessSeparator = Separator()
     private let brightnessRow = NSView()
@@ -131,7 +131,7 @@ final class ControlPanel: NSView {
         // The logo: on/off and brightness.
         logoSwitch.target = self
         logoSwitch.action = #selector(logoSwitchChanged)
-        logoSwitch.setAccessibilityLabel("Apple Logo")
+        logoSwitch.setAccessibilityLabel("Apple logo backlight")
 
         dimIcon.image = Self.symbol("sun.min.fill", size: 11)
         brightIcon.image = Self.symbol("sun.max.fill", size: 15)
