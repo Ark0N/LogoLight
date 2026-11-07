@@ -12,6 +12,8 @@ public enum LogoIllumination: String, Sendable, Equatable, CaseIterable {
 public struct LogoStatus: Sendable, Equatable {
     /// Where `setting` was determined from.
     public enum Source: Sendable, Equatable {
+        /// `corebrightnessd` itself. Always current.
+        case daemon
         /// The LED driver, read while the built-in display is awake. Always current.
         case led
         /// The NVRAM mirror. `corebrightnessd` doesn't write it as soon as the setting

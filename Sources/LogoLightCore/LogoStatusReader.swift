@@ -21,6 +21,9 @@ public struct LogoStatusReader: Sendable {
         self.hardware = hardware
     }
 
+    /// Whether the built-in display is on, or `nil` if unknown.
+    public func isDisplayAwake() -> Bool? { hardware.isBuiltInDisplayAwake() }
+
     public func read() -> LogoStatus {
         let nvram = hardware.nvramValue(forKey: LogoHardware.nvramKey)
         let pwm = hardware.serviceProperties(named: LogoHardware.pwmDeviceName)

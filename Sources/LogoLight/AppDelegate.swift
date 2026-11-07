@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItemController = StatusItemController(controller: LogoController())
+        statusItemController = StatusItemController(controller: LogoController.live())
 
         #if DEBUG
         // Opens the menu on launch, for checking the UI without clicking (debug builds only).

@@ -10,6 +10,8 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
     var displayAwake = true
     /// When false, corebrightnessd ignores changes to the default.
     var daemonResponds = true
+    /// Called when the root default changes, as corebrightnessd observes it.
+    var onDefaultChanged: ((Int?) -> Void)?
     /// What corebrightnessd is currently applying.
     private var appliedOn: Bool
     /// The NVRAM copy, written at boot and not again during the session.
@@ -36,7 +38,10 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
         default:
             return // e.g. the sudoers install script
         }
-        if daemonResponds { appliedOn = backlightMode != 0 }
+        if daemonResponds {
+            appliedOn = backlightMode != 0
+            onDefaultChanged?(backlightMode)
+        }
     }
 
     func nvramValue(forKey key: String) -> Data? {
@@ -85,30 +90,94 @@ final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
     func canRun(_ command: PrivilegedCommand) async -> Bool { allowed }
 }
 
+/// A stand-in for corebrightnessd's light emitter module. It logs every change it's sent,
+/// using the real key names, so tests can check the exact sequence.
 @MainActor
-private struct Fixture {
+final class FakeDaemon: LightEmitterService {
+    var mode = 2
+    var fadeDuration = 0.0
+    var lit = true
+    /// When false, every change is rejected (as if the client API stopped working).
+    var acceptsChanges = true
+    /// When false, changes are accepted but have no effect.
+    var appliesChanges = true
+    var log: [String] = []
+
+    func value(forKey key: String) -> Any? {
+        switch key {
+        case "LEBacklightMode": NSNumber(value: mode)
+        case "LEPWMState": ["Factor": NSNumber(value: lit ? 1.0 : 0.0)]
+        default: nil
+        }
+    }
+
+    func setValue(_ value: NSNumber, forKey key: String) -> Bool {
+        switch key {
+        case "LEBacklightMode": log.append("mode=\(value.intValue)")
+        case "LEPWMFactorFadeDuration": log.append("fade=\(value.doubleValue)")
+        case "DisplayLogicalState": log.append(value.intValue == 1 ? "blank" : value.intValue == 2 ? "unblank" : "state=\(value)")
+        default: log.append("\(key)=\(value)")
+        }
+        guard acceptsChanges else { return false }
+        guard appliesChanges else { return true }
+        switch key {
+        case "LEBacklightMode": mode = value.intValue
+        case "LEPWMFactorFadeDuration": fadeDuration = value.doubleValue
+        case "DisplayLogicalState": lit = value.intValue == 2
+        default: break
+        }
+        return true
+    }
+}
+
+/// Records sleeps and lets them return immediately. After `budget` sleeps it throws,
+/// which ends an effect loop so tests can inspect what it did.
+final class FakeClock: @unchecked Sendable {
+    var slept: [Double] = []
+    var budget = Int.max
+
+    func sleep(_ seconds: Double) async throws {
+        slept.append(seconds)
+        budget -= 1
+        if budget < 0 { throw CancellationError() }
+        await Task.yield()
+    }
+}
+
+@MainActor
+struct Fixture {
     let mac: SimulatedMac
     let admin: FakeAdminShell
     let sudo: FakeSudo
+    let daemon: FakeDaemon
+    let clock: FakeClock
     let controller: LogoController
 
-    init(backlightMode: Int? = nil, ruleInstalled: Bool = false, sudoAllows: Bool? = nil) {
+    /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
+    init(backlightMode: Int? = nil, ruleInstalled: Bool = false, sudoAllows: Bool? = nil, direct: Bool = false) {
         mac = SimulatedMac(backlightMode: backlightMode)
         admin = FakeAdminShell(mac: mac)
         sudo = FakeSudo(mac: mac, allowed: sudoAllows ?? ruleInstalled)
+        daemon = FakeDaemon()
+        daemon.mode = backlightMode == 0 ? 0 : 2
+        mac.onDefaultChanged = { [daemon] in daemon.mode = $0 == 0 ? 0 : 2 }
+        let clock = FakeClock()
+        self.clock = clock
         controller = LogoController(
             reader: LogoStatusReader(hardware: mac),
+            emitter: direct ? LightEmitter(service: daemon) : nil,
             admin: admin,
             sudo: sudo,
             isRuleInstalled: { ruleInstalled },
-            verificationTimeout: .milliseconds(300)
+            verificationTimeout: .milliseconds(300),
+            sleep: { try await clock.sleep($0) }
         )
     }
 }
 
 @MainActor
 func controllerTests(_ t: TestHarness) async {
-    print("\nController")
+    print("\nController: documented defaults command (no direct control)")
 
     await t.test("turns the logo off through the password dialog") {
         let f = Fixture()
