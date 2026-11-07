@@ -139,13 +139,18 @@ public final class LightEmitter {
     ///
     /// The keyboard backlight would darken too, so it's told straight away that the display is
     /// still on, which it can do without its light visibly changing.
-    @discardableResult
-    public func setLit(_ lit: Bool, keepingKeyboardLit keepKeyboard: Bool = true) -> Bool {
-        let sent = service.setValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
-                                    forKey: Key.logicalState)
+    private func setLit(_ lit: Bool, keepingKeyboardLit keepKeyboard: Bool = true) {
+        _ = service.setValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
+                             forKey: Key.logicalState)
         lastHeadingLit = lit
         if !lit, keepKeyboard { setKeyboardLit(true) }
-        return sent
+    }
+
+    /// Starts a fade the other way that's too slow to see. That stops the logo where it is, and
+    /// makes heading `lit` a change again (see docs/corebrightnessd.md, "Holding a level").
+    private func turnRound(from lit: Bool, keepingKeyboardLit keepKeyboard: Bool = true) {
+        setFadeDuration(Self.holdDuration)
+        setLit(!lit, keepingKeyboardLit: keepKeyboard)
     }
 
     /// Call when the display sleeps or wakes: `corebrightnessd` changes the state it sends
@@ -176,6 +181,7 @@ public final class LightEmitter {
     /// it there until the next change. The logo still adapts to ambient light, scaled by the level.
     public func fade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws {
         let target = min(max(level, 0), 1)
+        // Unknown: assume the far end, so the fade goes all the way.
         let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
         guard abs(target - current) >= 0.005 else { return }
 
@@ -186,10 +192,7 @@ public final class LightEmitter {
         // The fade must start now with the new duration, and a fade only starts when it changes
         // direction. So if it's already heading this way (or held after doing so), stop it first.
         let heading = isHeadingLit
-        if heading == nil || heading == lit {
-            setFadeDuration(Self.holdDuration)
-            setLit(!lit)
-        }
+        if heading == nil || heading == lit { turnRound(from: lit) }
         // A fade's duration covers the whole way to 0 or 1, so stretch it to reach the
         // target in about `duration`.
         let fadeTime = isAllTheWay ? duration
@@ -206,13 +209,7 @@ public final class LightEmitter {
             try await sleep(Self.pollInterval)
             waited += Self.pollInterval
         }
-        hold(headingLit: lit)
-    }
-
-    /// Stops a fade where it is by starting one the other way that's too slow to see.
-    private func hold(headingLit lit: Bool) {
-        setFadeDuration(Self.holdDuration)
-        setLit(!lit)
+        turnRound(from: lit) // and hold it there
     }
 
     /// Back to normal: fully lit (when the display is on), with the automatic fade duration.
@@ -220,8 +217,7 @@ public final class LightEmitter {
     public func restore(displayAwake: Bool) {
         if isHeadingLit != false, (fadeLevel ?? 1) < 0.999 {
             // Held after fading toward lit: turn it round (without moving) so relighting is a change.
-            setFadeDuration(Self.holdDuration)
-            setLit(false, keepingKeyboardLit: displayAwake)
+            turnRound(from: true, keepingKeyboardLit: displayAwake)
         }
         setFadeDuration(0)
         if displayAwake { setLit(true) }
