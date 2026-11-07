@@ -491,38 +491,42 @@ func landingTests(_ t: TestHarness) async {
         }
     }
 
-    await t.test("an effect's peak below full eases on, and the effect keeps its rhythm") {
-        for effect in [LogoEffect.breathe, .pulse, .heartbeat] {
-            let f = Fixture(direct: true, timeDriven: true)
-            f.controller.setBrightness(0.5)
-            await settle()
-            try await pass(f, 0.5)
-            f.daemon.trace = []
-            f.daemon.timeline.removeAll()
-            f.controller.setEffect(effect)
-            let period = effect.cycle.reduce(0) { $0 + $1.fade + $1.hold }
-            try await pass(f, 4.5 * period)
-            f.controller.restoreNormalLighting()
-            // Each cycle's last fall (a plain fade all the way, at the step's own duration).
-            let fall = effect.cycle.last { !$0.lit }!
-            let falls = f.daemon.timeline.filter { $0.entry == "fade=\(fall.fade)" }.map(\.time)
-            let cycles = zip(falls, falls.dropFirst()).map { $1 - $0 }
-            let motion = Motion(f.daemon.trace)
-            let stops = falls.dropFirst().map { motion.stop(before: $0 - 0.0001) }
-            // The speed in the last 60 ms before each peak's stop, against the fastest the logo
-            // moved in the cycle before it.
-            let ratios = stops.map { stop in
-                motion.speed(before: stop, over: 0.06) / motion.peakSpeed(from: stop - period, to: stop)
-            }
-            t.expect(cycles.count >= 3, "\(effect): \(cycles.count) cycles")
-            t.expect(ratios.allSatisfy { $0 < 0.25 }, "\(effect): stopped at \(ratios) of the peak")
-            if effect == .heartbeat {
-                // Its holds after the beats (0.05 s) can't make up for easing on (about 0.2 s
-                // a beat), so at this brightness it beats about 0.26 s slower than at full.
-                t.expect(cycles.allSatisfy { $0 >= period - 0.1 && $0 <= period + 0.3 },
-                         "\(effect): cycles of \(cycles), not about \(period)")
-            } else {
-                t.expect(cycles.allSatisfy { abs($0 - period) <= 0.1 }, "\(effect): cycles of \(cycles), not \(period)")
+    await t.test("an effect's peak below full eases on, and the effect keeps its rhythm, however late the polls run") {
+        for timing in Timing.all {
+            for effect in [LogoEffect.breathe, .pulse, .heartbeat] {
+                let f = Fixture(direct: true, timeDriven: true)
+                timing.apply(to: f)
+                f.controller.setBrightness(0.5)
+                await settle()
+                try await pass(f, 0.5)
+                f.daemon.trace = []
+                f.daemon.timeline.removeAll()
+                f.controller.setEffect(effect)
+                let period = effect.cycle.reduce(0) { $0 + $1.fade + $1.hold }
+                try await pass(f, 4.5 * period)
+                f.controller.restoreNormalLighting()
+                // Each cycle's last fall (a plain fade all the way, at the step's own duration).
+                let fall = effect.cycle.last { !$0.lit }!
+                let falls = f.daemon.timeline.filter { $0.entry == "fade=\(fall.fade)" }.map(\.time)
+                let cycles = zip(falls, falls.dropFirst()).map { $1 - $0 }
+                let motion = Motion(f.daemon.trace)
+                let stops = falls.dropFirst().map { motion.stop(before: $0 - 0.0001) }
+                // The speed in the last 60 ms before each peak's stop, against the fastest the logo
+                // moved in the cycle before it.
+                let ratios = stops.map { stop in
+                    motion.speed(before: stop, over: 0.06) / motion.peakSpeed(from: stop - period, to: stop)
+                }
+                let label = "\(effect), \(timing)"
+                t.expect(cycles.count >= 3, "\(label): \(cycles.count) cycles")
+                t.expect(ratios.allSatisfy { $0 < 0.25 }, "\(label): stopped at \(ratios) of the peak")
+                // Heartbeat's holds after its beats (0.05 s) can't make up for easing on (about 0.2 s
+                // a beat), but its rest can. A peak's easing is taken from the holds after it, which
+                // can be in the next cycle, so the first cycle may run long once (Pulse, at 16 ms
+                // frames, by 0.12 s), and the rest keep the length.
+                let last = effect.cycle.last!.hold
+                t.expect(cycles.first.map { $0 >= period - 0.1 && $0 <= period + 0.1 + last } ?? false,
+                         "\(label): a first cycle of \(cycles.first ?? 0), not \(period)")
+                t.expect(cycles.dropFirst().allSatisfy { abs($0 - period) <= 0.1 }, "\(label): cycles of \(cycles), not \(period)")
             }
         }
     }

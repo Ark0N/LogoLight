@@ -150,7 +150,12 @@ public final class LogoAnimator {
 
     private func play(_ cycle: [FadeStep]) {
         isPlaying = true
+        let cycleHold = cycle.reduce(0) { $0 + $1.hold }
         task = Task { [weak self] in
+            // Easing onto a peak below full takes longer than the step's fade. The time it ran over
+            // is taken from the holds that follow, as far as they go, so the cycle keeps its length:
+            // Heartbeat's short holds can't absorb its beats' easing, but its rest can.
+            var owed = 0.0
             playing: while true {
                 for step in cycle {
                     guard let self, !Task.isCancelled else { return }
@@ -160,9 +165,10 @@ public final class LogoAnimator {
                     do {
                         let took = try await self.emitter.timedFade(to: step.lit ? self.level : 0, over: step.fade,
                                                                     sleep: self.sleep)
-                        // Easing onto a peak below full takes longer than the step's fade, so the
-                        // hold makes up for it, as far as it can.
-                        try await self.sleep(max(0, step.hold - max(0, took - step.fade)))
+                        owed = min(owed + max(0, took - step.fade), cycleHold)
+                        let hold = max(0, step.hold - owed)
+                        owed -= step.hold - hold
+                        try await self.sleep(hold)
                     } catch {
                         break playing
                     }
