@@ -12,14 +12,14 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/notarized-Developer%20ID-1f1f24?style=flat-square" alt="Notarized by Apple">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f1f24?style=flat-square" alt="MIT license"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
+  &nbsp;
+  <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="56" alt="Buy me a coffee"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><b>Download LogoLight</b></a>
-  &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://buymeacoffee.com/arkon"><b>Buy me a coffee</b></a>
+  <img src="https://img.shields.io/badge/notarized-Developer%20ID-1f1f24?style=flat-square" alt="Notarized by Apple">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f1f24?style=flat-square" alt="MIT license"></a>
 </p>
 
 <br>
