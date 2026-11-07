@@ -118,9 +118,17 @@ To return to normal (fully lit, automatic duration), do the same flip with a sho
 and end in Unblank. Then set the duration to `0`, so the daemon's own fades use the automatic
 duration again.
 
-Not tested yet: what `corebrightnessd` does with a held level when the display sleeps and wakes
-on its own, since its own Blank/Unblank would use the huge duration. LogoLight resets the
-duration when the display sleeps and reapplies the level after it wakes.
+Measured through `LogoController` (`tools/livecheck`), a level lands within about 0.02 of its
+target. It stayed flat over 3 s, moving up or down from a held level works, and a simulated
+60 Hz slider drag ended exactly on target. Effects peak at the level; Heartbeat's quickest
+beats overshoot a little (0.30 for a level of 0.265), because polling can't stop a very fast
+fade precisely.
+
+Not tested yet: what `corebrightnessd` does with a held level when the display **really**
+sleeps and wakes, since its own Blank/Unblank could use the huge duration. LogoLight resets the
+duration when the display sleeps and reapplies the level after it wakes; those two handlers
+were only exercised by calling them directly. If LogoLight crashes while holding a level, the
+huge duration stays in the daemon until LogoLight is reopened, which resets it.
 
 ## Reading the LED without corebrightnessd
 

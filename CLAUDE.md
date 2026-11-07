@@ -31,12 +31,18 @@ runs but says the logo isn't available. So:
   `Sources/LogoLightTests/ControllerTests.swift` (`SimulatedMac`, `FakeDaemon`, which logs every
   key it's sent, and `FakeClock`) model the real hardware's behaviour.
 - Anything that changes what the LED does must be checked on the MacBook before it's called
-  done. Say so explicitly if it wasn't.
+  done, with `tools/livecheck`. Say so explicitly if it wasn't.
+- To see the panel anywhere, without touching the logo or the screen, draw it to PNGs in each
+  state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`
+  (switches render grey there, since the window isn't active).
+  `LOGOLIGHT_OPEN_MENU=1 .build/debug/LogoLight` opens the real menu. Quit LogoLight first, and
+  don't use it while the user is working: it interrupts them, and the menu won't stay open.
 
 ## Rules learned the hard way
 
-- **Chain build-and-run with `&&`, never `;`.** Once, a failed build fell through to running a
-  stale binary, which switched the real logo off and on.
+- **Never let a failed build reach the hardware.** Chain build-and-run with `&&`, not `;`, and
+  don't pipe the build (`swift build | tail && run` tests `tail`, not the build). Send its output
+  to a file instead. This has gone wrong twice: a stale binary ran against the real logo.
 - Writing to `corebrightnessd` changes the real logo immediately, for every user. Quit LogoLight
   before experimenting (its effects fight you), and restore normal lighting afterwards (the
   command is in `tools/probes/README.md`).
@@ -87,19 +93,20 @@ runs but says the logo isn't available. So:
 See `git log` for history. Done and verified on the MacBook:
 - On/off without a password, with fades.
 - Effects (Breathe, Pulse, Heartbeat).
+- Brightness, including effects peaking at it and turning on at it (`tools/livecheck`).
 - Launch at Login.
 - The documented-command fallback with the admin dialog, plus the optional sudoers rule.
 - The `make install` flow.
 
-**In progress** (started on the MacBook, 2026-11-07): an iOS-style control panel at the top of
-the menu, asked for as "make some nice sliders for the app so it looks like an iOS app :) keep
-it simple". The plan:
-- **Logo switch**: an iOS-style switch, which replaces the Turn Logo Off/On item.
-- **Brightness slider**: a thick capsule like Control Center's. It holds the logo's fade
-  `Factor` at a level, using the technique in "Holding a level" in `docs/corebrightnessd.md`.
-  Perceptual mapping: factor = 0.02 + 0.98 × slider². Effects fade between dark and this level.
-- **Effect speed slider**: scales the effect step durations, 0.5×–2×.
-- **Effect picker**: a segmented control (None / Breathe / Pulse / Heartbeat), which replaces
-  the Effect submenu.
-- The settings persist in UserDefaults.
-- Sleep and wake: reset the fade duration on sleep, and reapply the level on wake.
+The menu's control panel (`Sources/LogoLight/ControlPanel.swift`) was asked for as "nice sliders
+so it looks like an iOS app, keep it simple", then specified: "one slider for turn logo off, then
+the other sliders get greyed out, when its on then the other sliders are for the different
+effects". So "slider" meant iOS-style switches: one for the logo and one per effect (at most one
+on), all greyed out while the logo is off, keeping their state. The Brightness slider is the one
+real slider, and greys out with them.
+
+**Not yet verified:**
+- Clicking and dragging in the real menu. It has been seen rendered, but all the interaction
+  checks went through `LogoController` directly, because the session had no way to click.
+- A real display sleep and wake with a held brightness (see the end of "Holding a level" in
+  `docs/corebrightnessd.md`). Both need the MacBook.

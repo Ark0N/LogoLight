@@ -1,14 +1,18 @@
 # LogoLight
 
-A small macOS menu bar app that turns the illuminated Apple logo on the back of the
-**MacBook Pro with PROLED XDR Display** on and off.
+A small macOS menu bar app that controls the illuminated Apple logo on the back of the
+**MacBook Pro with PROLED XDR Display**: on and off, brightness, and glowing effects.
 
-<img src="docs/menu.png" width="345" alt="The LogoLight menu: Logo Illumination: On, glowing at 39%, with Turn Logo Off and an Effect submenu">
+<img src="docs/menu.png" width="290" alt="The LogoLight panel: a switch for the Apple Logo with a brightness slider below it, then a switch each for the Breathe, Pulse and Heartbeat effects">
 
-- Shows whether the logo is on, and how brightly it's glowing right now
-- **Turn Logo Off / On** from the menu (⌘T), or **Option-click** the icon to toggle. The logo
-  fades out and in smoothly, and no password is needed
-- **Effects**: Breathe, Pulse and Heartbeat, using the LED's own hardware fades
+- An iOS-style panel at the top of the menu. Everything below the logo switch greys out while
+  the logo is off
+- **Apple Logo** switch, or **Option-click** the icon to toggle. The logo fades out and in
+  smoothly, and no password is needed
+- **Brightness** slider. The logo still adapts to ambient light, scaled by the slider
+- **Effects**: Breathe, Pulse and Heartbeat, one at a time, using the LED's own hardware fades.
+  They peak at the chosen brightness
+- Shows how brightly the logo is glowing right now
 - **Launch at Login**
 - No Xcode needed to build: just the Command Line Tools
 
@@ -41,13 +45,19 @@ CoreBrightness's `BrightnessSystemClient`, the interface Control Center uses for
 LogoLight uses these to switch the logo without a password and to fade it smoothly:
 turning off fades out over a second first, and turning on starts from dark and fades in.
 The effects are loops of the same fades. They pause when the logo is off or the display
-sleeps, and normal lighting is restored when you choose **None** or quit.
+sleeps.
+
+There's no key for the logo's brightness, so the slider stops a fade part way: LogoLight
+watches `Factor` until it reaches the level, then starts a fade the other way that's so slow
+it never visibly moves. The level lasts until the next change. Quitting LogoLight returns the
+logo to normal brightness.
 
 This is private API, found by inspecting CoreBrightness (the details, measurements and
 the tools used are in [docs/corebrightnessd.md](docs/corebrightnessd.md) and
 [tools/probes](tools/probes)). LogoLight loads it dynamically and,
 if it's missing or `corebrightnessd` doesn't take a change, falls back to running Apple's
-documented command as root (see below). Effects need direct control.
+documented command as root (see below). Brightness and effects need direct control, and are
+hidden without it.
 
 ### Reading the state
 
@@ -123,14 +133,15 @@ the logo back on without the app:
 
 | Path | What's there |
 | --- | --- |
-| `Sources/LogoLightCore` | `LogoController`; direct control and effects (`LightEmitter`, `LogoEffect`); reading the state (I/O Registry); the documented command, the admin dialog and the sudoers rule |
-| `Sources/LogoLight` | The AppKit menu bar app |
+| `Sources/LogoLightCore` | `LogoController`; direct control, brightness and effects (`LightEmitter`, `LogoEffect`); reading the state (I/O Registry); the documented command, the admin dialog and the sudoers rule |
+| `Sources/LogoLight` | The AppKit menu bar app, including the control panel (`ControlPanel.swift`) |
 | `Sources/LogoLightTests` | The test suite (`swift run LogoLightTests`) |
 | `Resources/Info.plist` | App bundle metadata (template) |
 | `scripts/build-app.sh` | Builds and signs `LogoLight.app` |
 | `scripts/notarize.sh` | Notarizes, staples and zips a Developer ID build (`make dist`) |
 | `docs/corebrightnessd.md` | Research notes: the keys, the fade curve, holding a level |
 | `tools/probes` | The command-line tools used for that research |
+| `tools/livecheck` | Checks brightness and effects against the real logo |
 | `CLAUDE.md` | Notes for picking up work on the project |
 
 The tests are a plain executable instead of an XCTest bundle, because XCTest and
