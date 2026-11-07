@@ -158,8 +158,11 @@ public final class LogoAnimator {
                     // closed with an external display attached. Stop until the next wake.
                     guard self.isDisplayAwake() else { break playing }
                     do {
-                        try await self.emitter.fade(to: step.lit ? self.level : 0, over: step.fade, sleep: self.sleep)
-                        try await self.sleep(step.hold)
+                        let took = try await self.emitter.timedFade(to: step.lit ? self.level : 0, over: step.fade,
+                                                                    sleep: self.sleep)
+                        // Easing onto a peak below full takes longer than the step's fade, so the
+                        // hold makes up for it, as far as it can.
+                        try await self.sleep(max(0, step.hold - max(0, took - step.fade)))
                     } catch {
                         break playing
                     }

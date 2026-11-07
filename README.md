@@ -54,10 +54,11 @@ LogoLight tells the keyboard alone that the display is still on, which keeps it 
 display really sleeps, the keyboard goes dark as usual.
 
 There's no key for the logo's brightness, so the slider stops a fade part way: LogoLight
-watches `Factor` until it reaches the level, then starts a fade the other way that's so slow
-it never visibly moves. The level lasts until the next change. While the slider is dragged,
-the running fade follows it rather than starting again at every step. Quitting LogoLight
-returns the logo to normal brightness.
+watches `Factor`, and near the level it eases the logo on with a few short fades, so it slows
+to a stop instead of halting at speed. Then it starts a fade the other way that's so slow it
+never visibly moves. The level lasts until the next change. While the slider is dragged, the
+running fade follows it rather than starting again at every step. Quitting LogoLight returns
+the logo to normal brightness.
 
 This is private API, found by inspecting CoreBrightness (the details, measurements and
 the tools used are in [docs/corebrightnessd.md](docs/corebrightnessd.md) and

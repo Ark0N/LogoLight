@@ -128,7 +128,9 @@ final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
 ///
 /// Fades move in one of two ways. By default each read moves them a step (`stepPerRead`).
 /// With `timeDriven` (and `stepPerRead = 0`), time passing moves them instead, at the real
-/// hardware's speed: `Fixture` passes it every sleep through `FakeClock.onSleep`.
+/// hardware's speed: `Fixture` passes it every sleep through `FakeClock.onSleep`. Like the real
+/// one, a time-driven fade moves in frames (`frameInterval`), counted from when it started, so a
+/// new fade first moves a frame after it's started and stops where its last frame put it.
 @MainActor
 final class FakeDaemon: LightEmitterService {
     var mode = 2
@@ -141,6 +143,15 @@ final class FakeDaemon: LightEmitterService {
     var stepPerRead = 1.0
     /// When true, `elapse(_:)` moves a fade along the hardware's curve.
     var timeDriven = false
+    /// How often a time-driven fade moves: measured as about every 17.5 ms, and a restarted fade
+    /// first moved 18–20 ms after it was started. 0 moves it continuously.
+    var frameInterval = 0.0175
+    /// The time passed through `elapse(_:)` so far.
+    private(set) var time = 0.0
+    /// When set, `elapse(_:)` adds the level here every millisecond.
+    var trace: [(time: Double, level: Double)]?
+    /// Each change sent, as in `log`, with the time it was sent.
+    var timeline: [(time: Double, entry: String)] = []
     /// The highest level seen since the test set it.
     var peak = 0.0
     /// The `DisplayLogicalState` the keyboard backlight follows, which is dark on 1.
@@ -183,10 +194,20 @@ final class FakeDaemon: LightEmitterService {
     /// Time passing (time-driven mode only). A fade started at the hold duration moves too,
     /// but far too slowly to see.
     func elapse(_ seconds: Double) {
+        let steps = trace == nil ? 1 : max(1, Int((seconds / 0.001).rounded(.up)))
+        for _ in 0..<steps { run(for: seconds / Double(steps)) }
+    }
+
+    private func run(for seconds: Double) {
+        time += seconds
+        defer { trace?.append((time, level)) }
         guard timeDriven, var fade else { return }
         fade.elapsed += seconds
         let end: Double = state == 2 ? 1 : 0
-        let s = fade.elapsed / fade.length
+        // Where its last frame put it, until it reaches the end at its duration.
+        let frames = frameInterval > 0 ? (fade.elapsed / frameInterval + 1e-9).rounded(.down) * frameInterval
+            : fade.elapsed
+        let s = fade.elapsed >= fade.length ? 1 : frames / fade.length
         level = fade.from + (end - fade.from) * Self.progress(s)
         peak = max(peak, level)
         self.fade = s >= 1 ? nil : fade
@@ -211,6 +232,7 @@ final class FakeDaemon: LightEmitterService {
         case "DisplayLogicalState": log.append(value.intValue == 1 ? "blank" : value.intValue == 2 ? "unblank" : "state=\(value)")
         default: log.append("\(key)=\(value)")
         }
+        timeline.append((time, log[log.count - 1]))
         guard acceptsChanges else { return false }
         guard appliesChanges else { return true }
         switch key {
@@ -256,6 +278,10 @@ final class FakeClock {
     /// The total time slept so far, by every task.
     private(set) var now = 0.0
     var onSleep: (@MainActor (Double) -> Void)?
+    /// When true, a sleep cancelled once its time has passed (in `onSleep`, or while it waits for
+    /// the main actor) returns normally, as the real `Task.sleep` does. By default it throws,
+    /// which ends loops sooner.
+    var returnsWhenCancelledLate = false
 
     func sleep(_ seconds: Double) async throws {
         try Task.checkCancellation()
@@ -265,7 +291,7 @@ final class FakeClock {
         now += seconds
         onSleep?(seconds)
         await Task.yield()
-        try Task.checkCancellation()
+        if !returnsWhenCancelledLate { try Task.checkCancellation() }
     }
 }
 
