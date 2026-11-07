@@ -376,7 +376,10 @@ public final class LightEmitter {
             let toEnd = up ? 1 - now : now
             // Where this segment's fade is held, a quarter of its part short of the waypoint.
             var holdAt: Double?
-            if abs(delta) >= 0.0005, toEnd > 1e-4 {
+            // Past the waypoint (a late poll or a short frame let the fade on): wait there for the
+            // ease-out to catch up, instead of turning back, which would bounce.
+            let isAhead = up != (distance > 0)
+            if abs(delta) >= 0.0005, toEnd > 1e-4, !isAhead {
                 if isHeadingLit == nil || isHeadingLit == up { turnRound(from: up) }
                 let share = FadeCurve.springTime(toReach: abs(delta) / toEnd)
                 setFadeDuration(max(0.001, segment - Self.startLatency) / share)

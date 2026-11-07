@@ -437,6 +437,30 @@ func landingTests(_ t: TestHarness) async {
         }
     }
 
+    await t.test("a frame that carries the logo past the ease-out's next point doesn't make it turn back") {
+        // One poll runs late, at each point of the move in turn. The fade then gets a frame more
+        // than planned, at speed, and can pass the next segment's point.
+        var worst = (back: 0.0, label: "")
+        for (from, to) in [(1.0, 0.5), (0.3, 0.8), (0.9, 0.4)] {
+            for frame in [0.012, 0.0175] {
+                for n in stride(from: 1, through: 90, by: 1) {
+                    let timing = Timing("\(frame * 1000) ms frames, poll \(n) 12 ms late", frame: frame,
+                                        late: { $0 == n ? 0.012 : 0 })
+                    let f = try await click(from: from, to: to, timing: timing)
+                    let up = to > from
+                    let trace = f.daemon.trace ?? []
+                    let back = zip(trace, trace.dropFirst())
+                        .map { up ? $0.level - $1.level : $1.level - $0.level }.filter { $0 > 0 }.reduce(0, +)
+                    if back > worst.back { worst = (back, "\(from) to \(to), \(timing)") }
+                    let target = LogoAnimator.level(forBrightness: to)
+                    t.expect(abs(f.daemon.level - target) <= 0.015,
+                             "\(from) to \(to), \(timing): held at \(f.daemon.level), not \(target)")
+                }
+            }
+        }
+        t.expect(worst.back <= 0.005, "\(worst.label): went back by \(worst.back)")
+    }
+
     await t.test("moves to full brightness stay one plain fade") {
         let f = try await click(from: 0.5, to: 1)
         let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
