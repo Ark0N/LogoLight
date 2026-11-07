@@ -51,8 +51,9 @@ func keyboardDuty() -> Double {
 /// Changes the brightness, samples the logo every 5 ms until it has been still for 0.3 s, and
 /// prints how fast it was moving in the last 60 ms before it stopped, as a share of the move's
 /// top speed (over 35 ms, two of the daemon's frames). Cut short at the level, it stopped at
-/// 44-89%; eased on, at 10-17% (docs/corebrightnessd.md, "Easing onto a level"). Also prints the
-/// keyboard's lowest duty during the move, against its duty before it.
+/// 44-89%; eased on, at 10-17% (docs/corebrightnessd.md, "Easing onto a level"). Also prints how
+/// far it went back the way it came (a bounce that ends near the level would pass the other
+/// checks), and the keyboard's lowest duty during the move, against its duty before it.
 @MainActor func landing(to brightness: Double, _ label: String) async {
     let resting = keyboardDuty()
     var keyboardLo = resting
@@ -73,9 +74,12 @@ func keyboardDuty() -> Double {
     let atStop = abs(level(at: lastChange) - level(at: lastChange - 0.06)) / 0.06
     let share = peak > 0 ? atStop / peak : 0
     let expected = LogoAnimator.level(forBrightness: brightness)
-    print(String(format: "%-46@ factor=%.3f expected=%.3f %@  took %.2fs, last 60 ms at %.0f%% of %.2f/s %@  keyboard min %.3f (before %.3f)",
+    let up = expected > samples[0].f
+    let back = zip(samples, samples.dropFirst()).map { up ? $0.f - $1.f : $1.f - $0.f }.filter { $0 > 0 }.reduce(0, +)
+    print(String(format: "%-46@ factor=%.3f expected=%.3f %@  took %.2fs, last 60 ms at %.0f%% of %.2f/s %@  back %.3f %@  keyboard min %.3f (before %.3f)",
                  label as NSString, factor(), expected, abs(factor() - expected) <= 0.02 ? "ok" : "OFF", lastChange,
-                 100 * share, peak, share < 0.25 ? "ok" : "ABRUPT", keyboardLo, resting))
+                 100 * share, peak, share < 0.25 ? "ok" : "ABRUPT", back, back <= 0.005 ? "ok" : "BOUNCE",
+                 keyboardLo, resting))
 }
 let level = LogoAnimator.level(forBrightness:)
 
