@@ -514,6 +514,17 @@ func controllerTests(_ t: TestHarness) async {
         t.expect(!f.controller.autoEnablesPasswordless)
     }
 
+    await t.test("after Disable Password's own install fails, the next dialog doesn't promise the rule") {
+        let f = Fixture()
+        f.controller.autoEnablesPasswordless = true
+        f.mac.installsRule = false
+        do { try await f.controller.enablePasswordless(); t.expect(false, "should throw") } catch {}
+        t.expect(!f.controller.autoEnablesPasswordless)
+        try await f.controller.set(.off)
+        t.expectEqual(f.admin.prompts.map { $0.contains("without your password") }, [false, false])
+        t.expectEqual(f.admin.scripts.last, CoreBrightnessSetting.command(for: .off).shellString)
+    }
+
     await t.test("a cancelled dialog offers the rule again next time") {
         let f = Fixture()
         f.controller.autoEnablesPasswordless = true

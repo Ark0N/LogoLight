@@ -239,13 +239,19 @@ public final class LogoController {
     // MARK: - Password-free rule (only used when direct control isn't available)
 
     /// Installs the sudoers rule so toggling no longer asks for a password. Once that has worked,
-    /// `autoEnablesPasswordless` is back on; a cancelled or failed install leaves it as it was.
+    /// `autoEnablesPasswordless` is back on. A cancelled dialog leaves it as it was, and an install
+    /// that fails turns it off for this session, so the next password dialog doesn't promise the rule.
     public func enablePasswordless() async throws {
         let rule = try PasswordlessRule()
-        try admin.run(
-            script: rule.installScript,
-            prompt: "LogoLight wants to let you turn the Apple logo on and off without entering your password."
-        )
+        do {
+            try admin.run(
+                script: rule.installScript,
+                prompt: "LogoLight wants to let you turn the Apple logo on and off without entering your password."
+            )
+        } catch {
+            if (error as? LogoLightError) != .cancelled { autoEnablesPasswordless = false }
+            throw error
+        }
         guard await sudo.canRun(CoreBrightnessSetting.command(for: .off)) else {
             throw LogoLightError.passwordlessRuleNotHonored
         }
