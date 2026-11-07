@@ -278,7 +278,8 @@ flashes in the fake's 1 ms trace. Choosing an effect stops a message; turning th
 display sleep drops a message sent once and pauses a loop. The panel has a MORSE CODE card: a field,
 play (`play.fill`/`stop.fill`) and loop (`repeat`, accent-filled while looping). To check on the
 MacBook: that dots and dashes read clearly at 0.04 s edges (the keyboard isn't touched: both ends
-are plain Blank/Unblank fades), and that typing in the field works inside the open menu.
+are plain Blank/Unblank fades). Typing in the field inside the open menu was checked by the user
+(2026-11-07, with `LOGOLIGHT_SIMULATE=1`) and works.
 `LOGOLIGHT_SIMULATE=1` (debug) runs the app against `SimulatedEmitterService`, a wall-clock
 stand-in for corebrightnessd, so the live view can be watched on any Mac.
 
