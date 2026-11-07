@@ -79,8 +79,11 @@ public final class LogoAnimator {
         didSet { brightness = min(max(brightness, 0), 1) }
     }
 
-    /// How long a change of brightness takes to fade.
+    /// How long a change of brightness takes to fade, e.g. while the slider moves.
     public var brightnessFadeDuration = 0.25
+    /// How long the logo takes to settle at the chosen brightness after an effect stops, a wake or
+    /// a launch. Slower than the slider, so coming back from dark doesn't snap on.
+    public var transitionDuration = 0.8
 
     public init(emitter: LightEmitter, isDisplayAwake: @escaping @MainActor () -> Bool, sleep: @escaping Sleep) {
         self.emitter = emitter
@@ -109,7 +112,7 @@ public final class LogoAnimator {
     public func resume() {
         cancel()
         if effect == .none {
-            adjustBrightness()
+            adjustBrightness(over: transitionDuration)
         } else {
             let isDark = (emitter.fadeLevel ?? 1) < level / 2
             play(effect.cycle(startingLit: isDark))
@@ -121,7 +124,7 @@ public final class LogoAnimator {
         guard !isPlaying else { return }
         // A fade already under way follows up with the newest value when it's done, so
         // dragging a slider doesn't restart the fade at every step.
-        if !isAdjusting { adjustBrightness() }
+        if !isAdjusting { adjustBrightness(over: brightnessFadeDuration) }
     }
 
     /// Stops animating, leaving the logo as it is, e.g. because it's being turned off or the
@@ -154,19 +157,23 @@ public final class LogoAnimator {
         }
     }
 
-    private func adjustBrightness() {
+    /// Fades to the chosen brightness over `duration`, then follows any changes made meanwhile
+    /// at the slider's speed.
+    private func adjustBrightness(over duration: Double) {
         isAdjusting = true
         let generation = generation
         task = Task { [weak self] in
             var applied: Double?
+            var duration = duration
             while let self, !Task.isCancelled, applied != self.level {
                 let target = self.level
                 do {
-                    try await self.emitter.fade(to: target, over: self.brightnessFadeDuration, sleep: self.sleep)
+                    try await self.emitter.fade(to: target, over: duration, sleep: self.sleep)
                 } catch {
                     break
                 }
                 applied = target
+                duration = self.brightnessFadeDuration
             }
             if let self, self.generation == generation { self.isAdjusting = false }
         }

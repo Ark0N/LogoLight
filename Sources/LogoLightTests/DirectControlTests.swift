@@ -187,7 +187,8 @@ func effectTests(_ t: TestHarness) async {
         f.controller.setEffect(.none)
         await settle()
         t.expect(!f.controller.animator!.isPlaying)
-        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "blank", "fade=0.25", "unblank"])
+        // With the slower transition, so the logo doesn't snap on from dark.
+        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "blank", "fade=0.8", "unblank"])
         t.expect(f.daemon.lit)
     }
 
