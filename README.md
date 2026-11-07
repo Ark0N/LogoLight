@@ -96,8 +96,8 @@ lee ALL = (root) NOPASSWD: /usr/bin/defaults write com.apple.CoreBrightness LEBa
 It allows only those two exact commands, for your user only. The rule is checked with
 `visudo` before it's installed (owned by root, mode `0440`), so a bad rule can't break
 `sudo`. After that, the logo switches without a password. If the rule can't be installed, or
-`sudo` doesn't honor it, the dialog comes back as before, and doesn't offer the rule again
-until LogoLight is next opened.
+`sudo` doesn't honor it, the dialog comes back as before, and stops offering the rule while
+LogoLight is running.
 
 Uncheck **Disable Password** to remove the rule and be asked every time. LogoLight remembers
 that and doesn't install the rule again until you check the item again. (Deleting the file
