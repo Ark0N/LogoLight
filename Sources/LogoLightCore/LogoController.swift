@@ -34,6 +34,11 @@ public final class LogoController {
     /// once the user has removed the rule, so it isn't installed again.
     public var autoEnablesPasswordless = false
 
+    /// Awaited just before a password dialog is shown while switching. The dialog blocks the app
+    /// until it's answered, so the app closes its menu here, which would otherwise sit frozen under
+    /// it. Not called when `sudo` makes the switch without a dialog.
+    public var willPromptForPassword: (@MainActor () async -> Void)?
+
     /// Whether the logo is being switched on or off (`set(_:)` is running, one at a time).
     /// Meanwhile, choosing an effect or a brightness only records it, and a wake doesn't restart
     /// anything: the switch applies the latest choices when it's done.
@@ -335,10 +340,12 @@ public final class LogoController {
         } else if autoEnablesPasswordless, let rule = try? PasswordlessRule() {
             // The same dialog installs the rule, so this is the last time a password is needed. The
             // command's result is the script's, and a failed install doesn't stop it.
+            await willPromptForPassword?()
             try admin.run(script: rule.installScript(thenRunning: command),
                           prompt: Self.prompt(for: target, enablingPasswordless: true))
             return
         }
+        await willPromptForPassword?()
         try admin.run(script: command.shellString, prompt: Self.prompt(for: target))
     }
 

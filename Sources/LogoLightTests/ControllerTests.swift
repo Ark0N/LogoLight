@@ -489,4 +489,60 @@ func controllerTests(_ t: TestHarness) async {
         t.expect(f.admin.scripts.isEmpty, "no password dialog expected")
         t.expect(!f.controller.isPasswordlessEnabled)
     }
+
+    print("\nController: before a password dialog")
+
+    await t.test("waits for the app before showing the dialog, with or without the rule's install") {
+        for autoEnables in [false, true] {
+            let f = Fixture()
+            f.controller.autoEnablesPasswordless = autoEnables
+            let hook = PromptHook(f)
+            try await f.controller.set(.off)
+            t.expectEqual(hook.dialogsShownByThen, [0])
+            t.expectEqual(f.admin.scripts.count, 1)
+        }
+    }
+
+    await t.test("doesn't call the app when sudo switches without a dialog") {
+        let f = Fixture(ruleInstalled: true)
+        let hook = PromptHook(f)
+        try await f.controller.set(.off)
+        try await f.controller.set(.on)
+        t.expectEqual(hook.dialogsShownByThen, [])
+        t.expectEqual(f.sudo.commands.count, 2)
+    }
+
+    await t.test("calls the app when sudo wants a password after all") {
+        let f = Fixture(ruleInstalled: true, sudoAllows: false)
+        let hook = PromptHook(f)
+        try await f.controller.set(.off)
+        t.expectEqual(f.sudo.commands.count, 1)
+        t.expectEqual(hook.dialogsShownByThen, [0])
+        t.expectEqual(f.admin.scripts.count, 1)
+    }
+
+    await t.test("calls the app when corebrightnessd rejects a direct switch") {
+        let f = Fixture(direct: true)
+        f.daemon.acceptsChanges = false
+        f.controller.switchFadeDuration = 0
+        let hook = PromptHook(f)
+        try await f.controller.set(.off)
+        t.expectEqual(hook.dialogsShownByThen, [0])
+        t.expectEqual(f.admin.scripts.count, 1)
+        t.expectEqual(f.mac.backlightMode, 0)
+    }
+}
+
+/// Stands in for the app's `willPromptForPassword`, which waits for its menu to close: it takes a
+/// moment, then records how many dialogs had been shown by then.
+@MainActor
+final class PromptHook {
+    private(set) var dialogsShownByThen: [Int] = []
+
+    init(_ f: Fixture) {
+        f.controller.willPromptForPassword = { [self, admin = f.admin] in
+            for _ in 0..<5 { await Task.yield() }
+            dialogsShownByThen.append(admin.scripts.count)
+        }
+    }
 }

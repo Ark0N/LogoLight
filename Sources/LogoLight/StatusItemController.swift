@@ -64,6 +64,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // Without direct control, the first password also turns on Disable Password, unless the user
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
+        controller.willPromptForPassword = { [weak self] in await self?.closeMenuForPasswordDialog() }
         observeDisplay()
 
         if let button = statusItem.button {
@@ -168,6 +169,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard isMenuOpen else { return action() }
         afterMenuCloses.append(action)
         menu.cancelTracking()
+    }
+
+    /// Just before a password dialog: closes the menu if it's open, and returns once it has.
+    private func closeMenuForPasswordDialog() async {
+        guard isMenuOpen else { return }
+        // Meanwhile the switch looks disabled, as on the fallback path. A direct switch that has
+        // fallen back to the dialog isn't busy otherwise.
+        let marksBusy = !isBusy
+        if marksBusy {
+            isBusy = true
+            updateMenu()
+        }
+        await withCheckedContinuation { continuation in whenMenuClosed { continuation.resume() } }
+        if marksBusy {
+            isBusy = false
+            updateMenu()
+        }
     }
 
     // MARK: - State
