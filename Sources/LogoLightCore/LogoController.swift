@@ -31,7 +31,8 @@ public final class LogoController {
 
     /// Whether the first password dialog also installs the password-free rule (fallback path only).
     /// The dialog then says so, and later switches use `sudo` without asking. The app turns this off
-    /// once the user has removed the rule, so it isn't installed again.
+    /// once the user has removed the rule, so it isn't installed again. It also goes off when the
+    /// install didn't work, so later dialogs don't promise it again.
     public var autoEnablesPasswordless = false
 
     /// Awaited just before a password dialog is shown while switching. The dialog blocks the app
@@ -341,12 +342,27 @@ public final class LogoController {
             // The same dialog installs the rule, so this is the last time a password is needed. The
             // command's result is the script's, and a failed install doesn't stop it.
             await willPromptForPassword?()
-            try admin.run(script: rule.installScript(thenRunning: command),
-                          prompt: Self.prompt(for: target, enablingPasswordless: true))
+            do {
+                try admin.run(script: rule.installScript(thenRunning: command),
+                              prompt: Self.prompt(for: target, enablingPasswordless: true))
+            } catch {
+                // A cancelled dialog ran nothing, and the next one offers the rule again.
+                if (error as? LogoLightError) != .cancelled { await stopAutoEnablingUnlessRuleWorks(for: command) }
+                throw error
+            }
+            await stopAutoEnablingUnlessRuleWorks(for: command)
             return
         }
         await willPromptForPassword?()
         try admin.run(script: command.shellString, prompt: Self.prompt(for: target))
+    }
+
+    /// After a dialog that also installed the rule: if the rule isn't there (e.g. a managed Mac refused
+    /// it) or `sudo` doesn't honor it, later dialogs only run the command, rather than promising again
+    /// what they can't do. For this session only: it isn't the user's choice, so the app doesn't save it.
+    private func stopAutoEnablingUnlessRuleWorks(for command: PrivilegedCommand) async {
+        let works = isRuleInstalled() ? await sudo.canRun(command) : false
+        if !works { autoEnablesPasswordless = false }
     }
 
     /// Waits for the hardware to follow the new setting, when it can be observed.

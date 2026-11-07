@@ -453,6 +453,8 @@ func controllerTests(_ t: TestHarness) async {
         t.expectEqual(status.setting, .on)
         t.expectEqual(f.admin.scripts.count, 1)
         t.expect(f.controller.isPasswordlessEnabled)
+        // The script failed (nothing to delete), but the rule works, so it isn't given up on.
+        t.expect(f.controller.autoEnablesPasswordless)
     }
 
     await t.test("a rule that fails to install doesn't stop the switch") {
@@ -462,6 +464,40 @@ func controllerTests(_ t: TestHarness) async {
         try await f.controller.set(.off)
         t.expectEqual(f.mac.backlightMode, 0)
         t.expect(!f.controller.isPasswordlessEnabled)
+    }
+
+    await t.test("after a rule that fails to install, the next dialog doesn't promise it again") {
+        // In the second order the first command fails too (the logo is already on), which set()
+        // takes as success.
+        for targets in [[LogoIllumination.off, .on], [.on, .off]] {
+            let f = Fixture()
+            f.controller.autoEnablesPasswordless = true
+            f.mac.installsRule = false
+            for target in targets { try await f.controller.set(target) }
+            t.expectEqual(f.admin.prompts.map { $0.contains("without your password") }, [true, false])
+            t.expectEqual(f.admin.scripts.last, CoreBrightnessSetting.command(for: targets[1]).shellString)
+            t.expect(!f.controller.autoEnablesPasswordless)
+        }
+    }
+
+    await t.test("after a rule that sudo doesn't honor, the next dialog doesn't promise it again") {
+        let f = Fixture(sudoAllows: false)
+        f.controller.autoEnablesPasswordless = true
+        try await f.controller.set(.off)
+        t.expect(f.controller.isPasswordlessEnabled)
+        t.expect(!f.controller.autoEnablesPasswordless)
+    }
+
+    await t.test("a cancelled dialog offers the rule again next time") {
+        let f = Fixture()
+        f.controller.autoEnablesPasswordless = true
+        f.admin.error = LogoLightError.cancelled
+        do { try await f.controller.set(.off) } catch {}
+        t.expect(f.controller.autoEnablesPasswordless)
+        f.admin.error = nil
+        try await f.controller.set(.off)
+        t.expect(f.admin.prompts.map { $0.contains("without your password") } == [true, true], "\(f.admin.prompts)")
+        t.expect(f.controller.isPasswordlessEnabled)
     }
 
     await t.test("after the rule was removed on purpose, the dialog only runs the command") {
