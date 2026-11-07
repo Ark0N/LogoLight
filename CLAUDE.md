@@ -120,8 +120,9 @@ row allowed while it was labelled "Apple Logo" (the user then renamed it "Backli
 it 190. The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
 its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
 Launch Services' device types). They also asked for a live view "so fully synced up": `LogoPreview` shows
-`LogoController.liveGlow`, read from the hardware on each frame (a display link, at 60 Hz) while the menu is open. The
-menu bar icon doesn't animate, so nothing polls while the menu is closed.
+`LogoController.liveGlow`, read from the hardware on each frame (a display link, at 60 Hz) while
+the menu is open. With the menu closed, only a 10 s refresh runs, which keeps the menu bar icon in
+step with changes made elsewhere (every second while the menu is open).
 
 The user also reported "the keyboard is glowing at the same time". The fix keeps the keyboard
 steady, on the assumption that this was unwanted; they weren't asked. If they like it, it could

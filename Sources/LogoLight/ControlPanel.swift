@@ -13,7 +13,14 @@ final class ControlPanel: NSView {
     /// Narrow: the least that fits the longest label ("Heartbeat", 61 pt at 13 pt) between its tile and a
     /// full-size switch is 179. The menu's own items need only 143.
     private static let width: CGFloat = 180
+    /// Around the panel's contents (8 at the top), and between its sections.
     private static let inset: CGFloat = 6
+    private static let topInset: CGFloat = 8
+    private static let spacing: CGFloat = 6
+    /// The width of the cards and of everything else in the panel.
+    private static let cardWidth = width - 2 * inset
+    /// How far text outside the cards is indented, on both sides.
+    private static let textIndent: CGFloat = 12
     private static let rowHeight: CGFloat = 36
     /// Where row text starts inside a card.
     fileprivate static let textColumn: CGFloat = 40
@@ -35,10 +42,11 @@ final class ControlPanel: NSView {
     private let dimIcon = NSImageView()
     private let brightIcon = NSImageView()
     private let brightnessSlider = LogoSlider()
-    private let footerLabel = NSTextField(wrappingLabelWithString: "")
+    private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let effectsHeader = NSTextField(labelWithString: "EFFECTS")
-    private var footerContainer = NSView()
-    private var effectsHeaderContainer = NSView()
+    /// Each line of text outside the cards is in one of these, which indents it (and is what's hidden).
+    private let messageContainer = NSStackView()
+    private let effectsHeaderContainer = NSStackView()
     private let effectsCard = Card()
     private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
 
@@ -94,8 +102,8 @@ final class ControlPanel: NSView {
         }
         greyOutAdjustments(!state.canAdjust, animated: animated)
 
-        footerLabel.stringValue = state.message ?? ""
-        footerContainer.isHidden = state.message == nil
+        messageLabel.stringValue = state.message ?? ""
+        messageContainer.isHidden = state.message == nil
         // Only these change the panel's height.
         if old?.isSupported != state.isSupported || old?.showsAdjustments != state.showsAdjustments
             || old?.message != state.message {
@@ -125,8 +133,8 @@ final class ControlPanel: NSView {
     private func build() {
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: Self.inset, bottom: 6, right: Self.inset)
+        stack.spacing = Self.spacing
+        stack.edgeInsets = NSEdgeInsets(top: Self.topInset, left: Self.inset, bottom: Self.inset, right: Self.inset)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -153,17 +161,17 @@ final class ControlPanel: NSView {
         logoCard.add([row(tile: logoTile, label: logoLabel, toggle: logoSwitch), brightnessSeparator, brightnessRow])
         addFullWidth(logoCard)
 
-        footerLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        footerLabel.textColor = .secondaryLabelColor
-        footerLabel.maximumNumberOfLines = 2
-        footerLabel.preferredMaxLayoutWidth = Self.width - 2 * Self.inset - 24
-        footerContainer = addIndented(footerLabel)
+        // Only on a Mac without the logo, where nothing else is shown.
+        messageLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        messageLabel.textColor = .secondaryLabelColor
+        messageLabel.maximumNumberOfLines = 2
+        messageLabel.preferredMaxLayoutWidth = Self.cardWidth - 2 * Self.textIndent
+        addIndented(messageLabel, in: messageContainer)
 
         // Effects: one switch each; at most one is on.
         effectsHeader.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1, weight: .medium)
         effectsHeader.textColor = .secondaryLabelColor
-        effectsHeaderContainer = addIndented(effectsHeader)
-        stack.setCustomSpacing(10, after: footerContainer)
+        addIndented(effectsHeader, in: effectsHeaderContainer)
 
         var rows: [NSView] = []
         for effect in LogoEffect.allCases where effect != .none {
@@ -224,17 +232,14 @@ final class ControlPanel: NSView {
 
     private func addFullWidth(_ view: NSView) {
         stack.addArrangedSubview(view)
-        view.widthAnchor.constraint(equalToConstant: Self.width - 2 * Self.inset).isActive = true
+        view.widthAnchor.constraint(equalToConstant: Self.cardWidth).isActive = true
     }
 
-    /// Adds text outside the cards, lined up with the text inside them as in iOS Settings.
-    /// Returns its container, which is what to hide.
-    private func addIndented(_ view: NSView) -> NSView {
-        let container = NSStackView(views: [view])
-        container.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
-        stack.addArrangedSubview(container)
-        container.widthAnchor.constraint(equalToConstant: Self.width - 2 * Self.inset).isActive = true
-        return container
+    /// Adds text outside the cards, indented in `container` as in iOS Settings.
+    private func addIndented(_ text: NSView, in container: NSStackView) {
+        container.addArrangedSubview(text)
+        container.edgeInsets = NSEdgeInsets(top: 0, left: Self.textIndent, bottom: 0, right: Self.textIndent)
+        addFullWidth(container)
     }
 
     private func resizeToFit() {
