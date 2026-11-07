@@ -1,7 +1,7 @@
 import AppKit
 import LogoLightCore
 
-/// The menu bar icon and its menu.
+/// The menu bar icon and its menu, which starts with the control panel.
 ///
 /// Click to open the menu; Option-click to toggle the logo straight away.
 @MainActor
@@ -10,11 +10,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
 
-    private let headerItem = NSMenuItem()
-    private let detailItem = NSMenuItem()
-    private let toggleItem = NSMenuItem()
-    private let effectItem = NSMenuItem(title: "Effect", action: nil, keyEquivalent: "")
-    private let effectMenu = NSMenu()
+    private let panel = ControlPanel()
+    private let panelItem = NSMenuItem()
     private let passwordlessItem = NSMenuItem()
     private let launchAtLoginItem = NSMenuItem()
 
@@ -25,6 +22,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var workspaceObservers: [NSObjectProtocol] = []
 
     private static let effectDefaultsKey = "Effect"
+    private static let brightnessDefaultsKey = "Brightness"
 
     init(controller: LogoController) {
         self.controller = controller
@@ -32,9 +30,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         buildMenu()
 
         // Undo anything a previous run left behind (e.g. a crash mid-effect), then
-        // bring back the effect chosen last time.
+        // bring back the brightness and effect chosen last time.
         controller.restoreNormalLighting()
-        let saved = UserDefaults.standard.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Self.brightnessDefaultsKey) != nil {
+            controller.setBrightness(defaults.double(forKey: Self.brightnessDefaultsKey))
+        }
+        let saved = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
         controller.setEffect(saved ?? .none)
         observeSleepAndWake()
 
@@ -57,22 +59,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
         menu.autoenablesItems = false
 
-        headerItem.isEnabled = false
-        detailItem.isEnabled = false
-
-        toggleItem.target = self
-        toggleItem.action = #selector(toggleLogo)
-        toggleItem.keyEquivalent = "t"
-
-        for effect in LogoEffect.allCases {
-            let item = NSMenuItem(title: effect.title, action: #selector(chooseEffect(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = effect.rawValue
-            effectMenu.addItem(item)
-            if effect == .none { effectMenu.addItem(.separator()) }
-        }
-        effectMenu.autoenablesItems = false
-        effectItem.submenu = effectMenu
+        panelItem.view = panel
+        panel.onLogoSwitched = { [weak self] isOn in self?.setLogo(on: isOn) }
+        panel.onBrightnessChanged = { [weak self] in self?.setBrightness($0) }
+        panel.onEffectChosen = { [weak self] in self?.chooseEffect($0) }
 
         passwordlessItem.title = "Toggle Without Password"
         passwordlessItem.target = self
@@ -88,9 +78,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let quitItem = NSMenuItem(title: "Quit LogoLight", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         menu.items = [
-            headerItem, detailItem,
-            .separator(),
-            toggleItem, effectItem,
+            panelItem,
             .separator(),
             passwordlessItem, launchAtLoginItem,
             .separator(),
@@ -114,7 +102,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         refresh()
-        // Show the brightness changing live while the menu is open.
+        // Keep the panel current while the menu is open.
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -152,24 +140,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func updateMenu() {
-        headerItem.attributedTitle = NSAttributedString(
-            string: headerText,
-            attributes: [.font: NSFont.menuFont(ofSize: 0).bold, .foregroundColor: NSColor.labelColor]
-        )
-        detailItem.title = detailText
-        detailItem.isHidden = detailText.isEmpty
-
-        let target = (status.setting ?? .on).toggled
-        toggleItem.title = isBusy ? "Working…" : (target == .off ? "Turn Logo Off" : "Turn Logo On")
-        toggleItem.isEnabled = status.isSupported && !isBusy
-
-        let canAnimate = controller.canControlDirectly && status.isSupported
-        effectItem.isEnabled = canAnimate && !isBusy
-        effectItem.toolTip = canAnimate ? nil : "Effects aren't available on this Mac."
-        for item in effectMenu.items where item.representedObject != nil {
-            item.state = (item.representedObject as? String) == controller.effect.rawValue ? .on : .off
-            item.isEnabled = canAnimate && !isBusy
-        }
+        panel.update(PanelState(
+            isSupported: status.isSupported,
+            isOn: status.setting != .off,
+            isBusy: isBusy,
+            canAnimate: controller.canControlDirectly,
+            effect: controller.effect,
+            brightness: controller.brightness,
+            footer: detailText
+        ))
 
         // Only needed when the logo can't be controlled directly; kept visible if a rule is
         // already installed, so it can be removed.
@@ -177,15 +156,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.state = controller.isPasswordlessEnabled ? .on : .off
         passwordlessItem.isEnabled = status.isSupported && !isBusy
         launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
-    }
-
-    private var headerText: String {
-        guard status.isSupported else { return "No Illuminated Logo" }
-        switch status.setting {
-        case .on: return "Logo Illumination: On"
-        case .off: return "Logo Illumination: Off"
-        case nil: return "Logo Illumination: Unknown"
-        }
     }
 
     private var detailText: String {
@@ -211,8 +181,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         perform { [controller] in try await controller.toggle() }
     }
 
-    @objc private func chooseEffect(_ sender: NSMenuItem) {
-        guard let effect = (sender.representedObject as? String).flatMap(LogoEffect.init(rawValue:)) else { return }
+    private func setLogo(on isOn: Bool) {
+        perform { [controller] in try await controller.set(isOn ? .on : .off) }
+    }
+
+    private func setBrightness(_ brightness: Double) {
+        controller.setBrightness(brightness)
+        UserDefaults.standard.set(brightness, forKey: Self.brightnessDefaultsKey)
+    }
+
+    private func chooseEffect(_ effect: LogoEffect) {
         controller.setEffect(effect)
         UserDefaults.standard.set(effect.rawValue, forKey: Self.effectDefaultsKey)
         refresh()
@@ -265,7 +243,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         NSApp.activate()
         let credits = NSAttributedString(
             string: "Turns the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display on and off, "
-                + "and animates it with fades and effects. The on/off setting is the one described in Apple's "
+                + "sets its brightness, and animates it with fades and effects. The on/off setting is the one described in Apple's "
                 + "support article “About the illuminated Apple logo”.",
             attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
                          .foregroundColor: NSColor.secondaryLabelColor]
@@ -316,8 +294,4 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         alert.informativeText = error.localizedDescription
         alert.runModal()
     }
-}
-
-private extension NSFont {
-    var bold: NSFont { NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask) }
 }
