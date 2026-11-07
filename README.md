@@ -47,7 +47,8 @@ CoreBrightness's `BrightnessSystemClient`, the interface Control Center uses for
 LogoLight uses these to switch the logo without a password and to fade it smoothly:
 turning off fades out over a second first, and turning on starts from dark and fades in
 (with an effect chosen, the effect's first rise is the fade in). The effects are loops of
-the same fades. They pause when the logo is off or the display sleeps.
+the same fades. They pause when the logo is off, the display sleeps, or the built-in display
+goes away (lid closed with an external display).
 
 The keyboard backlight also listens to `DisplayLogicalState`, so right after every Blank,
 LogoLight tells the keyboard alone that the display is still on, which keeps it lit. When the
@@ -55,8 +56,9 @@ display really sleeps, the keyboard goes dark as usual.
 
 There's no key for the logo's brightness, so the slider stops a fade part way: LogoLight
 watches `Factor` until it reaches the level, then starts a fade the other way that's so slow
-it never visibly moves. The level lasts until the next change. Quitting LogoLight returns the
-logo to normal brightness.
+it never visibly moves. The level lasts until the next change. While the slider is dragged,
+the running fade follows it rather than starting again at every step. Quitting LogoLight
+returns the logo to normal brightness.
 
 This is private API, found by inspecting CoreBrightness (the details, measurements and
 the tools used are in [docs/corebrightnessd.md](docs/corebrightnessd.md) and
@@ -154,7 +156,8 @@ The tests are a plain executable instead of an XCTest bundle, because XCTest and
 swift-testing only ship with a full Xcode install. They cover the exact commands,
 shell and AppleScript quoting, the sudoers rule (checked with the real `visudo`), the
 controller and effects against a simulated Mac and a fake `corebrightnessd` that logs
-every key it's sent, and a read-only check of this Mac's real logo state.
+every key it's sent and moves its fades along the measured curve, and a read-only check of
+this Mac's real logo state.
 
 ---
 

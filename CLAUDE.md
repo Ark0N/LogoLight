@@ -29,7 +29,10 @@ runs but says the logo isn't available. So:
 
 - Logic changes can be made and tested anywhere. The fakes in
   `Sources/LogoLightTests/ControllerTests.swift` (`SimulatedMac`, `FakeDaemon`, which logs every
-  key it's sent, and `FakeClock`) model the real hardware's behaviour.
+  key it's sent, and `FakeClock`) model the real hardware's behaviour. Use
+  `Fixture(timeDriven: true)` for new tests: the fake's fades then move as the code sleeps, along
+  the measured curve, so landings, overshoots and timing look like the real logo's. (The older
+  tests move a fade a step per read instead.)
 - Anything that changes what the LED does must be checked on the MacBook before it's called
   done, with `tools/livecheck`. Say so explicitly if it wasn't.
 - To see the panel anywhere, without touching the logo or the screen, draw it to PNGs in each
@@ -50,9 +53,10 @@ runs but says the logo isn't available. So:
   with a state *change*.
 - `DisplayLogicalState` moves the keyboard backlight as well as the logo, and reading it back gives
   the last value sent to anything. So `LightEmitter.setLit` corrects the keyboard after every Blank
-  and remembers the logo's direction itself. Check side effects with `tools/probes/ledsample`, and
-  check logic with `tools/livecheck`: the unit tests missed the read-back problem until the fake
-  was taught it.
+  and remembers the logo's direction itself; when that isn't known (at launch, after a sleep or
+  wake) it's `nil`, never read back, and the code writes both states at the hold duration. Check
+  side effects with `tools/probes/ledsample`, and check logic with `tools/livecheck`: the unit
+  tests missed the read-back problem until the fake was taught it.
 - The `bklb-backlight-enabled` NVRAM variable is stale. Read the setting from
   `corebrightnessd`, or from the LED while the display is awake.
 - The admin dialog (`do shell script … with administrator privileges`) asks for the password
@@ -119,6 +123,15 @@ become an option.
 
 Seen working in the real menu: the effect switches and the slider (the user's saved settings
 changed).
+
+**Changed since the last check on the MacBook** (logic tested with the time-driven fake only;
+run `tools/livecheck` and watch the logo):
+- The slider's fade now follows a drag instead of restarting at each step.
+- Effects have longer rises than falls (starting values in `LogoEffect.cycle`, to tune by eye),
+  and turning on with an effect starts it with a rise from dark instead of a separate fade in.
+- Choosing None, a wake and launch fade over 0.8 s instead of 0.25 s. Launch
+  (`LogoController.start`) goes straight to a saved level instead of relighting to full first.
+- Sleeps have a 2 ms tolerance, and App Nap is held off while animating.
 
 **Not yet verified:**
 - The live view animating in the real menu. It has only been seen drawn offscreen, and

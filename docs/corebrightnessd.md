@@ -121,6 +121,11 @@ of the duration (2 s fade, sampled every 0.1 s):
 Unblanking from 0 reached 0.5 after 0.57 s of a 2 s fade. Unblanking from 0.51 over 2 s
 followed the same curve, scaled to the remaining 0.49.
 
+The table fits a critically damped spring, `p(s) = 1 - (1 + k·s)·exp(-k·s)` with `k = 6.51`
+and `s` the share of the duration elapsed, to within 0.009 rms. Its top speed is at
+`s = 0.154`. As far as has been measured, every fade starts from rest: a new fade doesn't
+keep the speed of the one it replaces. The fake `corebrightnessd` in the tests uses this curve.
+
 ## Holding a level
 
 There's no key for the logo's brightness, but the fade can be stopped at any level:
@@ -137,21 +142,32 @@ Leaving a held level takes a state *change* again. Writing the state the logo is
 is ignored, so to go up from a level held in Unblank, write Blank with the huge duration
 first (nothing moves), then Unblank with the real duration.
 
+When it isn't known which state the logo is in (the state can't be read back once the
+keyboard has been written to, and the daemon changes it itself when the display sleeps and
+wakes), write Blank and then Unblank, both with the huge duration. Whichever is a change
+starts a fade too slow to see, so nothing moves either way, and the state is then known.
+
+A fade carries on after whatever started it stops watching it, e.g. when an effect step is
+cancelled. So a level that's reached "already" still needs a hold, or that fade carries the
+logo past it.
+
 To return to normal (fully lit, automatic duration), do the same flip with a short duration
 and end in Unblank. Then set the duration to `0`, so the daemon's own fades use the automatic
 duration again.
 
 Measured through `LogoController` (`tools/livecheck`), a level lands within about 0.02 of its
 target. It stayed flat over 3 s, moving up or down from a held level works, and a simulated
-60 Hz slider drag ended exactly on target. Effects peak at the level; Heartbeat's quickest
-beats overshoot a little (0.30 for a level of 0.265), because polling can't stop a very fast
-fade precisely.
+60 Hz slider drag ended exactly on target (that was before the fade started following the
+drag, which hasn't been checked on the MacBook yet). Effects peak at the level; Heartbeat's
+quickest beats overshoot a little (0.30 for a level of 0.265), because polling can't stop a
+very fast fade precisely.
 
 Not tested yet: what `corebrightnessd` does with a held level when the display **really**
 sleeps and wakes, since its own Blank/Unblank could use the huge duration. LogoLight resets the
 duration when the display sleeps and reapplies the level after it wakes; those two handlers
 were only exercised by calling them directly. If LogoLight crashes while holding a level, the
-huge duration stays in the daemon until LogoLight is reopened, which resets it.
+huge duration stays in the daemon until LogoLight is reopened, which replaces it: with the
+automatic duration, or with a new hold at the saved level.
 
 ## Reading the LED without corebrightnessd
 
