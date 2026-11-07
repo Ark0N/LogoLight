@@ -48,6 +48,11 @@ runs but says the logo isn't available. So:
   command is in `tools/probes/README.md`).
 - Writing `DisplayLogicalState` with the value it already has is ignored. Release a held level
   with a state *change*.
+- `DisplayLogicalState` moves the keyboard backlight as well as the logo, and reading it back gives
+  the last value sent to anything. So `LightEmitter.setLit` corrects the keyboard after every Blank
+  and remembers the logo's direction itself. Check side effects with `tools/probes/ledsample`, and
+  check logic with `tools/livecheck`: the unit tests missed the read-back problem until the fake
+  was taught it.
 - The `bklb-backlight-enabled` NVRAM variable is stale. Read the setting from
   `corebrightnessd`, or from the LED while the display is awake.
 - The admin dialog (`do shell script … with administrator privileges`) asks for the password
@@ -103,10 +108,22 @@ so it looks like an iOS app, keep it simple", then specified: "one slider for tu
 the other sliders get greyed out, when its on then the other sliders are for the different
 effects". So "slider" meant iOS-style switches: one for the logo and one per effect (at most one
 on), all greyed out while the logo is off, keeping their state. The Brightness slider is the one
-real slider, and greys out with them.
+real slider, and greys out with them. The user then asked for the whole menu to be "much more
+narrower" (it's 216 points wide) and for a live view "so fully synced up": `LogoPreview` shows
+`LogoController.liveGlow`, read from the hardware 30 times a second while the menu is open. The
+menu bar icon doesn't animate, so nothing polls while the menu is closed.
+
+The user also reported "the keyboard is glowing at the same time". The fix keeps the keyboard
+steady, on the assumption that this was unwanted; they weren't asked. If they like it, it could
+become an option.
+
+Seen working in the real menu: the effect switches and the slider (the user's saved settings
+changed).
 
 **Not yet verified:**
-- Clicking and dragging in the real menu. It has been seen rendered, but all the interaction
-  checks went through `LogoController` directly, because the session had no way to click.
-- A real display sleep and wake with a held brightness (see the end of "Holding a level" in
-  `docs/corebrightnessd.md`). Both need the MacBook.
+- The live view animating in the real menu. It has only been seen drawn offscreen, and
+  `liveGlow` was checked through `tools/livecheck`.
+- A real display sleep and wake (not just calling the handlers): with a held brightness, the
+  logo should come back at that level, and the keyboard should go dark and relight.
+- The `DisplaySelect` route in `docs/corebrightnessd.md`, which might replace holding a fade with a
+  real brightness control. Worth trying if the hold causes trouble.

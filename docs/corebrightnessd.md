@@ -29,6 +29,12 @@ The light emitter (LE) classes are `CBLEManager`, `CBLEPWMContainer`,
   - `ClamshellUpdate`, `DisplayPowerStateEvent` and `LEPWMFrameInfoProvider`
   - `RampSpringProfileMass`, `RampSpringProfileStiffness`, `RampSpringProfileDamping` and
     `RampSpringProfileVelocity`. **The fade is a spring animation**; these weren't tried.
+- `-[CBKeyboardBacklightContainer setPropertyInternal:forKey:]` also handles
+  `DisplayLogicalState`. See "The keyboard backlight".
+- `-[CBLEManager setProperty:forKey:andClient:]` handles `DisplaySelect`, comparing it with
+  `DisplayTypeSiri` and `DisplayTypeIcon`, and routes `DisplayBrightness`, `DisplayNitsKey` and
+  `MaxBrightness` (`clientMappedSetKey:`) to the selected LED. That looks like a client can target
+  the logo and set its brightness properly, instead of holding a fade. **Not tried yet.**
 - `-[CBLEPWMControlModule copyPropertyInternalForKey:]` handles `DisplayNitsKey`,
   `LEBacklightMode`, `LEPWMState` and `StatusInfo`.
 
@@ -38,7 +44,7 @@ The light emitter (LE) classes are `CBLEManager`, `CBLEPWMContainer`,
 | --- | --- | --- | --- |
 | `LEBacklightMode` | `0`/`2` | yes | `0` off, `2` on. `1` lights the logo too, but is saved as off. The daemon saves it itself with `setBool:(mode == 2) forKey:` into root's `com.apple.CoreBrightness` defaults, the same setting as Apple's documented `sudo defaults write … LEBacklightMode -int 0`. So it persists, and `defaults delete` still turns the logo on. |
 | `LEPWMFactorFadeDuration` | `nil` | yes | Seconds, used by the **next** logical-state change. `0` means automatic (about 0.3 s). Changing it during a fade doesn't affect the fade in progress. |
-| `DisplayLogicalState` | yes | yes | The display state the logo follows. Writing `1` (Blank) fades the logo to dark and `2` (Unblank) fades it to fully lit. **Only the logo follows it; the screen isn't affected.** Writing the state it's already in is ignored, even mid-fade or while a level is held. |
+| `DisplayLogicalState` | yes | yes | The display state the logo follows. Writing `1` (Blank) fades the logo to dark and `2` (Unblank) fades it to fully lit. **The keyboard backlight follows it too; the screen doesn't.** Writing the state it's already in is ignored, even mid-fade or while a level is held. Reading gives the last value sent to *anything*, including a keyboard-only write, so it doesn't show the logo's state once those are in use. |
 | `LEPWMState` | dict | – | Live state, see below. |
 | `ClamshellUpdate` | `0` | untested | |
 | `LEPWMBrightnessNitsMapping` | array | accepted, no effect seen | Screen nits → logo nits. See "Brightness mappings". |
@@ -83,6 +89,23 @@ LEPWMLuxToMinNitsRestrictionMapping  [0,12.5] [190,150] [560,300] [1350,1000] [3
 Writing a scaled-down copy of any of them returns `YES` and reads back, but `AppliedNits`
 didn't change within 5 s. Maybe it would on the next lux or screen-brightness change; that
 wasn't pursued. The originals were written back. **LogoLight doesn't use these.**
+
+## The keyboard backlight
+
+The keyboard LED (`kbd-backlight@0`, the same kind of PWM device as the logo) reacts to
+`DisplayLogicalState` too. Measured with `tools/probes/ledsample`: on Blank it fades from 14% to
+off, and it stays off for as long as the state is Blank, even when the logo is held at a visible
+level.
+
+`-[BrightnessSystemClient setProperty:withKey:keyboardID:]` sends a key to one keyboard only (IDs
+come from `-[KeyboardBrightnessClient copyKeyboardBacklightIDs]`). Writing Unblank to the keyboards
+straight after each global Blank keeps the keyboard lit while the logo fades. Over a 50 s run of
+brightness changes, all three effects and off/on, the keyboard LED stayed on in all 154 samples,
+at 23–25% with one dip to 19% while the logo switched back on.
+
+The keyboard must still go dark with the display, so LogoLight only does this while the display
+is awake, and sends the keyboards Blank when the display sleeps. A real sleep hasn't been measured
+yet, so it isn't known how that lines up with the daemon's own states.
 
 ## The fade curve
 

@@ -3,10 +3,12 @@
 A small macOS menu bar app that controls the illuminated Apple logo on the back of the
 **MacBook Pro with PROLED XDR Display**: on and off, brightness, and glowing effects.
 
-<img src="docs/menu.png" width="290" alt="The LogoLight panel: a switch for the Apple Logo with a brightness slider below it, then a switch each for the Breathe, Pulse and Heartbeat effects">
+<img src="docs/menu.png" width="216" alt="The LogoLight panel: a live view of the glowing logo, a switch for the Apple Logo with a brightness slider below it, then a switch each for the Breathe, Pulse and Heartbeat effects">
 
 - An iOS-style panel at the top of the menu. Everything below the logo switch greys out while
   the logo is off
+- A **live view** of the logo, read from the hardware 30 times a second while the menu is open,
+  so it follows effects, the slider and changes made elsewhere
 - **Apple Logo** switch, or **Option-click** the icon to toggle. The logo fades out and in
   smoothly, and no password is needed
 - **Brightness** slider. The logo still adapts to ambient light, scaled by the slider
@@ -39,13 +41,17 @@ CoreBrightness's `BrightnessSystemClient`, the interface Control Center uses for
 | --- | --- |
 | `LEBacklightMode` | `0` off, `2` on. `corebrightnessd` (running as root) saves it to the same `LEBacklightMode` default as the command above, so it persists, and `defaults delete` still turns the logo back on. |
 | `LEPWMFactorFadeDuration` | How long the logo's fade takes, in seconds. `0` restores the automatic duration. |
-| `DisplayLogicalState` | `1` (Blank) fades the logo out and `2` (Unblank) fades it back in. Only the logo follows this key; the screen is unaffected. |
+| `DisplayLogicalState` | `1` (Blank) fades the logo out and `2` (Unblank) fades it back in. The screen is unaffected, but the keyboard backlight follows it too (see below). |
 | `LEPWMState` | Live state, e.g. `Factor` (fade position), `FinalNits`, `Lux` (read only). |
 
 LogoLight uses these to switch the logo without a password and to fade it smoothly:
 turning off fades out over a second first, and turning on starts from dark and fades in.
 The effects are loops of the same fades. They pause when the logo is off or the display
 sleeps.
+
+The keyboard backlight also listens to `DisplayLogicalState`, so right after every Blank,
+LogoLight tells the keyboard alone that the display is still on, which keeps it lit. When the
+display really sleeps, the keyboard goes dark as usual.
 
 There's no key for the logo's brightness, so the slider stops a fade part way: LogoLight
 watches `Factor` until it reaches the level, then starts a fade the other way that's so slow

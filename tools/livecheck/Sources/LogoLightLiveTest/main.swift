@@ -16,16 +16,17 @@ let emitter = LightEmitter(service: CoreBrightnessService()!)
 func wait(_ s: Double) async { try? await Task.sleep(for: .seconds(s)) }
 @MainActor func report(_ label: String, expected: Double) {
     let f = factor()
-    print(String(format: "%-46@ factor=%.3f expected=%.3f %@", label as NSString, f, expected, abs(f - expected) <= 0.06 ? "ok" : "OFF"))
+    print(String(format: "%-46@ factor=%.3f expected=%.3f glow=%.3f %@", label as NSString, f, expected, controller.liveGlow, abs(f - expected) <= 0.06 ? "ok" : "OFF"))
 }
 @MainActor func sample(_ label: String, seconds: Double) async {
-    var lo = 2.0, hi = -1.0
+    var lo = 2.0, hi = -1.0, glowLo = 2.0, glowHi = -1.0
     let t0 = Date()
     while Date().timeIntervalSince(t0) < seconds {
-        let f = factor(); lo = min(lo, f); hi = max(hi, f)
+        let f = factor(), g = controller.liveGlow
+        lo = min(lo, f); hi = max(hi, f); glowLo = min(glowLo, g); glowHi = max(glowHi, g)
         await wait(0.02)
     }
-    print(String(format: "%-46@ min=%.3f max=%.3f", label as NSString, lo, hi))
+    print(String(format: "%-46@ min=%.3f max=%.3f  glow %.3f...%.3f", label as NSString, lo, hi, glowLo, glowHi))
 }
 let level = LogoAnimator.level(forBrightness:)
 
@@ -59,7 +60,7 @@ controller.setEffect(.none); await wait(0.8)
 report("effect None -> back to brightness", expected: level(0.5))
 
 try await controller.set(.off); await wait(0.3)
-print("off: setting=\(String(describing: emitter.setting)) factor=\(factor())")
+print("off: setting=\(String(describing: emitter.setting)) factor=\(factor()) glow=\(controller.liveGlow)")
 try await controller.set(.on); await wait(0.5)
 print("on: setting=\(String(describing: emitter.setting))")
 report("on at brightness 0.5", expected: level(0.5))
