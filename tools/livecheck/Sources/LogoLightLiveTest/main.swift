@@ -13,7 +13,7 @@ import IOKit
 import LogoLightCore
 
 var controller = LogoController.live()
-let emitter = LightEmitter(service: CoreBrightnessService()!)
+let emitter = LightEmitter(service: CoreBrightnessService()!, clock: LightEmitter.uptime)
 @MainActor func factor() -> Double { emitter.fadeLevel ?? -1 }
 func wait(_ s: Double) async { try? await Task.sleep(for: .seconds(s)) }
 

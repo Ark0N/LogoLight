@@ -72,7 +72,7 @@ public final class LogoController {
     public static func live() -> LogoController {
         LogoController(
             reader: LogoStatusReader(),
-            emitter: CoreBrightnessService().map(LightEmitter.init),
+            emitter: CoreBrightnessService().map { LightEmitter(service: $0, clock: LightEmitter.uptime) },
             admin: AppleScriptAdminShell(),
             sudo: SudoRunner(),
             isRuleInstalled: { PasswordlessRule.isInstalled }

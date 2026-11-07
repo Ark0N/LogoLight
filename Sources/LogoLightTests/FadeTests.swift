@@ -56,11 +56,59 @@ private struct Motion {
     }
 }
 
+/// How the time-driven fake is timed. A real 10 ms sleep runs about 2 ms late (median, measured
+/// on the MacBook: 0.3 ms at p10 and 5 ms at p90), and the daemon's frames are 12–19 ms apart,
+/// though 17.5 ms on average. Landings and effects shouldn't depend on the exact numbers.
+@MainActor
+private final class Timing: CustomStringConvertible {
+    let description: String
+    let frame: Double
+    private let late: (Int) -> Double
+
+    init(_ description: String, frame: Double = 0.0175, late: @escaping (Int) -> Double = { _ in 0 }) {
+        self.description = description
+        self.frame = frame
+        self.late = late
+    }
+
+    static let exact = Timing("exact")
+    static func late(by seconds: Double) -> Timing { Timing("polls \(seconds * 1000) ms late") { _ in seconds } }
+    static func frames(_ seconds: Double) -> Timing { Timing("\(seconds * 1000) ms frames", frame: seconds) }
+    /// Each poll late by 0–5 ms, from a seeded generator.
+    static func jitter(seed: UInt64) -> Timing {
+        var state = seed
+        return Timing("polls 0–5 ms late, seed \(seed)") { _ in
+            // SplitMix64.
+            state &+= 0x9E37_79B9_7F4A_7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            z ^= z >> 31
+            return 0.005 * Double(z >> 11) / Double(1 << 53)
+        }
+    }
+
+    static let all = [exact, late(by: 0.001), late(by: 0.0026), jitter(seed: 1), jitter(seed: 2),
+                      frames(0.016), frames(0.019)]
+
+    /// Times the fixture this way: its sleeps of a poll or less pass more time on the daemon.
+    func apply(to f: Fixture) {
+        f.daemon.frameInterval = frame
+        var polls = 0
+        f.clock.onSleep = { [daemon = f.daemon, late] seconds in
+            guard seconds <= 0.010_000_1 else { return daemon.elapse(seconds) }
+            polls += 1
+            daemon.elapse(seconds + late(polls))
+        }
+    }
+}
+
 /// Settles the logo at one brightness, then moves the slider to another in one change (as a
 /// click does), and lets it settle again. The fixture's daemon has the move's trace and writes.
 @MainActor
-private func click(from: Double, to: Double) async throws -> Fixture {
+private func click(from: Double, to: Double, timing: Timing = .exact) async throws -> Fixture {
     let f = Fixture(direct: true, timeDriven: true)
+    timing.apply(to: f)
     f.controller.setBrightness(from)
     await settle()
     try await pass(f, 0.5)
@@ -193,7 +241,7 @@ func fadeTests(_ t: TestHarness) async {
         daemon.stepPerRead = 0
         let clock = FakeClock()
         clock.onSleep = { [daemon] in daemon.elapse($0) }
-        let emitter = LightEmitter(service: daemon)
+        let emitter = LightEmitter(service: daemon, clock: { [daemon] in daemon.time })
         var target = 0.7
         var reads = 0
         // The 0.8 s transition's stretched fade toward 0.7, then the target drops to 0.05.
@@ -218,7 +266,7 @@ func fadeTests(_ t: TestHarness) async {
             let at = daemon.level
             let clock = FakeClock()
             clock.onSleep = { [daemon] in daemon.elapse($0) }
-            let emitter = LightEmitter(service: daemon) // a fresh one: the heading isn't known
+            let emitter = LightEmitter(service: daemon, clock: { [daemon] in daemon.time }) // a fresh one: the heading isn't known
             try await emitter.fade(to: at + (state == 1 ? 0.002 : -0.002), over: 0.25,
                                    sleep: { try await clock.sleep($0) })
             daemon.elapse(10)
@@ -331,25 +379,32 @@ func landingTests(_ t: TestHarness) async {
         t.expect(abs(FadeCurve.springTime(toReach: FadeCurve.springProgress(0.154)) - 0.154) < 1e-6)
     }
 
-    await t.test("slider clicks both ways ease onto the level, and stop slowly") {
-        for (from, to) in [(1.0, 0.5), (0.5, 0.9), (0.9, 0.4), (0.3, 0.8), (0.8, 0.2), (0.2, 0.3), (0.6, 0.55)] {
-            let f = try await click(from: from, to: to)
-            let target = LogoAnimator.level(forBrightness: to)
-            let motion = Motion(f.daemon.trace)
-            let stop = motion.stop()
-            let peak = motion.peakSpeed()
-            let atStop = motion.speed(before: stop, over: 0.06)
-            let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
-            let flips = f.daemon.timeline.filter { $0.entry == "blank" || $0.entry == "unblank" }
-            let label = "\(from) to \(to)"
-            t.expect(abs(f.daemon.level - target) <= 0.01, "\(label): held at \(f.daemon.level), not \(target)")
-            t.expect(f.daemon.isHolding, "\(label): not held")
-            t.expect(atStop < 0.25 * peak, "\(label): \(atStop)/s in the last 60 ms, peak \(peak)/s")
-            // The stretched fade, then at most 6 segments. Each starts with a turn-round, and
-            // the hold ends it.
-            t.expect(fades.count >= 2, "\(label): didn't ease on")
-            t.expect(fades.count <= 1 + 6, "\(label): \(fades.count) fades")
-            t.expect(flips.count <= 2 + 2 * 6 + 1, "\(label): \(flips.count) flips")
+    await t.test("slider clicks both ways ease onto the level, and stop slowly, however late the polls run") {
+        for timing in Timing.all {
+            for (from, to) in [(1.0, 0.5), (0.5, 0.9), (0.9, 0.4), (0.3, 0.8), (0.8, 0.2), (0.2, 0.3), (0.6, 0.55)] {
+                let f = try await click(from: from, to: to, timing: timing)
+                let target = LogoAnimator.level(forBrightness: to)
+                let motion = Motion(f.daemon.trace)
+                let stop = motion.stop()
+                let peak = motion.peakSpeed()
+                let atStop = motion.speed(before: stop, over: 0.06)
+                let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
+                let flips = f.daemon.timeline.filter { $0.entry == "blank" || $0.entry == "unblank" }
+                // How far it went back the way it came: an ease-out that overcorrects bounces.
+                let up = to > from
+                let back = zip(motion.trace, motion.trace.dropFirst())
+                    .map { up ? $0.level - $1.level : $1.level - $0.level }.filter { $0 > 0 }.reduce(0, +)
+                let label = "\(from) to \(to), \(timing)"
+                t.expect(abs(f.daemon.level - target) <= 0.01, "\(label): held at \(f.daemon.level), not \(target)")
+                t.expect(f.daemon.isHolding, "\(label): not held")
+                t.expect(back <= 0.005, "\(label): went back by \(back)")
+                t.expect(atStop < 0.25 * peak, "\(label): \(atStop)/s in the last 60 ms, peak \(peak)/s")
+                // The stretched fade, then at most 6 segments. Each starts with a turn-round, and
+                // the hold ends it.
+                t.expect(fades.count >= 2, "\(label): didn't ease on")
+                t.expect(fades.count <= 1 + 6, "\(label): \(fades.count) fades")
+                t.expect(flips.count <= 2 + 2 * 6 + 1, "\(label): \(flips.count) flips")
+            }
         }
     }
 
@@ -394,7 +449,7 @@ func landingTests(_ t: TestHarness) async {
         daemon.frameInterval = 0 // so it moves about as far at each poll
         let clock = FakeClock()
         clock.onSleep = { [daemon] in daemon.elapse($0) }
-        let emitter = LightEmitter(service: daemon)
+        let emitter = LightEmitter(service: daemon, clock: { [daemon] in daemon.time })
         var reads = 0
         var last = daemon.level
         var target = 0.6

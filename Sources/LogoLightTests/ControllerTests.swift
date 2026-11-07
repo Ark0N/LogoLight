@@ -324,7 +324,7 @@ struct Fixture {
         self.clock = clock
         controller = LogoController(
             reader: LogoStatusReader(hardware: mac),
-            emitter: direct ? LightEmitter(service: daemon) : nil,
+            emitter: direct ? LightEmitter(service: daemon, clock: { [daemon] in daemon.time }) : nil,
             admin: admin,
             sudo: sudo,
             isRuleInstalled: { [mac] in mac.ruleInstalled },

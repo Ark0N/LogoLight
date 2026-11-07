@@ -108,6 +108,11 @@ public final class LightEmitter {
 
     private let service: LightEmitterService
 
+    /// The time in seconds, from any fixed start. Fades are timed by it, not by adding up the
+    /// sleeps asked for: a real sleep runs late (a 10 ms one by about 2 ms, measured), and an ease-out
+    /// that counts its sleeps lets the daemon move it a frame further than planned.
+    private let clock: @MainActor () -> Double
+
     /// Which way the logo was last told to fade (`true` is toward lit), or `nil` when that isn't
     /// known: at launch, and once the display sleeps or wakes (`corebrightnessd` changes the state
     /// itself then). It can't be read back, because `DisplayLogicalState` gives the last value
@@ -118,9 +123,15 @@ public final class LightEmitter {
     /// may be a hold that never gets there.
     private var lastDurationWasHold = false
 
-    public init(service: LightEmitterService) {
+    /// `clock` gives the time in seconds, e.g. `LightEmitter.uptime`. Tests pass the fake's time,
+    /// which moves as their sleeps do.
+    public init(service: LightEmitterService, clock: @escaping @MainActor () -> Double) {
         self.service = service
+        self.clock = clock
     }
+
+    /// The time since the Mac started, in seconds: the clock for the real hardware.
+    public static func uptime() -> Double { ProcessInfo.processInfo.systemUptime }
 
     /// The setting, read from `corebrightnessd`. `nil` if it isn't available.
     public var setting: LogoIllumination? {
@@ -209,8 +220,8 @@ public final class LightEmitter {
         _ = try await run(following: { level }, over: duration, sleep: sleep)
     }
 
-    /// Like `fade(to:over:sleep:)`, and returns how long it took, from the time it slept. It's
-    /// longer than `duration` when the fade eases onto a level in between.
+    /// Like `fade(to:over:sleep:)`, and returns how long it took, on the clock. It's longer than
+    /// `duration` when the fade eases onto a level in between.
     public func timedFade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws -> Double {
         try await run(following: { level }, over: duration, sleep: sleep).time
     }
@@ -236,7 +247,7 @@ public final class LightEmitter {
     }
 
     /// What a fade did: the target it stopped the logo at (`nil` if it stopped short), and how
-    /// long it took (the time it slept).
+    /// long it took, on the clock.
     private struct Outcome {
         var target: Double?
         var time: Double
@@ -244,6 +255,7 @@ public final class LightEmitter {
 
     private func run(following level: () -> Double, over duration: Double,
                      sleep: LogoAnimator.Sleep) async throws -> Outcome {
+        let started = clock()
         let first = min(max(level(), 0), 1)
         var target = first
         // Unknown: assume the far end, so the fade goes all the way.
@@ -275,7 +287,7 @@ public final class LightEmitter {
         if isAllTheWay {
             try await sleep(duration)
             try Task.checkCancellation()
-            return Outcome(target: target, time: duration)
+            return Outcome(target: target, time: clock() - started)
         }
         var waited = 0.0
         // Where the logo was when the target last changed, and how many polls ago that was.
@@ -313,17 +325,17 @@ public final class LightEmitter {
                 if let a = recent.first, let b = recent.last, b.time > a.time {
                     speed = (b.level - a.level) / (b.time - a.time)
                 }
-                let landing = try await land(from: now, on: target, speed: speed, following: level, sleep: sleep)
-                let time = waited + landing.time
-                return landing.reached ? stopped(at: target, time: time) : Outcome(target: nil, time: time)
+                let reached = try await land(from: now, on: target, speed: speed, following: level, sleep: sleep)
+                let time = clock() - started
+                return reached ? stopped(at: target, time: time) : Outcome(target: nil, time: time)
             }
             try await sleep(Self.pollInterval)
             try Task.checkCancellation()
-            waited += Self.pollInterval
+            waited = clock() - started
             steadyPolls += 1
         }
         turnRound(from: lit) // and hold it there
-        return stopped(at: target, time: waited)
+        return stopped(at: target, time: clock() - started)
     }
 
     /// Eases the logo from `start` onto `target`, out of a fade that's moving at `speed` (per
@@ -336,12 +348,14 @@ public final class LightEmitter {
     /// the keyboard doesn't visibly dim (see `maxLandingSegments`). Each segment starts a new
     /// fade, from rest, long enough to cover its part of the way by the segment's end, after the
     /// start latency. A fade only starts on a change of direction, so it's turned round first
-    /// when it's already heading that way.
+    /// when it's already heading that way. Segments end on the clock, and a segment's fade is held
+    /// once it has covered most of its part: a late poll would otherwise let the daemon move it
+    /// another frame at the spring's top speed, and the next segment would overcorrect.
     ///
     /// Stops at the target if the logo gets there early. If the target changes, it holds the logo
-    /// where it is and stops short. Returns whether it got there, and the time it took.
+    /// where it is and stops short. Returns whether it got there.
     private func land(from start: Double, on target: Double, speed: Double, following level: () -> Double,
-                      sleep: LogoAnimator.Sleep) async throws -> (reached: Bool, time: Double) {
+                      sleep: LogoAnimator.Sleep) async throws -> Bool {
         let distance = target - start
         let length = abs(speed) > 0.01 ? min(max(2 * abs(distance) / abs(speed), 0.15), 1.2) : 0.3
         let count = length < 0.4 ? 4 : Self.maxLandingSegments
@@ -349,37 +363,44 @@ public final class LightEmitter {
         let isPast = { (now: Double) in distance > 0 ? now >= target : now <= target }
         // Holding it again would only cost writes.
         func stop() { if !lastDurationWasHold { hold() } }
-        var time = 0.0
+        let landingStart = clock()
         segments: for i in 1...count {
             guard let now = fadeLevel, !isPast(now) else { break }
             let u = Double(i) / Double(count)
-            let delta = start + distance * (1 - (1 - u) * (1 - u)) - now
+            let waypoint = start + distance * (1 - (1 - u) * (1 - u))
+            let delta = waypoint - now
             let up = delta > 0
             let toEnd = up ? 1 - now : now
+            // Where this segment's fade is held, a quarter of its part short of the waypoint.
+            var holdAt: Double?
             if abs(delta) >= 0.0005, toEnd > 1e-4 {
                 if isHeadingLit == nil || isHeadingLit == up { turnRound(from: up) }
                 let share = FadeCurve.springTime(toReach: abs(delta) / toEnd)
                 setFadeDuration(max(0.001, segment - Self.startLatency) / share)
                 setLit(up)
+                holdAt = waypoint - 0.25 * delta
             } else {
                 stop() // close enough for now, so the last segment's fade doesn't carry it on
             }
-            var left = segment
-            while left > 1e-9 {
-                let step = min(Self.pollInterval, left)
-                try await sleep(step)
+            let segmentEnd = landingStart + segment * Double(i)
+            while true {
+                let left = segmentEnd - clock()
+                guard left > 1e-6 else { break }
+                try await sleep(min(Self.pollInterval, left))
                 try Task.checkCancellation()
-                left -= step
-                time += step
                 if min(max(level(), 0), 1) != target {
                     stop()
-                    return (false, time)
+                    return false
                 }
                 guard let now = fadeLevel, !isPast(now) else { break segments }
+                if let mark = holdAt, up ? now >= mark : now <= mark {
+                    stop()
+                    holdAt = nil
+                }
             }
         }
         stop()
-        return (true, time)
+        return true
     }
 
     /// Stops the logo where it is.
