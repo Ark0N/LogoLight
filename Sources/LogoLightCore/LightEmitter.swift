@@ -114,6 +114,10 @@ public final class LightEmitter {
     /// sent to anything, including the keyboard. Everything here is safe with `nil`.
     private(set) var isHeadingLit: Bool?
 
+    /// Whether the last fade duration written was `holdDuration`, so a fade heading for 0 or 1
+    /// may be a hold that never gets there.
+    private var lastDurationWasHold = false
+
     public init(service: LightEmitterService) {
         self.service = service
     }
@@ -133,7 +137,8 @@ public final class LightEmitter {
     /// It applies to the next fade; a fade in progress keeps its duration.
     @discardableResult
     public func setFadeDuration(_ seconds: Double) -> Bool {
-        service.setValue(NSNumber(value: max(0, seconds)), forKey: Key.fadeDuration)
+        lastDurationWasHold = seconds >= Self.holdDuration
+        return service.setValue(NSNumber(value: max(0, seconds)), forKey: Key.fadeDuration)
     }
 
     /// Fades the logo out (`false`) or back in (`true`) over the fade duration.
@@ -246,9 +251,11 @@ public final class LightEmitter {
     /// an effect step that was cancelled, and it would carry the logo on past the target.
     private func stay(at target: Double, over duration: Double) {
         if target <= 0.001 || target >= 0.999 {
-            // A fade toward an end stops there by itself.
+            // A fade toward an end stops there by itself, unless it's a hold. A hold heading that
+            // way is replaced by a real fade, so the end isn't left with the endless duration.
             let lit = target >= 0.999
-            if isHeadingLit != lit {
+            if isHeadingLit != lit || lastDurationWasHold {
+                if isHeadingLit == lit { turnRound(from: lit) }
                 setFadeDuration(duration)
                 setLit(lit)
             }
