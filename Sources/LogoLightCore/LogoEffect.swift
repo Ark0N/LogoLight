@@ -63,12 +63,18 @@ public final class LogoAnimator {
     private let isDisplayAwake: @MainActor () -> Bool
     private let sleep: Sleep
     private var task: Task<Void, Never>?
-    private var isAdjusting = false
+    private var isAdjusting = false {
+        didSet { updateActivity() }
+    }
+    /// Held while animating (see `updateActivity()`).
+    private var activity: NSObjectProtocol?
 
     /// The chosen effect. It keeps its value while paused (e.g. the logo is off or the display sleeps).
     public private(set) var effect: LogoEffect = .none
     /// Whether an effect is playing.
-    public private(set) var isPlaying = false
+    public private(set) var isPlaying = false {
+        didSet { updateActivity() }
+    }
     /// Whether an effect is playing or the logo is fading to the chosen brightness.
     public var isAnimating: Bool { isPlaying || isAdjusting }
 
@@ -177,6 +183,18 @@ public final class LogoAnimator {
                 duration = self.brightnessFadeDuration
             }
             self?.taskDidEnd()
+        }
+    }
+
+    /// Holds off App Nap while animating: its timer coalescing would make fades stop late and
+    /// effects lose their rhythm. The Mac can still sleep.
+    private func updateActivity() {
+        if isAnimating, activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep, reason: "Animating the Apple logo")
+        } else if !isAnimating, let activity {
+            ProcessInfo.processInfo.endActivity(activity)
+            self.activity = nil
         }
     }
 

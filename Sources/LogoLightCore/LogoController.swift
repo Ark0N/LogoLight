@@ -39,7 +39,8 @@ public final class LogoController {
         sudo: PasswordlessSudo,
         isRuleInstalled: @escaping @MainActor () -> Bool,
         verificationTimeout: Duration = .seconds(3),
-        sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0)) }
+        // A small tolerance: by default, sleeps can run tens of ms late, which shows in effects.
+        sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0), tolerance: .milliseconds(2)) }
     ) {
         self.reader = reader
         self.emitter = emitter
@@ -258,6 +259,10 @@ public final class LogoController {
     /// The display can sleep or wake during a fade, so it's checked again after each one.
     private func setDirectly(_ target: LogoIllumination, emitter: LightEmitter) async throws -> SwitchOutcome {
         animator?.pause()
+        // Like the animator, hold off App Nap, so the fades stop on time.
+        let activity = ProcessInfo.processInfo.beginActivity(
+            options: .userInitiatedAllowingIdleSystemSleep, reason: "Switching the Apple logo on or off")
+        defer { ProcessInfo.processInfo.endActivity(activity) }
         let fade = isDisplayAwake ? switchFadeDuration : 0
 
         if target == .off {

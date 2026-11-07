@@ -314,6 +314,20 @@ func brightnessTests(_ t: TestHarness) async {
         t.expect(f.daemon.peak >= 0.2, "peaked at \(f.daemon.peak)")
     }
 
+    await t.test("animates only while a fade runs or an effect plays") {
+        let f = Fixture(direct: true, timeDriven: true)
+        let animator = f.controller.animator!
+        t.expect(!animator.isAnimating)
+        f.controller.setBrightness(0.5)
+        t.expect(animator.isAnimating)
+        await settle()
+        t.expect(!animator.isAnimating, "done once the level is held")
+        f.controller.setEffect(.heartbeat)
+        t.expect(animator.isAnimating)
+        f.controller.displayDidSleep()
+        t.expect(!animator.isAnimating)
+    }
+
     t.test("restoring normal lighting releases a held level") {
         let f = Fixture(direct: true)
         f.daemon.setHeld(at: 0.25, state: 2)
