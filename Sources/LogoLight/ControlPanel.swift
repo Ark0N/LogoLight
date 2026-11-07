@@ -348,7 +348,14 @@ private final class LogoPreview: NSView {
         }
     }
 
+    /// The glow last drawn.
+    private var shownGlow: Double?
+
+    /// Called on every frame while the menu is open. A change too small to see isn't drawn, so a
+    /// steady logo costs nothing.
     func show(glow: Double) {
+        if let shownGlow, abs(glow - shownGlow) < 0.002 { return }
+        shownGlow = glow
         withoutAnimation {
             logo.opacity = Float(glow)
             logo.shadowOpacity = Float(glow)

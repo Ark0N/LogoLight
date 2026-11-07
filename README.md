@@ -7,8 +7,8 @@ A small macOS menu bar app that controls the illuminated Apple logo on the back 
 
 - An iOS-style panel at the top of the menu. Everything below the logo switch greys out while
   the logo is off
-- A **live view** of the logo, read from the hardware 30 times a second while the menu is open,
-  so it follows effects, the slider and changes made elsewhere
+- A **live view** of the logo, read from the hardware on every frame of the display while the
+  menu is open, so it follows effects, the slider and changes made elsewhere
 - **Backlight** switch, or **Option-click** the icon to toggle. The logo fades out and in
   smoothly, and no password is needed
 - **Brightness** slider. The logo still adapts to ambient light, scaled by the slider

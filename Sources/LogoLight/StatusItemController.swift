@@ -29,7 +29,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var afterMenuCloses: [@MainActor () -> Void] = []
     private var backgroundRefresh: Timer?
     private var liveRefresh: Timer?
-    private var liveView: Timer?
+    /// Redraws the live view at the display's frame rate while the menu is open.
+    private var glowLink: CADisplayLink?
     private var workspaceObservers: [NSObjectProtocol] = []
 
     private static let effectDefaultsKey = "Effect"
@@ -120,23 +121,25 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         RunLoop.main.add(timer, forMode: .eventTracking)
         liveRefresh = timer
 
-        // The live view reads the real logo on every frame, so it's only drawn while it's visible.
+        // The live view reads the real logo on every frame, in step with the display, so it's only
+        // drawn while it's visible. (`.common` includes the menu's event-tracking mode.)
         panel.showGlow(controller.liveGlow)
-        let frames = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.panel.showGlow(self.controller.liveGlow)
-            }
-        }
-        RunLoop.main.add(frames, forMode: .eventTracking)
-        liveView = frames
+        let link = panel.displayLink(target: self, selector: #selector(showLiveGlow))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        glowLink = link
+    }
+
+    @objc private func showLiveGlow(_ link: CADisplayLink) {
+        panel.showGlow(controller.liveGlow)
     }
 
     func menuDidClose(_ menu: NSMenu) {
         liveRefresh?.invalidate()
         liveRefresh = nil
-        liveView?.invalidate()
-        liveView = nil
+        // The link keeps its target alive until it's invalidated.
+        glowLink?.invalidate()
+        glowLink = nil
         statusItem.menu = nil
 
         isMenuOpen = false
