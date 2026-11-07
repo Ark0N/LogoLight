@@ -17,4 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        statusItemController?.prepareToQuit()
+    }
 }

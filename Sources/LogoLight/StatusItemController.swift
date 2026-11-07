@@ -13,6 +13,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let headerItem = NSMenuItem()
     private let detailItem = NSMenuItem()
     private let toggleItem = NSMenuItem()
+    private let effectItem = NSMenuItem(title: "Effect", action: nil, keyEquivalent: "")
+    private let effectMenu = NSMenu()
     private let passwordlessItem = NSMenuItem()
     private let launchAtLoginItem = NSMenuItem()
 
@@ -20,11 +22,21 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var isBusy = false
     private var backgroundRefresh: Timer?
     private var liveRefresh: Timer?
+    private var workspaceObservers: [NSObjectProtocol] = []
+
+    private static let effectDefaultsKey = "Effect"
 
     init(controller: LogoController) {
         self.controller = controller
         super.init()
         buildMenu()
+
+        // Undo anything a previous run left behind (e.g. a crash mid-effect), then
+        // bring back the effect chosen last time.
+        controller.restoreNormalLighting()
+        let saved = UserDefaults.standard.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
+        controller.setEffect(saved ?? .none)
+        observeSleepAndWake()
 
         if let button = statusItem.button {
             button.target = self
@@ -52,6 +64,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         toggleItem.action = #selector(toggleLogo)
         toggleItem.keyEquivalent = "t"
 
+        for effect in LogoEffect.allCases {
+            let item = NSMenuItem(title: effect.title, action: #selector(chooseEffect(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = effect.rawValue
+            effectMenu.addItem(item)
+            if effect == .none { effectMenu.addItem(.separator()) }
+        }
+        effectMenu.autoenablesItems = false
+        effectItem.submenu = effectMenu
+
         passwordlessItem.title = "Toggle Without Password"
         passwordlessItem.target = self
         passwordlessItem.action = #selector(togglePasswordless)
@@ -68,7 +90,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.items = [
             headerItem, detailItem,
             .separator(),
-            toggleItem,
+            toggleItem, effectItem,
             .separator(),
             passwordlessItem, launchAtLoginItem,
             .separator(),
@@ -141,6 +163,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         toggleItem.title = isBusy ? "Working…" : (target == .off ? "Turn Logo Off" : "Turn Logo On")
         toggleItem.isEnabled = status.isSupported && !isBusy
 
+        let canAnimate = controller.canControlDirectly && status.isSupported
+        effectItem.isEnabled = canAnimate && !isBusy
+        effectItem.toolTip = canAnimate ? nil : "Effects aren't available on this Mac."
+        for item in effectMenu.items where item.representedObject != nil {
+            item.state = (item.representedObject as? String) == controller.effect.rawValue ? .on : .off
+            item.isEnabled = canAnimate && !isBusy
+        }
+
+        // Only needed when the logo can't be controlled directly; kept visible if a rule is
+        // already installed, so it can be removed.
+        passwordlessItem.isHidden = controller.canControlDirectly && !controller.isPasswordlessEnabled
         passwordlessItem.state = controller.isPasswordlessEnabled ? .on : .off
         passwordlessItem.isEnabled = status.isSupported && !isBusy
         launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
@@ -162,6 +195,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             return "Off for all users, including in macOS Recovery"
         case .on where status.isLit == false:
             return "Dark while the display is off"
+        case .on where controller.effect != .none:
+            return "\(controller.effect.title) effect · adapts to ambient light"
         case .on:
             guard let level = status.outputLevel else { return "Adapts to screen brightness and ambient light" }
             return "Glowing at \(Int((level * 100).rounded()))% · adapts to ambient light"
@@ -174,6 +209,39 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleLogo() {
         perform { [controller] in try await controller.toggle() }
+    }
+
+    @objc private func chooseEffect(_ sender: NSMenuItem) {
+        guard let effect = (sender.representedObject as? String).flatMap(LogoEffect.init(rawValue:)) else { return }
+        controller.setEffect(effect)
+        UserDefaults.standard.set(effect.rawValue, forKey: Self.effectDefaultsKey)
+        refresh()
+    }
+
+    /// Returns the logo to normal before the app quits.
+    func prepareToQuit() {
+        controller.restoreNormalLighting()
+    }
+
+    /// Effects pause while the display or the Mac sleeps, and resume on wake.
+    private func observeSleepAndWake() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
+            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.controller.displayDidSleep() }
+            })
+        }
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
+            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                // Give corebrightnessd a moment to relight the logo for the display first.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    MainActor.assumeIsolated {
+                        self?.controller.displayDidWake()
+                        self?.refresh()
+                    }
+                }
+            })
+        }
     }
 
     @objc private func togglePasswordless() {
@@ -197,7 +265,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         NSApp.activate()
         let credits = NSAttributedString(
             string: "Turns the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display on and off, "
-                + "using the setting described in Apple's support article “About the illuminated Apple logo”.",
+                + "and animates it with fades and effects. The on/off setting is the one described in Apple's "
+                + "support article “About the illuminated Apple logo”.",
             attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
                          .foregroundColor: NSColor.secondaryLabelColor]
         )
