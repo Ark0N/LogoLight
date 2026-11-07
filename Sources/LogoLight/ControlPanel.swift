@@ -10,9 +10,10 @@ final class ControlPanel: NSView {
     var onBrightnessChanged: ((Double) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
 
-    /// Narrow: the least that fits the longest label ("Heartbeat", 61 pt at 13 pt) between its tile and a
-    /// full-size switch is 179. The menu's own items need only 143, or 153 with Disable Password.
-    private static let width: CGFloat = 180
+    /// As narrow as the user asked for. The longest label, "Heartbeat" (61 pt at 13 pt, 64 with Bold
+    /// Text), still fits between its tile and its switch, which leave it 66. The menu's own items need
+    /// only 143, or 153 with Disable Password.
+    private static let width: CGFloat = 170
     /// Around the panel's contents (8 at the top), and between its sections.
     private static let inset: CGFloat = 6
     private static let topInset: CGFloat = 8

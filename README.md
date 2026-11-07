@@ -3,7 +3,7 @@
 A small macOS menu bar app that controls the illuminated Apple logo on the back of the
 **MacBook Pro with PROLED XDR Display**: on and off, brightness, and glowing effects.
 
-<img src="docs/menu.png" width="180" alt="The LogoLight panel: a live view of the glowing logo, a Backlight switch for the logo with a brightness slider below it, then a switch each for the Breathe, Pulse and Heartbeat effects">
+<img src="docs/menu.png" width="170" alt="The LogoLight panel: a live view of the glowing logo, a Backlight switch for the logo with a brightness slider below it, then a switch each for the Breathe, Pulse and Heartbeat effects">
 
 - An iOS-style panel at the top of the menu. Everything below the logo switch greys out while
   the logo is off

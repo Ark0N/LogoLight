@@ -6,10 +6,11 @@ import AppKit
 /// menu's window key, a moment after the menu appears, and is grey until then. This one uses the accent
 /// colour from the first frame, like `LogoSlider`, and animates only when it's flipped.
 final class LogoSwitch: NSControl {
-    /// The size of a regular `NSSwitch` on macOS 27, measured from one drawn offscreen: a 54 × 24 track
-    /// with a 32 × 20 capsule for a knob, 2 points in from the edges.
-    static let size = NSSize(width: 54, height: 24)
-    private static let knobSize = NSSize(width: 32, height: 20)
+    /// A 40 × 24 track with a round knob 20 across, 2 points in from the edges: about the proportions
+    /// of an iOS switch. (The user chose it over the size of a regular `NSSwitch`, 54 × 24 with a
+    /// capsule for a knob.)
+    static let size = NSSize(width: 40, height: 24)
+    private static let knobDiameter: CGFloat = 20
     private static let knobInset: CGFloat = 2
     /// How far the pointer moves before a press becomes a drag of the knob.
     private static let dragThreshold: CGFloat = 3
@@ -110,9 +111,9 @@ final class LogoSwitch: NSControl {
         withoutAnimation {
             track.frame = bounds
             fill.frame = track.bounds
-            knob.bounds = CGRect(origin: .zero, size: Self.knobSize)
+            knob.bounds = CGRect(x: 0, y: 0, width: Self.knobDiameter, height: Self.knobDiameter)
             for layer in [track, fill] { layer.cornerRadius = bounds.height / 2 }
-            knob.cornerRadius = Self.knobSize.height / 2
+            knob.cornerRadius = Self.knobDiameter / 2
             knob.position = knobCenter
             fill.opacity = isOn ? 1 : 0
         }
@@ -120,7 +121,7 @@ final class LogoSwitch: NSControl {
 
     /// The knob's centre when it's off and when it's on.
     private var knobRange: ClosedRange<CGFloat> {
-        let offX = Self.knobInset + Self.knobSize.width / 2
+        let offX = Self.knobInset + Self.knobDiameter / 2
         return offX...max(offX, bounds.width - offX)
     }
 

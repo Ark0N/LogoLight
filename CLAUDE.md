@@ -119,14 +119,17 @@ real slider, and greys out with them (one 0.22 s fade of their rows, as soon as 
 flipped, not when the logo's fade ends). The user then asked for the whole menu to be "much more
 narrower", then "a little bit more narrow" and "remove the about logolight option"
 and "the Q shortcut it terrible off to the right side". The menu has no About item and no ⌘Q,
-whose shortcut column alone would make it 190 points wide. The panel is 180 wide, measured:
-- The widest row is Heartbeat's: the text column starts at 40, the label needs 61 (13 pt), then
-  at least 4, the switch 54 and 8 to the card's edge, so 167; plus the 6-point margins, 179.
-  "Backlight" (the user renamed "Apple Logo") needs 56.5, Breathe 47.5, Pulse 33.
+whose shortcut column alone would make it 190 points wide. At their request the panel is 170
+wide, measured:
+- The widest row is Heartbeat's: the text column starts at 40, the label needs 61 (13 pt; 64 with
+  Bold Text), then at least 4, the switch 40 and 8 to the card's edge (the tiles' inset), so 153
+  (156); plus the 6-point margins, 165 (168). "Backlight" (the user renamed "Apple Logo") needs
+  56.5, Breathe 47.5, Pulse 33. The renderer reports no truncated label.
 - The menu's own items need 143 ("Launch at Login", "Quit LogoLight"), or 153 with
   "Disable Password", so the panel sets the menu's width.
-- The switches are the size of a regular `NSSwitch` on macOS 27, measured from one drawn
-  offscreen: a 54 × 24 track with a 32 × 20 capsule knob.
+- The switches are 40 × 24 with a round knob 20 across, about an iOS switch's proportions: the
+  user chose them over a regular `NSSwitch`'s size on macOS 27 (54 × 24 with a 32 × 20 capsule
+  knob, which would need a 179-point panel).
 
 The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
 its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
@@ -159,8 +162,8 @@ run `tools/livecheck` and watch the logo):
 
 **Changed since the last look at the real menu** (drawn offscreen only; open the menu with
 `LOGOLIGHT_OPEN_MENU` when the user isn't working):
-- The switches are NSSwitch-sized, with a capsule knob that can also be dragged. Check that
-  they're blue on the very first frame, and that a drag works inside the menu.
+- The switches' knob can also be dragged. Check that they're blue on the very first frame, and
+  that a drag works inside the menu.
 - The menu opens on mouse-down. Check a quick click, press-drag-release onto an item, and that
   Option-click toggles the logo without the menu flashing.
 - After a flip, the switch stays usable and the rows grey out or come back at once. Flip
