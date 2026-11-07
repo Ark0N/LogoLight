@@ -1,30 +1,69 @@
 <p align="center">
-  <img src="docs/icon.png" width="128" height="128" alt="LogoLight's icon: a dark lid with a soft light glowing at its centre">
+  <img src="docs/icon.png" width="140" height="140" alt="LogoLight's icon: a dark lid with a soft light glowing at its centre">
 </p>
 
 <h1 align="center">LogoLight</h1>
 
+<h3 align="center">Control your glowing Apple logo.</h3>
+
 <p align="center">
-  The illuminated logo on the back of your MacBook Pro, your way:<br>
-  turn it off, dim it, or let it breathe, pulse or beat like a heart. Right from the menu bar.
+  A free menu bar app for the illuminated Apple logo on the back of your new<br>
+  <b>MacBook Pro with PROLED XDR Display</b>. Turn it off, dim it, or let it breathe, pulse or beat like a heart.
 </p>
 
 <p align="center">
-  <a href="https://logolight.app"><b>Download at logolight.app</b></a>
-  &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open source (MIT)
-  &nbsp;·&nbsp; <a href="https://buymeacoffee.com/arkon">Buy me a coffee</a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest"><img src="https://img.shields.io/github/v/release/Ark0N/LogoLight?style=flat-square&label=release&color=0a84ff" alt="Latest release"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases"><img src="https://img.shields.io/github/downloads/Ark0N/LogoLight/total?style=flat-square&color=0a84ff" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-1f1f24?style=flat-square" alt="macOS 14 or later">
+  <img src="https://img.shields.io/badge/notarized-Developer%20ID-1f1f24?style=flat-square" alt="Notarized by Apple">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f1f24?style=flat-square" alt="MIT license"></a>
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/menu-dark.png">
-    <img src="docs/menu-light.png" width="255" alt="LogoLight's menu: a Backlight switch at the top, then a live view of the glowing logo on the lid, then a brightness slider, then a switch each for the Breathe, Pulse and Heartbeat effects, with Heartbeat on.">
-  </picture>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><b>⬇ Download LogoLight</b></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="https://logolight.app"><b>logolight.app</b></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="https://buymeacoffee.com/arkon"><b>☕ Buy me a coffee</b></a>
 </p>
 
-For the **MacBook Pro with PROLED XDR Display**, the model with the illuminated logo on its lid.
+<br>
 
-## See it glow
+<table align="center">
+  <tr>
+    <td align="center" valign="middle">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/menu-dark.png">
+        <img src="docs/menu-light.png" width="250" alt="LogoLight's menu: a Backlight switch at the top, then a live view of the glowing logo on the lid, then a brightness slider, then a switch each for the Breathe, Pulse and Heartbeat effects, with Heartbeat on.">
+      </picture>
+    </td>
+    <td align="center" valign="middle">
+      <img src="docs/media/breathe.gif" width="400" alt="LogoLight's live view of the lid: the Apple logo slowly fades out and back in (Breathe).">
+      <br><sub>The live view at the top of the menu, breathing</sub>
+    </td>
+  </tr>
+</table>
+
+## ✨ Features
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><b>💡 Backlight switch</b><br>At the top of the menu, or Option-click the menu bar icon. The logo fades out and back in smoothly, with no password.</td>
+    <td width="50%" valign="top"><b>🔆 Brightness</b><br>A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🌙 Effects</b><br>Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.</td>
+    <td valign="top"><b>🖥 Live view</b><br>Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🎛 Control Center</b><br>A Backlight control for Control Center or the menu bar (macOS 26 or later).</td>
+    <td valign="top"><b>🔑 A password once, at most</b><br>Usually none at all. Where macOS asks, <a href="#fallback-the-documented-command">Disable Password</a> makes it the only time.</td>
+  </tr>
+</table>
+
+Plus **Launch at Login**, and nothing to set up: it remembers your brightness and effect.
+
+## 🌈 See it glow
 
 <table>
   <tr>
@@ -37,31 +76,16 @@ For the **MacBook Pro with PROLED XDR Display**, the model with the illuminated 
   </tr>
 </table>
 
-Drawn by LogoLight's own live view, with the effects' real timing (`swift scripts/make-media.swift`
-makes them again).
+<sub>Drawn by LogoLight's own live view, with the effects' real timing (<code>swift scripts/make-media.swift</code> makes them again).</sub>
 
-## Features
+## 📦 Install
 
-- **Backlight switch** at the top of the menu, or **Option-click** the menu bar icon to toggle.
-  The logo fades out and in smoothly, and no password is needed
-- A **live view** of your lid, in its own finish (space black or silver), read from the hardware
-  on every frame of the display while the menu is open, so it follows effects, the slider and
-  changes made elsewhere
-- **Brightness** slider. The logo still adapts to ambient light, scaled by the slider
-- **Effects**: Breathe, Pulse and Heartbeat, one at a time, using the LED's own hardware fades.
-  They peak at the chosen brightness
-- **Control Center**: a Backlight control, which can also go in the menu bar (macOS 26 or later)
-- **Launch at Login**
-- Without direct control, a password is needed **once at most** (see
-  [the fallback](#fallback-the-documented-command))
-
-## Install
-
-1. Download LogoLight from [logolight.app](https://logolight.app). It's signed with a Developer
-   ID and notarized by Apple.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip)**
+   (or from [logolight.app](https://logolight.app)). It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
-Or [build it from source](#build-from-source).
+Needs a MacBook Pro with PROLED XDR Display and macOS 14 or later (these Macs ship with macOS 27).
+On other Macs, LogoLight opens but says the logo isn't available.
 
 ### Add it to Control Center
 
@@ -73,10 +97,12 @@ Or [build it from source](#build-from-source).
   <img src="docs/control-center.png" width="720" alt="Control Center with LogoLight's Backlight button at the top left. An arrow points to it: one tap turns the glowing logo on your lid on or off, shown as the lid lit and dark. A second arrow points to Edit Controls, with the steps to add it: open Control Center, click Edit Controls, search for LogoLight, drag Backlight in.">
 </p>
 
-Apple only lets apps add switches and buttons to Control Center, so the brightness slider stays
-in LogoLight's own menu.
+<sub>Apple only lets apps add switches and buttons to Control Center, so the brightness slider stays in LogoLight's own menu.</sub>
 
-## How it works
+## 🔧 How it works
+
+<details>
+<summary><b>The details</b>: the private interface, the fades, Control Center, reading the state and the password fallback</summary>
 
 Apple documents a single setting for the logo in
 [About the illuminated Apple logo](https://support.apple.com/en-us/149248):
@@ -90,7 +116,7 @@ The logo is driven by `corebrightnessd`, which watches that setting. While the l
 it sets the brightness automatically from the screen brightness and ambient light. The
 setting applies to every user account, and also in macOS Recovery.
 
-### Direct control (no password)
+#### Direct control (no password)
 
 `corebrightnessd`'s light emitter ("LE") module also accepts a few keys from any app through
 CoreBrightness's `BrightnessSystemClient`, the interface Control Center uses for brightness:
@@ -126,7 +152,7 @@ if it's missing or `corebrightnessd` doesn't take a change, falls back to runnin
 documented command as root (see below). Brightness and effects need direct control, and are
 hidden without it.
 
-### The Control Center control
+#### The Control Center control
 
 The control is a WidgetKit extension inside the app (`Controls/`). Extensions must be sandboxed,
 so it can't reach `corebrightnessd` itself, and only the app may change the logo anyway, since
@@ -137,7 +163,7 @@ opened in the background first. The app reloads the control whenever its switch 
 only lets apps add switches and buttons to Control Center, so there's no brightness slider
 there.)
 
-### Reading the state
+#### Reading the state
 
 The setting is read from `corebrightnessd` (`LEBacklightMode`). The logo's `bklb-backlight` PWM
 device in the I/O Registry shows whether the LED is lit, and how brightly:
@@ -152,7 +178,7 @@ direct control, LogoLight reads the setting from `enabled` while the screen is o
 rely on the `bklb-backlight-enabled` NVRAM variable, which `corebrightnessd` only reads at
 startup and which isn't updated as soon as the setting changes.
 
-### Fallback: the documented command
+#### Fallback: the documented command
 
 If direct control isn't available, LogoLight runs the documented command as root, which
 needs your password in the standard macOS administrator dialog. You only enter it once: the
@@ -175,15 +201,13 @@ that and doesn't install the rule again until you check the item again. (Deletin
 yourself, `sudo rm /etc/sudoers.d/logolight`, also removes it, but then the next password
 installs it again.)
 
-## Requirements
+</details>
 
-- A MacBook Pro with PROLED XDR Display (on other Macs the menu says the logo isn't available)
-- macOS 14 or later to build and run (the PROLED models ship with macOS 27); the Control
-  Center control needs macOS 26
-- Xcode or the Command Line Tools (`xcode-select --install`). Without Xcode 26 or later, the
-  app is built without the Control Center control (it needs Xcode's App Intents tools)
+## 🛠 Build from source
 
-## Build from source
+Needs macOS 14 or later and Xcode or the Command Line Tools (`xcode-select --install`). Without
+Xcode 26 or later, the app is built without the Control Center control (it needs Xcode's App
+Intents tools).
 
 ```sh
 make test      # run the tests
@@ -206,17 +230,8 @@ Other overrides for `scripts/build-app.sh`: `VERSION`, `BUILD_NUMBER`, `BUNDLE_I
 LogoLight can't go on the Mac App Store: it uses private API, and the App Store requires the
 App Sandbox, which rules out both direct control and the admin-command fallback.
 
-## Uninstall
-
-1. If **Disable Password** is checked, uncheck it first (this removes the sudoers rule).
-2. Turn off **Launch at Login** if you turned it on.
-3. Quit LogoLight and delete it from Applications (`make uninstall`).
-
-The logo setting itself stays as you left it (an effect stops when the app quits). To turn
-the logo back on without the app:
-`sudo defaults delete com.apple.CoreBrightness LEBacklightMode`.
-
-## Project layout
+<details>
+<summary><b>Project layout</b> and tests</summary>
 
 | Path | What's there |
 | --- | --- |
@@ -239,15 +254,26 @@ controller and effects against a simulated Mac and a fake `corebrightnessd` that
 every key it's sent and moves its fades along the measured curve, and a read-only check of
 this Mac's real logo state.
 
-## Support
+</details>
 
-LogoLight is free. If you like it, you can [buy me a coffee](https://buymeacoffee.com/arkon).
+## 🗑 Uninstall
+
+1. If **Disable Password** is checked, uncheck it first (this removes the sudoers rule).
+2. Turn off **Launch at Login** if you turned it on.
+3. Quit LogoLight and delete it from Applications (`make uninstall`).
+
+The logo setting itself stays as you left it (an effect stops when the app quits). To turn
+the logo back on without the app:
+`sudo defaults delete com.apple.CoreBrightness LEBacklightMode`.
+
+## ☕ Support
+
+LogoLight is free. If you like it, you can buy me a coffee:
+
+<a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" alt="Buy me a coffee"></a>
 
 ## License
 
-MIT (see [LICENSE](LICENSE)). The signed, notarized app is free at
-[logolight.app](https://logolight.app).
+MIT, see [LICENSE](LICENSE).
 
----
-
-LogoLight is not affiliated with or endorsed by Apple Inc.
+<sub>LogoLight is not affiliated with or endorsed by Apple Inc. Apple, the Apple logo and MacBook Pro are trademarks of Apple Inc., registered in the U.S. and other countries.</sub>
