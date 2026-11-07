@@ -52,15 +52,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         super.init()
         buildMenu()
 
-        // Undo anything a previous run left behind (e.g. a crash mid-effect), then
-        // bring back the brightness and effect chosen last time.
-        controller.restoreNormalLighting()
+        // Bring back the brightness and effect chosen last time. This also takes over from anything a
+        // previous run left behind (e.g. a crash mid-effect), without relighting to full first.
         let defaults = UserDefaults.standard
-        if defaults.object(forKey: Self.brightnessDefaultsKey) != nil {
-            controller.setBrightness(defaults.double(forKey: Self.brightnessDefaultsKey))
-        }
-        let saved = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
-        controller.setEffect(saved ?? .none)
+        let brightness = defaults.object(forKey: Self.brightnessDefaultsKey) != nil
+            ? defaults.double(forKey: Self.brightnessDefaultsKey) : nil
+        let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
+        controller.start(brightness: brightness, effect: effect ?? .none)
         observeDisplay()
 
         if let button = statusItem.button {
