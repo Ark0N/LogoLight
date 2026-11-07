@@ -86,8 +86,10 @@ runs but says the logo isn't available. So:
 
 ## Git
 
-- Remote: `https://github.com/Ark0N/LogoLight` (**private**). Work on `main` unless asked
-  otherwise, commit in small logical steps, and push when a piece of work is done.
+- Remote: `https://github.com/Ark0N/LogoLight` (**public** since 2026-11-07, MIT). Work on `main`
+  unless asked otherwise, commit in small logical steps, and push when a piece of work is done.
+  Releases are tagged (`v1.0.0` is commit 76c389a, build 105) and published as GitHub Releases
+  with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`).
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
   `git config user.name` and `git config user.email` if the new machine differs.
@@ -104,9 +106,13 @@ runs but says the logo isn't available. So:
   `scripts/notarize.sh` has the details. This MacBook has the Developer ID identity (team
   CGMJ6YKL5G) and the `logolight` notarytool profile. First run 2026-11-07 (1.0.0, build 94):
   Accepted, "Ready for distribution", no issues, stapled; `spctl` says Notarized Developer ID.
-  The zip goes to `site/public/LogoLight.zip` (not in git) for the website's download. The build
-  for release is 1.0.0 build 103 (commit 6d5e0f8, notarized 17:17, no issues); tag it `v1.0.0`
-  when the repo goes public.
+  The zip goes to `site/public/LogoLight.zip` (not in git) for the website's download.
+  **1.0.0 shipped 2026-11-07**: build 105 (commit 76c389a, tag `v1.0.0`), notarized with no
+  issues, on https://logolight.app and as a GitHub Release.
+- The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
+  user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
+  version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, deploy, tag,
+  `gh release create`.
 - `scripts/make-media.swift` makes the README's GIFs (`docs/media/`) and videos (`site/media/`,
   not uploaded: Safari needs Range requests for `<video>`, which static assets don't answer)
   from the live view's renders, with the effects' real timing. Re-run it after tuning effects.
@@ -124,9 +130,11 @@ runs but says the logo isn't available. So:
   2026-11-07, replacing the placeholder `io.github.logolight.LogoLight`; the user's settings were
   copied over with `defaults export`/`import`). Don't change it after the first release: that
   resets the saved preferences and Launch at Login, and orphans placed Control Center controls.
-- **License**: MIT (chosen 2026-11-07). The repo stays **private until the user's final tests**;
-  then it's made public, so the site's GitHub links work. Don't make it public before they say
-  so. The website is in `site/` (Cloudflare Workers static assets, `logolight.app`).
+- **License**: MIT (chosen 2026-11-07); the repo went public with the 1.0.0 release. The website is
+  in `site/` (Cloudflare Workers static assets, `logolight.app`). Donations go to
+  buymeacoffee.com/arkon and never state an amount (the user's rule). On the site, the Apple
+  logo appears only inside LogoLight's own renders (the user's choice, given Apple's trademark
+  rules).
 
 ## Status
 
