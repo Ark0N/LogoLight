@@ -367,25 +367,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Unchecking removes the rule and remembers that, so the next password doesn't install it again.
     /// Checking it installs the rule; the password dialog's prompt says what it's for.
     @objc private func togglePasswordless() {
-        // Both always show the dialog. (Choosing the item has closed the menu already.)
-        if controller.isPasswordlessEnabled {
-            perform { [weak self, controller] in
-                await self?.closeMenuForPasswordDialog()
-                try controller.disablePasswordless()
-                self?.setKeepsPassword(true)
-            }
-        } else {
-            perform { [weak self, controller] in
-                await self?.closeMenuForPasswordDialog()
-                self?.setKeepsPassword(false)
+        let enable = !controller.isPasswordlessEnabled
+        perform { [weak self, controller] in
+            // Both always show the dialog. (Choosing the item has closed the menu already.)
+            await self?.closeMenuForPasswordDialog()
+            if enable {
                 try await controller.enablePasswordless()
+            } else {
+                try controller.disablePasswordless()
             }
+            // The controller has turned installing with the first password on or off. Saved only
+            // now: a cancelled or failed dialog has thrown, and the earlier choice stands.
+            UserDefaults.standard.set(!enable, forKey: Self.keepsPasswordDefaultsKey)
         }
-    }
-
-    private func setKeepsPassword(_ keepsPassword: Bool) {
-        controller.autoEnablesPasswordless = !keepsPassword
-        UserDefaults.standard.set(keepsPassword, forKey: Self.keepsPasswordDefaultsKey)
     }
 
     @objc private func toggleLaunchAtLogin() {

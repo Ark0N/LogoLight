@@ -509,6 +509,32 @@ func controllerTests(_ t: TestHarness) async {
         t.expect(!f.controller.isPasswordlessEnabled)
     }
 
+    await t.test("checking Disable Password turns installing with the password back on, once it has worked") {
+        let f = Fixture()
+        f.controller.autoEnablesPasswordless = false // unchecked before
+        f.admin.error = LogoLightError.cancelled
+        do { try await f.controller.enablePasswordless(); t.expect(false, "should throw") } catch {}
+        t.expect(!f.controller.autoEnablesPasswordless, "a cancelled dialog keeps the earlier choice")
+        f.admin.error = nil
+        try await f.controller.set(.off)
+        t.expectEqual(f.admin.scripts.last, CoreBrightnessSetting.command(for: .off).shellString)
+
+        try await f.controller.enablePasswordless()
+        t.expect(f.controller.autoEnablesPasswordless)
+    }
+
+    t.test("unchecking Disable Password turns installing with the password off, once it has worked") {
+        let f = Fixture(ruleInstalled: true)
+        f.controller.autoEnablesPasswordless = true
+        f.admin.error = LogoLightError.cancelled
+        t.expectThrows { try f.controller.disablePasswordless() }
+        t.expect(f.controller.autoEnablesPasswordless, "a cancelled dialog keeps the earlier choice")
+        t.expect(f.controller.isPasswordlessEnabled)
+        f.admin.error = nil
+        try f.controller.disablePasswordless()
+        t.expect(!f.controller.autoEnablesPasswordless)
+    }
+
     await t.test("a rule that sudo doesn't honor falls back to a dialog that only runs the command") {
         let f = Fixture(ruleInstalled: true, sudoAllows: false)
         f.controller.autoEnablesPasswordless = true

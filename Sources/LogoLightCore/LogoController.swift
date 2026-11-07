@@ -30,9 +30,10 @@ public final class LogoController {
     public var switchFadeDuration: Double = 1.0
 
     /// Whether the first password dialog also installs the password-free rule (fallback path only).
-    /// The dialog then says so, and later switches use `sudo` without asking. The app turns this off
-    /// once the user has removed the rule, so it isn't installed again. It also goes off when the
-    /// install didn't work, so later dialogs don't promise it again.
+    /// The dialog then says so, and later switches use `sudo` without asking. Removing the rule
+    /// (`disablePasswordless()`) turns this off, so it isn't installed again, and installing it
+    /// turns it back on; the app saves that choice. It also goes off when the install didn't work,
+    /// so later dialogs don't promise it again.
     public var autoEnablesPasswordless = false
 
     /// Awaited just before a password dialog is shown while switching. The dialog blocks the app
@@ -237,7 +238,8 @@ public final class LogoController {
 
     // MARK: - Password-free rule (only used when direct control isn't available)
 
-    /// Installs the sudoers rule so toggling no longer asks for a password.
+    /// Installs the sudoers rule so toggling no longer asks for a password. Once that has worked,
+    /// `autoEnablesPasswordless` is back on; a cancelled or failed install leaves it as it was.
     public func enablePasswordless() async throws {
         let rule = try PasswordlessRule()
         try admin.run(
@@ -247,14 +249,17 @@ public final class LogoController {
         guard await sudo.canRun(CoreBrightnessSetting.command(for: .off)) else {
             throw LogoLightError.passwordlessRuleNotHonored
         }
+        autoEnablesPasswordless = true
     }
 
-    /// Removes the sudoers rule.
+    /// Removes the sudoers rule. Once it's gone, `autoEnablesPasswordless` is off, so the next
+    /// password doesn't install it again.
     public func disablePasswordless() throws {
         try admin.run(
             script: PasswordlessRule.removeScript,
             prompt: "LogoLight wants to require your password again for turning the Apple logo on and off."
         )
+        autoEnablesPasswordless = false
     }
 
     // MARK: - Private
