@@ -241,9 +241,15 @@ answers), a request that reached the app but wasn't answered isn't sent again (t
 showing the password dialog), a request for the state the switch already shows does nothing
 (it used to fade the logo out and in), and a tap the fallback path drops while busy fails as "busy".
 The app has an icon (`scripts/make-icon.swift`, also put in an asset catalog by `build-app.sh`
-when Xcode's actool is there); the gallery showed a blank one before. Control Center caches app
-icons, so after the first icon it needed `killall ControlCenter` (it relaunches). It has no
-Apple logo, which Apple doesn't allow in icons. chronod logs "purging instead because we shouldn't cache it ... isApple? false"
+when Xcode's actool is there). It has no Apple logo, which Apple doesn't allow in icons. On the
+user's Mac, Control Center's gallery kept showing the generic app icon (a grey grid on macOS 26+)
+that macOS drew while the app had none: restarting ControlCenter and chronod, re-registering,
+new versions, the real SDK and a reboot didn't help. A copy under a fresh bundle ID showed the
+icon at once, so new installs are fine. What fixed it was clearing the system icon cache
+(`sudo rm -rf /Library/Caches/com.apple.iconservices.store`, then restart), done by the user.
+Gallery entries also stuck: chronod only adds or updates a control's kinds, so removed controls
+stayed listed until the extension was unregistered (`pluginkit -r`, `lsregister -u`) and
+registered again. chronod logs "purging instead because we shouldn't cache it ... isApple? false"
 for this extension, as it did for every ad-hoc and Developer ID probe; that may only mean it
 fetches the control's description when the gallery is opened.
 
