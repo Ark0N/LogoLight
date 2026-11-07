@@ -89,6 +89,49 @@ func fadeTests(_ t: TestHarness) async {
         t.expect(tried > 10, "only \(tried) polls")
     }
 
+    await t.test("the slider clicked at the bottom, then at 0.65 0.09 s later, lands on 0.65's level") {
+        // The logo is falling fast when the second click arrives, only just above the new level.
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0)
+        try await pass(f, 0.09)
+        f.controller.setBrightness(0.65)
+        await settle()
+        try await pass(f, 3)
+        let target = LogoAnimator.level(forBrightness: 0.65)
+        t.expect(!f.controller.animator!.isAnimating, "should have settled")
+        t.expect(abs(f.daemon.level - target) <= 0.02, "held at \(f.daemon.level), not \(target)")
+        t.expect(f.daemon.isHolding)
+    }
+
+    await t.test("two slider clicks 0.05 to 0.15 s apart always land within 0.02") {
+        var worst = (error: 0.0, label: "")
+        for delay in stride(from: 0.05, through: 0.15, by: 0.02) {
+            for brightness in stride(from: 0.3, through: 0.75, by: 0.05) {
+                let f = Fixture(direct: true, timeDriven: true)
+                f.controller.setBrightness(0)
+                try await pass(f, delay)
+                f.controller.setBrightness(brightness)
+                await settle()
+                try await pass(f, 3)
+                let error = abs(f.daemon.level - LogoAnimator.level(forBrightness: brightness))
+                if error > worst.error { worst = (error, "after \(delay) s, \(brightness)") }
+            }
+        }
+        t.expect(worst.error <= 0.02, "\(worst.label) landed \(worst.error) off")
+    }
+
+    await t.test("a followed target that's missed is tried once more, so the adjust loop ends") {
+        for step in [0.05, 0.1, 0.2] {
+            let f = Fixture(direct: true)
+            f.daemon.stepPerRead = step
+            f.controller.setBrightness(0.6)
+            for _ in 0..<3 { await Task.yield() }
+            f.controller.setBrightness(0.5)
+            await settle()
+            t.expect(!f.controller.animator!.isAnimating, "step \(step): still fading")
+        }
+    }
+
     await t.test("a nudge at the top of the slider and straight back ends fully lit, not held") {
         for nudge in [0.99, 0.97, 0.95] {
             for frames in 1...4 {

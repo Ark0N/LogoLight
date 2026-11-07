@@ -193,13 +193,16 @@ public final class LightEmitter {
     /// is dragged. While it keeps moving the same way, the fade carries on and stops where it
     /// passes the latest target, instead of stopping and starting again from rest each time.
     /// It stops short when the target turns round, reaches 0 or 1, or runs too far ahead for
-    /// this fade to catch up in time, so that a new fade can take over.
+    /// this fade to catch up in time, so that a new fade can take over. A followed target the
+    /// fast fade was about to pass can be missed by a poll's travel, so that counts as stopping
+    /// short too (when it's more than 0.02 off): a new fade from rest lands precisely.
     ///
     /// Returns the target the logo was stopped at, or `nil` if it stopped short.
     @discardableResult
     public func fade(following level: () -> Double, over duration: Double,
                      sleep: LogoAnimator.Sleep) async throws -> Double? {
-        var target = min(max(level(), 0), 1)
+        let first = min(max(level(), 0), 1)
+        var target = first
         // Unknown: assume the far end, so the fade goes all the way.
         let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
         guard abs(target - current) >= 0.005 else {
@@ -250,6 +253,9 @@ public final class LightEmitter {
             waited += Self.pollInterval
         }
         turnRound(from: lit) // and hold it there
+        // Only a followed target is tried again: the next fade's target doesn't change, so the
+        // adjust loop always ends.
+        if target != first, let held = fadeLevel, abs(held - target) > 0.02 { return nil }
         return target
     }
 
