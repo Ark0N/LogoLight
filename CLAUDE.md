@@ -111,8 +111,15 @@ runs but says the logo isn't available. So:
   issues, on https://logolight.app and as a GitHub Release.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
-  version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, deploy, tag,
-  `gh release create`.
+  version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
+  version and date in the site's JSON-LD (`index.html`) and `llms.txt` and the sitemap's
+  `lastmod`, deploy, tag, `gh release create`, then ping IndexNow (below).
+- SEO and AI search: `robots.txt` welcomes every crawler and lists `sitemap.xml`; `llms.txt` is a
+  plain-text summary for AI assistants; `index.html` has JSON-LD (the app, and the FAQ, which must
+  match the page's). ChatGPT's search leans on Bing's index, so after a deploy that changes the
+  page, tell Bing and the other IndexNow engines (the key file is
+  `site/public/5ac2b92d275422183e47b25b5e0e0a4d.txt`):
+  `curl "https://api.indexnow.org/indexnow?url=https://logolight.app/&key=5ac2b92d275422183e47b25b5e0e0a4d"`.
 - `scripts/make-media.swift` makes the README's GIFs (`docs/media/`) and videos (`site/media/`,
   not uploaded: Safari needs Range requests for `<video>`, which static assets don't answer)
   from the live view's renders, with the effects' real timing. Re-run it after tuning effects.

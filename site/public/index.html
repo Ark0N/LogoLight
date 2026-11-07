@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LogoLight: control the glowing Apple logo on your MacBook Pro</title>
-  <meta name="description" content="LogoLight is a free menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display. Turn it on and off, set its brightness, or let it breathe, pulse or beat like a heart.">
+  <title>LogoLight: turn off or dim the MacBook Pro's glowing Apple logo</title>
+  <meta name="description" content="Turn off or dim the glowing Apple logo on the OLED MacBook Pro with PROLED XDR Display, or let it breathe, pulse or beat like a heart. A free, open-source menu bar app.">
+  <meta name="robots" content="max-image-preview:large">
+  <link rel="alternate" type="text/plain" href="https://logolight.app/llms.txt" title="LogoLight, in plain text for AI assistants">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0c0c0e" media="(prefers-color-scheme: dark)">
@@ -17,14 +19,99 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LogoLight">
   <meta property="og:url" content="https://logolight.app/">
-  <meta property="og:title" content="LogoLight: control the glowing Apple logo on your MacBook Pro">
-  <meta property="og:description" content="A free menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display. Turn it on and off, set its brightness, or let it breathe, pulse or beat like a heart.">
+  <meta property="og:title" content="LogoLight: turn off or dim the MacBook Pro's glowing Apple logo">
+  <meta property="og:description" content="A free, open-source menu bar app for the illuminated Apple logo on the back of the OLED MacBook Pro with PROLED XDR Display. Turn it off, set its brightness, or let it breathe, pulse or beat like a heart.">
   <meta property="og:image" content="https://logolight.app/og.jpg">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="LogoLight's app icon and name, beside the top of its menu: the Backlight switch, the live view of the lid with the Apple logo glowing, and the brightness slider.">
   <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Structured data for search engines and AI assistants: the app, and the FAQ below (keep the answers in step
+       with the page's). A data block, not a script: it never runs, so the CSP's script-src 'none' doesn't apply.
+       Bump softwareVersion with each release. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://logolight.app/#website",
+        "url": "https://logolight.app/",
+        "name": "LogoLight",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://logolight.app/#app",
+        "name": "LogoLight",
+        "url": "https://logolight.app/",
+        "description": "A free, open-source menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display (the OLED MacBook Pro). Turn the logo off and on with a smooth fade, set its brightness, or animate it with Breathe, Pulse or Heartbeat. Includes a Backlight control for Control Center.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "macOS 14 or later",
+        "softwareRequirements": "MacBook Pro with PROLED XDR Display",
+        "softwareVersion": "1.0.0",
+        "datePublished": "2026-11-07",
+        "downloadUrl": "https://logolight.app/LogoLight.zip",
+        "installUrl": "https://logolight.app/#download",
+        "image": "https://logolight.app/images/app-icon-256.png",
+        "screenshot": "https://logolight.app/images/menu-on-light.png",
+        "featureList": [
+          "Turn the illuminated Apple logo off and on, with a smooth fade",
+          "Set the logo's brightness",
+          "Effects: Breathe, Pulse and Heartbeat",
+          "Live view of the lid in its own finish, space black or silver",
+          "Backlight control for Control Center and the menu bar",
+          "Option-click the menu bar icon to toggle the logo",
+          "Launch at Login"
+        ],
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://opensource.org/license/mit",
+        "codeRepository": "https://github.com/Ark0N/LogoLight",
+        "author": { "@type": "Person", "name": "Ark0N", "url": "https://github.com/Ark0N" },
+        "sameAs": ["https://github.com/Ark0N/LogoLight"]
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://logolight.app/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How do I turn off the Apple logo on my MacBook Pro?",
+            "acceptedAnswer": { "@type": "Answer", "text": "With LogoLight, flip the Backlight switch at the top of its menu, or hold Option and click LogoLight in the menu bar. The logo fades out, and stays off even after you quit LogoLight or restart your Mac. Without LogoLight, Apple's documented way is a command in Terminal: sudo defaults write com.apple.CoreBrightness LEBacklightMode -int 0 turns the logo off, and sudo defaults delete com.apple.CoreBrightness LEBacklightMode turns it back on. Apple documents only on and off; LogoLight adds brightness and effects." }
+          },
+          {
+            "@type": "Question",
+            "name": "Why isn't it on the App Store?",
+            "acceptedAnswer": { "@type": "Answer", "text": "LogoLight works with the part of macOS that drives the logo, through system interfaces that Mac App Store apps aren't allowed to use. Store apps also have to run in a sandbox, which would shut LogoLight out completely. So it's offered here instead, signed with a Developer ID and notarized by Apple." }
+          },
+          {
+            "@type": "Question",
+            "name": "Is it safe?",
+            "acceptedAnswer": { "@type": "Answer", "text": "LogoLight is signed with a Developer ID and notarized by Apple, which means Apple has checked it for malicious software. It usually needs no password. If LogoLight can't switch the logo directly, it asks for one once, in the standard macOS dialog, and installs a small rule (in /etc/sudoers.d) that lets your user account run exactly two commands without a password: Apple's documented commands to turn the logo off and back on. Nothing else. The rule is checked before it's installed, so it can't break sudo, and unchecking Disable Password removes it. And the whole source is on GitHub, so anyone can check what it does." }
+          },
+          {
+            "@type": "Question",
+            "name": "Which Macs does it work on?",
+            "acceptedAnswer": { "@type": "Answer", "text": "The MacBook Pro with PROLED XDR Display (the OLED MacBook Pro), the model with the illuminated Apple logo on the back of the lid. On other Macs, LogoLight opens but tells you the logo isn't available." }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I uninstall it?",
+            "acceptedAnswer": { "@type": "Answer", "text": "If Disable Password is checked, uncheck it first. That removes the password rule. Turn off Launch at Login if you turned it on. Quit LogoLight and move it from Applications to the Trash. Quitting stops any effect and returns the logo to its normal brightness. If you turned the logo off, it stays off. To turn it back on without LogoLight, run sudo defaults delete com.apple.CoreBrightness LEBacklightMode in Terminal." }
+          },
+          {
+            "@type": "Question",
+            "name": "Is it really free?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Download it and use every feature for free. If you enjoy it, you can buy me a coffee, but it doesn't unlock anything; it just says thanks. It's open source, too: the code is on GitHub under the MIT license, so you can read it, change it or build it yourself." }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -358,6 +445,14 @@
 
         <div class="faq">
           <details>
+            <summary><h3>How do I turn off the Apple logo on my MacBook&nbsp;Pro?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
+            <div class="answer">
+              <p>With LogoLight, flip the <strong>Backlight</strong> switch at the top of its menu, or hold <kbd>⌥ Option</kbd> and click LogoLight in the menu bar. The logo fades out, and stays off even after you quit LogoLight or restart your Mac.</p>
+              <p>Without LogoLight, <a href="https://support.apple.com/en-us/149248">Apple's documented way</a> is a command in Terminal: <code>sudo defaults write com.apple.CoreBrightness LEBacklightMode -int 0</code> turns the logo off, and <code>sudo defaults delete com.apple.CoreBrightness LEBacklightMode</code> turns it back on. Apple documents only on and off; LogoLight adds brightness and effects.</p>
+            </div>
+          </details>
+
+          <details>
             <summary><h3>Why isn't it on the App Store?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
             <div class="answer">
               <p>LogoLight works with the part of macOS that drives the logo, through system interfaces that Mac App Store apps aren't allowed to use. Store apps also have to run in a sandbox, which would shut LogoLight out completely.</p>
@@ -377,7 +472,7 @@
           <details>
             <summary><h3>Which Macs does it work on?</h3><svg aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></summary>
             <div class="answer">
-              <p>The MacBook Pro with PROLED XDR Display, the model with the illuminated Apple logo on the back of the lid. On other Macs, LogoLight opens but tells you the logo isn't available.</p>
+              <p>The MacBook Pro with PROLED XDR Display (the OLED MacBook&nbsp;Pro), the model with the illuminated Apple logo on the back of the lid. On other Macs, LogoLight opens but tells you the logo isn't available.</p>
             </div>
           </details>
 

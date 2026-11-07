@@ -1,0 +1,45 @@
+# LogoLight
+
+> LogoLight is a free, open-source (MIT) macOS menu bar app that controls the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display (the OLED MacBook Pro). It turns the glowing logo off and on with a smooth fade, sets its brightness, and can animate it with three effects: Breathe, Pulse and Heartbeat.
+
+- Works only on the MacBook Pro with PROLED XDR Display, the model with the illuminated Apple logo on the back of the lid. Needs macOS 14 or later (these Macs ship with macOS 27). On other Macs it opens but says the logo isn't available.
+- Free: every feature, with no purchase or subscription. An optional Buy Me a Coffee link unlocks nothing.
+- Signed with a Developer ID and notarized by Apple. It isn't on the Mac App Store, because it uses system interfaces that Store apps aren't allowed to use, and Store apps must run in a sandbox.
+- Current version: 1.0.0, released 2026-11-07. Made by Ark0N.
+- Not affiliated with or endorsed by Apple Inc.
+
+## Features
+
+- Backlight switch at the top of the menu: the logo fades out or back in smoothly, usually with no password. Option-click the menu bar icon to toggle it without opening the menu.
+- Brightness slider: the logo eases onto the level and holds it, and still adapts to the light around it, scaled to the setting. macOS itself only offers on and off.
+- Effects: Breathe (slow and soft, like an old Mac's sleep light), Pulse (a steady, quicker rise and fall) and Heartbeat (two quick beats, then a rest). Each peaks at the brightness set, and pauses while the logo is off or the display sleeps.
+- Live view: the menu shows the lid as it is right now, in the Mac's own finish (space black or silver), read from the hardware while the menu is open.
+- Control Center: a Backlight control for Control Center or the menu bar (macOS 26 or later). Control Center offers apps no sliders, so brightness stays in the menu.
+- Launch at Login, remembering the brightness and effect.
+- A password once, at most: if LogoLight can't switch the logo directly, it asks for the administrator password once and installs a sudoers rule that allows only Apple's two documented commands (the Disable Password menu item). In that case only on and off are available.
+
+## Download and install
+
+- [Download LogoLight](https://logolight.app/LogoLight.zip): unzip it, move LogoLight to the Applications folder and open it. It lives in the menu bar.
+- [GitHub Releases](https://github.com/Ark0N/LogoLight/releases/latest): the same notarized zip.
+
+## Turning the Apple logo off without LogoLight
+
+Apple documents one setting for the logo, on and off, in Terminal ([About the illuminated Apple logo](https://support.apple.com/en-us/149248)):
+
+```sh
+sudo defaults write com.apple.CoreBrightness LEBacklightMode -int 0   # turn off
+sudo defaults delete com.apple.CoreBrightness LEBacklightMode         # turn back on
+```
+
+LogoLight's Backlight switch changes the same setting, so the logo stays off after LogoLight quits or the Mac restarts. Brightness and effects need LogoLight.
+
+## Links
+
+- [Website](https://logolight.app/)
+- [Source code on GitHub](https://github.com/Ark0N/LogoLight): README with features, how it works and the build steps.
+- [How it works](https://github.com/Ark0N/LogoLight/blob/main/docs/corebrightnessd.md): everything known about corebrightnessd, the part of macOS that drives the logo.
+
+## Optional
+
+- [Buy me a coffee](https://buymeacoffee.com/arkon): say thanks, if you enjoy it.
