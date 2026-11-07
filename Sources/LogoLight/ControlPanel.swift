@@ -11,7 +11,7 @@ final class ControlPanel: NSView {
     var onEffectChosen: ((LogoEffect) -> Void)?
 
     /// Narrow: the least that fits the longest label ("Heartbeat", 61 pt at 13 pt) between its tile and a
-    /// full-size switch is 179. The menu's own items need only 143.
+    /// full-size switch is 179. The menu's own items need only 143, or 153 with Disable Password.
     private static let width: CGFloat = 180
     /// Around the panel's contents (8 at the top), and between its sections.
     private static let inset: CGFloat = 6
@@ -31,6 +31,10 @@ final class ControlPanel: NSView {
     /// it and its label.
     private static let switchInset: CGFloat = 8
     private static let labelSpacing: CGFloat = 4
+    /// How the brightness and the effects look while the logo is off.
+    private static let greyedOutAlpha: CGFloat = 0.4
+    /// How long they take to grey out or come back when the logo is switched.
+    private static let greyingDuration = 0.22
 
     private let stack = NSStackView()
     private let preview: LogoPreview
@@ -52,11 +56,6 @@ final class ControlPanel: NSView {
 
     /// What the panel shows now. `nil` until the first update, which always applies.
     private var state: PanelState?
-
-    /// How the brightness and the effects look while the logo is off.
-    private static let greyedOutAlpha: CGFloat = 0.4
-    /// How long they take to grey out or come back when the logo is switched.
-    private static let greyingDuration = 0.22
 
     /// `finish` is the colour of this Mac's case, which the live view copies.
     init(finish: MacFinish = .spaceBlack) {
