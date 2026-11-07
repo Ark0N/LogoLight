@@ -187,13 +187,13 @@ public final class LightEmitter {
     /// Like `fade(to:over:sleep:)`, but reads the target again on every poll, e.g. while a slider
     /// is dragged. While it keeps moving the same way, the fade carries on and stops where it
     /// passes the latest target, instead of stopping and starting again from rest each time.
-    /// It stops early, for the caller to start a new fade, when the target turns round, reaches
-    /// 0 or 1, or runs too far ahead for this fade to catch up in time.
+    /// It stops short when the target turns round, reaches 0 or 1, or runs too far ahead for
+    /// this fade to catch up in time, so that a new fade can take over.
     ///
-    /// Returns the target the logo was stopped at.
+    /// Returns the target the logo was stopped at, or `nil` if it stopped short.
     @discardableResult
     public func fade(following level: () -> Double, over duration: Double,
-                     sleep: LogoAnimator.Sleep) async throws -> Double {
+                     sleep: LogoAnimator.Sleep) async throws -> Double? {
         var target = min(max(level(), 0), 1)
         // Unknown: assume the far end, so the fade goes all the way.
         let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
@@ -228,7 +228,10 @@ public final class LightEmitter {
                 let isAhead = lit ? latest > now : latest < now
                 let reachedIn = fadeTime * FadeCurve.timeFraction(toReach: abs(latest - current) / abs(end - current))
                 guard isAhead, abs(latest - end) >= 0.001, reachedIn - waited <= Self.followSlack * duration
-                else { break }
+                else {
+                    turnRound(from: lit)
+                    return nil
+                }
                 target = latest
             }
             if lit ? now >= target : now <= target { break }
