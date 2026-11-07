@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://logolight.app"><img src="https://img.shields.io/badge/website-logolight.app-1f1f24?style=flat-square" alt="Website: logolight.app"></a>
   <img src="https://img.shields.io/badge/notarized-Developer%20ID-1f1f24?style=flat-square" alt="Notarized by Apple">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f1f24?style=flat-square" alt="MIT license"></a>
 </p>
