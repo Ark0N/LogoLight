@@ -482,6 +482,77 @@ private func settle() async {
 }
 
 @MainActor
+func launchTests(_ t: TestHarness) async {
+    print("\nLaunch")
+
+    await t.test("after a run killed while holding a level reached going up, goes straight to the saved level") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.setHeld(at: 0.5, state: 1) // held in Blank
+        f.daemon.fadeDuration = 1e9
+        f.daemon.setKeyboardValue(2, forKey: "DisplayLogicalState") // which is what reads back
+        f.controller.start(brightness: 0.3, effect: .none)
+        f.daemon.elapse(0.02) // the rest of the app's launch, before anything else runs
+        await settle()
+        let level = LogoAnimator.level(forBrightness: 0.3)
+        t.expect(abs(f.daemon.level - level) <= 0.02, "held at \(f.daemon.level), not \(level)")
+        t.expect(f.daemon.isHolding)
+        t.expect(f.daemon.peak <= 0.501, "went up to \(f.daemon.peak) first")
+    }
+
+    await t.test("after a run killed while holding a level reached going down, goes straight to the saved level") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.setHeld(at: 0.265, state: 2) // held in Unblank
+        f.daemon.fadeDuration = 1e9
+        f.controller.start(brightness: 0.8, effect: .none)
+        f.daemon.elapse(0.02) // the rest of the app's launch, before anything else runs
+        await settle()
+        let level = LogoAnimator.level(forBrightness: 0.8)
+        t.expect(abs(f.daemon.level - level) <= 0.02, "held at \(f.daemon.level), not \(level)")
+        t.expect(f.daemon.isHolding)
+        t.expect(f.daemon.peak <= level + 0.03, "went up to \(f.daemon.peak) first")
+    }
+
+    await t.test("with an effect chosen, starts playing it") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.setHeld(at: 0.265, state: 2)
+        f.daemon.fadeDuration = 1e9
+        f.clock.budget = 4
+        f.controller.start(brightness: 0.5, effect: .breathe)
+        t.expect(f.controller.animator!.isPlaying)
+        t.expectEqual(f.controller.effect, .breathe)
+        await settle()
+        t.expect(f.daemon.log.contains("blank") && f.daemon.log.contains("unblank"), "should fade both ways")
+    }
+
+    t.test("at full brightness with no effect, returns the logo to normal") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.setHeld(at: 0.265, state: 2)
+        f.daemon.fadeDuration = 1e9
+        f.controller.start(brightness: 1, effect: .none)
+        t.expectEqual(f.daemon.fadeDuration, 0)
+        t.expectEqual(f.daemon.state, 2)
+        t.expectEqual(f.daemon.log.last, "unblank")
+    }
+
+    t.test("with the logo off, only ends a leftover hold and keeps the choices") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.daemon.fadeDuration = 1e9
+        f.controller.start(brightness: 0.5, effect: .pulse)
+        t.expect(!f.controller.animator!.isAnimating)
+        t.expectEqual(f.daemon.fadeDuration, 0)
+        t.expectEqual(f.controller.effect, .pulse)
+        t.expectEqual(f.controller.brightness, 0.5)
+    }
+
+    t.test("without a saved brightness, keeps full brightness") {
+        let f = Fixture(direct: true)
+        f.controller.start(brightness: nil, effect: .none)
+        t.expectEqual(f.controller.brightness, 1)
+        t.expectEqual(f.daemon.fadeDuration, 0)
+    }
+}
+
+@MainActor
 func switchingTests(_ t: TestHarness) async {
     print("\nSwitching on and off while other things happen")
 

@@ -178,6 +178,23 @@ public final class LogoController {
         animator?.reset()
     }
 
+    /// Applies the saved choices at launch, after anything a previous run left behind.
+    ///
+    /// A previous run that didn't quit cleanly may have left the logo held at a level, with the
+    /// endless fade duration. If the logo is on and a level or an effect is chosen, it goes
+    /// straight there: the fades' own writes replace that duration, without first relighting to
+    /// full. Otherwise it's returned to normal, which ends that duration too.
+    public func start(brightness: Double?, effect: LogoEffect) {
+        guard let animator else { return }
+        if let brightness { animator.brightness = brightness }
+        animator.select(effect)
+        if isLitAndAwake, animator.level < 1 || effect != .none {
+            animator.resume()
+        } else {
+            animator.reset()
+        }
+    }
+
     // MARK: - Password-free rule (only used when direct control isn't available)
 
     /// Installs the sudoers rule so toggling no longer asks for a password.
