@@ -23,12 +23,13 @@ make install   # copy to /Applications, (re)launch
   `@MainActor`, and Timer and notification closures use `MainActor.assumeIsolated`.
 - The app bundle is assembled by `scripts/build-app.sh` (there's no Xcode project).
   `Resources/Info.plist` is a template with `LSUIElement` (no Dock icon).
-- The Control Center controls (Backlight, Brighter, Dimmer: WidgetKit has no slider template for
-  apps, only toggles and buttons) are one extension. It's sandboxed (the system ignores extensions
-  that aren't), and reaches the running app through `ControlLink` (a Mach port named
-  `<bundle ID>.control`, the one name its entitlements let it look up); only the app touches the
-  logo. `ControlLink.swift` is compiled
-  into both, so it mustn't use the rest of LogoLightCore. A debug build run from `.build` has no
+- The Control Center control (Backlight, a toggle) is an extension. It's sandboxed (the system
+  ignores extensions that aren't), and reaches the running app through `ControlLink` (a Mach port
+  named `<bundle ID>.control`, the one name its entitlements let it look up); only the app touches
+  the logo. `ControlLink.swift` is compiled into both, so it mustn't use the rest of LogoLightCore.
+  WidgetKit gives apps no slider, only toggles and buttons. The user asked for a brightness slider
+  there; Brighter/Dimmer buttons and a button opening the menu's slider were tried, and the user
+  had them removed ("these buttons doesn't make much sense"). A debug build run from `.build` has no
   bundle ID and serves no port.
 
 ## Which Mac
@@ -225,14 +226,15 @@ were answered in 2-3 ms, and the logo followed. A sandboxed test client could lo
 with the entitlement and couldn't without it. Not yet seen by the user: the control in Control
 Center's Edit Controls (under LogoLight, "Backlight"), a tap, and the control following the
 menu's switch. Update: the user placed Backlight and tapped it; the log shows
-`SetBacklightIntent.perform()` running in the extension and the logo turned off. Brighter and
-Dimmer (added after) were checked through the port only. After review: sends are serialized in
+`SetBacklightIntent.perform()` running in the extension and the logo turned off. After review: sends are serialized in
 the extension (CF shares one remote port per name, and an invalidate lost other callers'
 answers), a request that reached the app but wasn't answered isn't sent again (the app may be
 showing the password dialog), a request for the state the switch already shows does nothing
-(it used to fade the logo out and in), a tap the fallback path drops while busy fails as "busy",
-and the slider reloads the controls (coalesced). The app has an icon (`scripts/make-icon.swift`;
-the gallery showed a blank one before), with no Apple logo, which Apple doesn't allow in icons. chronod logs "purging instead because we shouldn't cache it ... isApple? false"
+(it used to fade the logo out and in), and a tap the fallback path drops while busy fails as "busy".
+The app has an icon (`scripts/make-icon.swift`, also put in an asset catalog by `build-app.sh`
+when Xcode's actool is there); the gallery showed a blank one before. Control Center caches app
+icons, so after the first icon it needed `killall ControlCenter` (it relaunches). It has no
+Apple logo, which Apple doesn't allow in icons. chronod logs "purging instead because we shouldn't cache it ... isApple? false"
 for this extension, as it did for every ad-hoc and Developer ID probe; that may only mean it
 fetches the control's description when the gallery is opened.
 

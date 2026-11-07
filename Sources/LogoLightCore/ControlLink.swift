@@ -9,15 +9,8 @@ import Foundation
 ///
 /// This file is compiled into the extension as well, so it uses nothing else from LogoLightCore.
 public enum ControlLink {
-    /// The controls' kinds: the switch, and the brightness buttons. (Apple doesn't offer apps a
-    /// slider in Control Center, only switches and buttons.)
-    public static let backlightKind = "Backlight"
-    public static let brighterKind = "Brighter"
-    public static let dimmerKind = "Dimmer"
-    /// The button that opens the app's menu, whose slider Control Center can't have.
-    public static let sliderKind = "BrightnessSlider"
-    /// How much Brighter and Dimmer change the brightness, as a share of the slider.
-    public static let brightnessStep = 0.1
+    /// The control's kind, used by the extension and by the app's reloads.
+    public static let kind = "Backlight"
     /// What the extension's bundle ID adds to the app's.
     public static let extensionSuffix = ".Controls"
 
@@ -29,24 +22,6 @@ public enum ControlLink {
         case state = 1
         case turnOn = 2
         case turnOff = 3
-        /// One step brighter, turning the logo on if it's off.
-        case brighter = 4
-        /// One step dimmer, while the logo is on.
-        case dimmer = 5
-        /// Opens the app's menu, with its brightness slider.
-        case showMenu = 6
-    }
-
-    /// The brightness after a step from `brightness`: to the next multiple of `brightnessStep`
-    /// that way, so a level the slider left in between lines up with the steps.
-    public static func brightness(after request: Request, from brightness: Double) -> Double {
-        let steps = brightness / brightnessStep
-        let step: Double = switch request {
-        case .brighter: (steps + 1e-6).rounded(.down) + 1
-        case .dimmer: (steps - 1e-6).rounded(.up) - 1
-        case .state, .turnOn, .turnOff, .showMenu: steps
-        }
-        return min(max(step * brightnessStep, 0), 1)
     }
 
     /// The app's answer, sent after it has started a change, not after the fade.
@@ -55,28 +30,19 @@ public enum ControlLink {
         public var isOn: Bool
         /// Whether this Mac has the logo.
         public var isAvailable: Bool
-        /// Whether the brightness can be changed (it needs direct control).
-        public var canAdjust: Bool
-        /// The brightness slider's value, in whole percent.
-        public var brightnessPercent: Int
 
-        public init(isOn: Bool, isAvailable: Bool, canAdjust: Bool = false, brightness: Double = 1) {
+        public init(isOn: Bool, isAvailable: Bool) {
             self.isOn = isOn
             self.isAvailable = isAvailable
-            self.canAdjust = canAdjust
-            brightnessPercent = Int((min(max(brightness, 0), 1) * 100).rounded())
         }
 
         public init?(data: Data) {
-            guard data.count == 4, data[data.startIndex + 3] <= 100 else { return nil }
+            guard data.count == 2 else { return nil }
             let bytes = Array(data)
-            self.init(isOn: bytes[0] != 0, isAvailable: bytes[1] != 0, canAdjust: bytes[2] != 0,
-                      brightness: Double(bytes[3]) / 100)
+            self.init(isOn: bytes[0] != 0, isAvailable: bytes[1] != 0)
         }
 
-        public var data: Data {
-            Data([isOn ? 1 : 0, isAvailable ? 1 : 0, canAdjust ? 1 : 0, UInt8(brightnessPercent)])
-        }
+        public var data: Data { Data([isOn ? 1 : 0, isAvailable ? 1 : 0]) }
     }
 
     /// How a request went.

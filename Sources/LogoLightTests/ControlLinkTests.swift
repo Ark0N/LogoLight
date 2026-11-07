@@ -24,30 +24,12 @@ private func serve(until done: () -> Bool) {
 @MainActor
 func controlLinkTests(_ t: TestHarness) {
     t.test("the control's answer survives the trip as data") {
-        for state in [ControlLink.State(isOn: true, isAvailable: true, canAdjust: true, brightness: 0.55),
-                      .init(isOn: false, isAvailable: true, canAdjust: false, brightness: 0),
-                      .init(isOn: true, isAvailable: true, canAdjust: true, brightness: 1),
+        for state in [ControlLink.State(isOn: true, isAvailable: true), .init(isOn: false, isAvailable: true),
                       .init(isOn: false, isAvailable: false)] {
             t.expectEqual(ControlLink.State(data: state.data), state)
         }
-        t.expectEqual(ControlLink.State(isOn: true, isAvailable: true, brightness: 0.554).brightnessPercent, 55)
-        t.expectEqual(ControlLink.State(isOn: true, isAvailable: true, brightness: 2).brightnessPercent, 100)
-        t.expect(ControlLink.State(data: Data([1, 1, 1])) == nil, "too short")
-        t.expect(ControlLink.State(data: Data([1, 1, 1, 50, 0])) == nil, "too long")
-        t.expect(ControlLink.State(data: Data([1, 1, 1, 101])) == nil, "over 100%")
-    }
-
-    t.test("Brighter and Dimmer step to the next tenth that way") {
-        let cases: [(ControlLink.Request, Double, Double)] = [
-            (.brighter, 0.5, 0.6), (.brighter, 0.55, 0.6), (.brighter, 0.95, 1), (.brighter, 1, 1),
-            (.brighter, 0, 0.1), (.brighter, 0.3 - 1e-12, 0.4),
-            (.dimmer, 0.5, 0.4), (.dimmer, 0.55, 0.5), (.dimmer, 0.05, 0), (.dimmer, 0, 0),
-            (.dimmer, 1, 0.9), (.dimmer, 0.7 + 1e-12, 0.6),
-        ]
-        for (request, from, expected) in cases {
-            let after = ControlLink.brightness(after: request, from: from)
-            t.expect(abs(after - expected) < 1e-9, "\(request) from \(from): \(after), expected \(expected)")
-        }
+        t.expect(ControlLink.State(data: Data([1])) == nil, "too short")
+        t.expect(ControlLink.State(data: Data([1, 1, 1])) == nil, "too long")
     }
 
     t.test("the port is named after the app") {
@@ -61,17 +43,11 @@ func controlLinkTests(_ t: TestHarness) {
     t.test("the app's server answers each request with the state after it") {
         let app = "test.logolight.\(getpid())"
         var isOn = true
-        var brightness = 0.5
         var requests: [ControlLink.Request] = []
         guard let server = ControlLinkServer(appBundleID: app, handler: { request in
             requests.append(request)
-            switch request {
-            case .state: break
-            case .turnOn, .turnOff: isOn = request == .turnOn
-            case .brighter, .dimmer: brightness = ControlLink.brightness(after: request, from: brightness)
-            case .showMenu: break
-            }
-            return ControlLink.State(isOn: isOn, isAvailable: true, canAdjust: true, brightness: brightness)
+            if request != .state { isOn = request == .turnOn }
+            return ControlLink.State(isOn: isOn, isAvailable: true)
         }) else { return t.expect(false, "couldn't register the port") }
         defer { server.invalidate() }
         t.expect(ControlLinkServer(appBundleID: app) { _ in .init(isOn: false, isAvailable: false) } == nil,
@@ -81,14 +57,13 @@ func controlLinkTests(_ t: TestHarness) {
         // as the app's does.
         let answers = Answers()
         Thread.detachNewThread {
-            for request in [ControlLink.Request.state, .turnOff, .state, .turnOn, .brighter] {
+            for request in [ControlLink.Request.state, .turnOff, .state, .turnOn] {
                 answers.append(ControlLink.send(request, toApp: app))
             }
         }
-        serve { answers.all.count == 5 }
-        t.expectEqual(requests, [.state, .turnOff, .state, .turnOn, .brighter])
-        t.expectEqual(answers.states.map { $0?.isOn }, [true, false, false, true, true])
-        t.expectEqual(answers.states.map { $0?.brightnessPercent }, [50, 50, 50, 50, 60])
+        serve { answers.all.count == 4 }
+        t.expectEqual(requests, [.state, .turnOff, .state, .turnOn])
+        t.expectEqual(answers.states.map { $0?.isOn }, [true, false, false, true])
     }
 
     t.test("requests sent at once from several threads are each answered, and handled once") {
@@ -104,7 +79,7 @@ func controlLinkTests(_ t: TestHarness) {
         defer { server.invalidate() }
         let answers = Answers()
         for _ in 0..<4 {
-            Thread.detachNewThread { answers.append(ControlLink.send(.brighter, toApp: app)) }
+            Thread.detachNewThread { answers.append(ControlLink.send(.state, toApp: app)) }
         }
         serve { answers.all.count == 4 }
         t.expectEqual(answers.all.count, 4)
