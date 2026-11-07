@@ -18,7 +18,9 @@ func directControlTests(_ t: TestHarness) async {
         let f = Fixture(direct: true)
         let status = try await f.controller.set(.off)
         t.expectEqual(status.setting, .off)
-        t.expectEqual(f.daemon.log, ["fade=1.0", "blank", "mode=0", "fade=0.0", "unblank"])
+        // A new emitter doesn't know which way the logo is heading, so it turns it round at the
+        // hold duration first. Here that's ignored, as the logo is already in Unblank.
+        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "unblank", "fade=1.0", "blank", "mode=0", "fade=0.0", "unblank"])
         t.expectEqual(f.clock.slept, [1.0])
         t.expect(f.admin.scripts.isEmpty, "no password dialog expected")
     }
@@ -27,7 +29,8 @@ func directControlTests(_ t: TestHarness) async {
         let f = Fixture(backlightMode: 0, direct: true)
         let status = try await f.controller.set(.on)
         t.expectEqual(status.setting, .on)
-        t.expectEqual(f.daemon.log, ["fade=0.05", "blank", "mode=2", "fade=1.0", "unblank", "fade=0.0", "unblank"])
+        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "unblank", "fade=0.05", "blank", "mode=2",
+                                     "fade=1.0", "unblank", "fade=0.0", "unblank"])
         t.expect(f.admin.scripts.isEmpty, "no password dialog expected")
     }
 
@@ -94,8 +97,9 @@ func effectTests(_ t: TestHarness) async {
         f.controller.setEffect(.breathe)
         t.expect(f.controller.animator!.isPlaying)
         await settle()
-        t.expectEqual(Array(f.daemon.log.prefix(8)),
-                      ["fade=2.2", "blank", "fade=2.2", "unblank", "fade=2.2", "blank", "fade=2.2", "unblank"])
+        t.expectEqual(Array(f.daemon.log.prefix(10)),
+                      ["fade=1000000000.0", "unblank", // the heading isn't known yet
+                       "fade=2.2", "blank", "fade=2.2", "unblank", "fade=2.2", "blank", "fade=2.2", "unblank"])
         t.expectEqual(Array(f.clock.slept.prefix(4)), [2.2, 0.3, 2.2, 1.2])
     }
 
@@ -142,7 +146,7 @@ func effectTests(_ t: TestHarness) async {
         f.controller.setEffect(.none)
         await settle()
         t.expect(!f.controller.animator!.isPlaying)
-        t.expectEqual(f.daemon.log, ["fade=0.25", "unblank"])
+        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "blank", "fade=0.25", "unblank"])
         t.expect(f.daemon.lit)
     }
 
@@ -176,7 +180,7 @@ func brightnessTests(_ t: TestHarness) async {
         f.daemon.stepPerRead = 0.05
         f.controller.setBrightness(0.5)
         await settle()
-        t.expectEqual(f.daemon.log.prefix(2).last, "blank")
+        t.expectEqual(f.daemon.log.prefix(4).last, "blank") // after turning round, as the heading isn't known
         t.expectEqual(Array(f.daemon.log.suffix(2)), ["fade=1000000000.0", "unblank"])
         t.expect(abs(f.daemon.level - 0.265) <= 0.05, "held at \(f.daemon.level)")
         t.expect(f.daemon.isHolding)
@@ -271,6 +275,22 @@ func brightnessTests(_ t: TestHarness) async {
         await settle()
         t.expect(f.daemon.level < held - 0.1, "moved from \(held) to \(f.daemon.level)")
         t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
+    await t.test("moves from a level held in Blank after the display wakes") {
+        // Reading DisplayLogicalState back would say Unblank (the keyboard's), and a Blank
+        // would then be ignored as a repeat, leaving the logo stuck.
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.setHeld(at: 0.05, state: 2)
+        f.controller.setBrightness(0.5)
+        await settle()
+        t.expectEqual(f.daemon.state, 1)
+        f.controller.displayDidWake()
+        await settle()
+        f.controller.setBrightness(0.45)
+        await settle()
+        let target = LogoAnimator.level(forBrightness: 0.45)
+        t.expect(abs(f.daemon.level - target) <= 0.01, "held at \(f.daemon.level), not \(target)")
     }
 
     await t.test("effects keep moving when the peak is a held level") {

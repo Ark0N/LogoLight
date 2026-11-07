@@ -107,9 +107,12 @@ public final class LightEmitter {
     static let pollInterval = 0.01
 
     private let service: LightEmitterService
-    /// Which way the logo was last told to fade (`true` is toward lit). It has to be remembered:
-    /// `DisplayLogicalState` reads back the last value sent to anything, including the keyboard.
-    private var lastHeadingLit: Bool?
+
+    /// Which way the logo was last told to fade (`true` is toward lit), or `nil` when that isn't
+    /// known: at launch, and once the display sleeps or wakes (`corebrightnessd` changes the state
+    /// itself then). It can't be read back, because `DisplayLogicalState` gives the last value
+    /// sent to anything, including the keyboard. Everything here is safe with `nil`.
+    private(set) var isHeadingLit: Bool?
 
     public init(service: LightEmitterService) {
         self.service = service
@@ -142,7 +145,7 @@ public final class LightEmitter {
     private func setLit(_ lit: Bool, keepingKeyboardLit keepKeyboard: Bool = true) {
         _ = service.setValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
                              forKey: Key.logicalState)
-        lastHeadingLit = lit
+        isHeadingLit = lit
         if !lit, keepKeyboard { setKeyboardLit(true) }
     }
 
@@ -156,7 +159,7 @@ public final class LightEmitter {
     /// Call when the display sleeps or wakes: `corebrightnessd` changes the state it sends
     /// the logo itself, and the keyboard should follow the display again.
     public func displayDidChange(isAwake: Bool) {
-        lastHeadingLit = nil
+        isHeadingLit = nil
         setKeyboardLit(isAwake)
     }
 
@@ -164,12 +167,6 @@ public final class LightEmitter {
     private func setKeyboardLit(_ lit: Bool) {
         service.setKeyboardValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
                                  forKey: Key.logicalState)
-    }
-
-    /// Whether the logo was last told to fade in (`true`) or out (`false`).
-    var isHeadingLit: Bool? {
-        lastHeadingLit
-            ?? (service.value(forKey: Key.logicalState) as? NSNumber).map { $0.intValue == LogicalState.unblank }
     }
 
     /// Where the logo is in a fade, from 0 (dark) to 1 (fully lit).
@@ -191,8 +188,8 @@ public final class LightEmitter {
 
         // The fade must start now with the new duration, and a fade only starts when it changes
         // direction. So if it's already heading this way (or held after doing so), stop it first.
-        let heading = isHeadingLit
-        if heading == nil || heading == lit { turnRound(from: lit) }
+        // When that isn't known, the turn-round is either ignored or too slow to see.
+        if isHeadingLit == nil || isHeadingLit == lit { turnRound(from: lit) }
         // A fade's duration covers the whole way to 0 or 1, so stretch it to reach the
         // target in about `duration`.
         let fadeTime = isAllTheWay ? duration
