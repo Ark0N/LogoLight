@@ -29,6 +29,11 @@ public final class LogoController {
     /// How long the logo fades when it's switched on or off directly. 0 switches instantly.
     public var switchFadeDuration: Double = 1.0
 
+    /// Whether the first password dialog also installs the password-free rule (fallback path only).
+    /// The dialog then says so, and later switches use `sudo` without asking. The app turns this off
+    /// once the user has removed the rule, so it isn't installed again.
+    public var autoEnablesPasswordless = false
+
     /// Whether the logo is being switched on or off (`set(_:)` is running, one at a time).
     /// Meanwhile, choosing an effect or a brightness only records it, and a wake doesn't restart
     /// anything: the switch applies the latest choices when it's done.
@@ -105,7 +110,7 @@ public final class LogoController {
         }
 
         do {
-            try await runAsRoot(CoreBrightnessSetting.command(for: target), prompt: Self.prompt(for: target))
+            try await runAsRoot(target)
         } catch where target == .on && CoreBrightnessSetting.isMissingKeyError(error) {
             // Nothing to delete: the setting is already at its default (on).
         }
@@ -314,7 +319,10 @@ public final class LogoController {
         switchFadeTask = nil
     }
 
-    private func runAsRoot(_ command: PrivilegedCommand, prompt: String) async throws {
+    /// Runs the documented command for `target` as root: through `sudo` if the password-free rule is
+    /// installed, otherwise through the password dialog.
+    private func runAsRoot(_ target: LogoIllumination) async throws {
+        let command = CoreBrightnessSetting.command(for: target)
         if isRuleInstalled() {
             do {
                 try await sudo.run(command)
@@ -324,8 +332,14 @@ public final class LogoController {
             } catch {
                 // The rule is missing or out of date; fall back to the password dialog.
             }
+        } else if autoEnablesPasswordless, let rule = try? PasswordlessRule() {
+            // The same dialog installs the rule, so this is the last time a password is needed. The
+            // command's result is the script's, and a failed install doesn't stop it.
+            try admin.run(script: rule.installScript(thenRunning: command),
+                          prompt: Self.prompt(for: target, enablingPasswordless: true))
+            return
         }
-        try admin.run(script: command.shellString, prompt: prompt)
+        try admin.run(script: command.shellString, prompt: Self.prompt(for: target))
     }
 
     /// Waits for the hardware to follow the new setting, when it can be observed.
@@ -339,10 +353,13 @@ public final class LogoController {
         }
     }
 
-    static func prompt(for target: LogoIllumination) -> String {
-        switch target {
+    static func prompt(for target: LogoIllumination, enablingPasswordless: Bool = false) -> String {
+        let action = switch target {
         case .off: "LogoLight wants to turn off the illuminated Apple logo."
         case .on: "LogoLight wants to turn the illuminated Apple logo back on."
         }
+        guard enablingPasswordless else { return action }
+        return action + " After this, you can turn it on and off without your password "
+            + "(change this with Disable Password in LogoLight's menu)."
     }
 }

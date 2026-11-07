@@ -53,6 +53,18 @@ public struct PasswordlessRule: Sendable, Equatable {
 
     public static var removeScript: String { "/bin/rm -f \(Shell.quote(path))" }
 
+    /// A root shell script that installs the rule, then runs `command`, so one password dialog does
+    /// both. The script's result (exit status and output) is the command's: the install is quiet, and
+    /// if it fails the command still runs.
+    public func installScript(thenRunning command: PrivilegedCommand) -> String {
+        Self.script(installing: installScript, thenRunning: command.shellString)
+    }
+
+    /// The install runs in a subshell, so its `umask` and `trap` don't reach the command.
+    static func script(installing install: String, thenRunning command: String) -> String {
+        "(\(install)) >/dev/null 2>&1; \(command)"
+    }
+
     // MARK: - Helpers
 
     /// macOS short names: letters, digits, `_`, `.` and `-`, not starting with `-` or a digit.

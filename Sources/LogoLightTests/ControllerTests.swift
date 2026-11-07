@@ -12,6 +12,10 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
     var daemonResponds = true
     /// Called when the root default changes, as corebrightnessd observes it.
     var onDefaultChanged: ((Int?) -> Void)?
+    /// Whether the password-free rule is installed (`/etc/sudoers.d/logolight`).
+    var ruleInstalled = false
+    /// When false, installing the rule fails.
+    var installsRule = true
     /// What corebrightnessd is currently applying.
     private var appliedOn: Bool
     /// The NVRAM copy, written at boot and not again during the session.
@@ -23,9 +27,23 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
         nvramCopy = appliedOn ? "true" : "false"
     }
 
-    /// Applies a command as root, the way `defaults` would.
-    func execute(_ shellString: String) throws {
-        switch shellString {
+    /// Runs a root shell script the way `/bin/sh` would: one of the two commands (as `defaults` would),
+    /// the rule's install or removal, or the install followed by a command, whose result is the script's.
+    func execute(_ script: String) throws {
+        let rule = try? PasswordlessRule()
+        for target in LogoIllumination.allCases {
+            let command = CoreBrightnessSetting.command(for: target)
+            if let rule, script == rule.installScript(thenRunning: command) {
+                try? installRule()
+                return try execute(command.shellString)
+            }
+        }
+        if script == rule?.installScript { return try installRule() }
+        if script == PasswordlessRule.removeScript {
+            ruleInstalled = false
+            return
+        }
+        switch script {
         case CoreBrightnessSetting.command(for: .off).shellString:
             backlightMode = 0
         case CoreBrightnessSetting.command(for: .on).shellString:
@@ -36,12 +54,19 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
             }
             backlightMode = nil
         default:
-            return // e.g. the sudoers install script
+            return
         }
         if daemonResponds {
             appliedOn = backlightMode != 0
             onDefaultChanged?(backlightMode)
         }
+    }
+
+    private func installRule() throws {
+        guard installsRule else {
+            throw LogoLightError.commandFailed(exitCode: 1, message: "install: Operation not permitted")
+        }
+        ruleInstalled = true
     }
 
     func nvramValue(forKey key: String) -> Data? {
@@ -60,12 +85,14 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
 final class FakeAdminShell: AdminShell {
     let mac: SimulatedMac
     var scripts: [String] = []
+    var prompts: [String] = []
     var error: Error?
 
     init(mac: SimulatedMac) { self.mac = mac }
 
     func run(script: String, prompt: String) throws {
         scripts.append(script)
+        prompts.append(prompt)
         if let error { throw error }
         try mac.execute(script)
     }
@@ -73,21 +100,24 @@ final class FakeAdminShell: AdminShell {
 
 final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
     let mac: SimulatedMac
-    var allowed: Bool
+    /// Whether sudo runs the logo commands without a password. `nil`: when the rule is installed.
+    var allowed: Bool?
     var commands: [PrivilegedCommand] = []
 
-    init(mac: SimulatedMac, allowed: Bool) {
+    init(mac: SimulatedMac, allowed: Bool?) {
         self.mac = mac
         self.allowed = allowed
     }
 
+    private var isAllowed: Bool { allowed ?? mac.ruleInstalled }
+
     func run(_ command: PrivilegedCommand) async throws {
         commands.append(command)
-        guard allowed else { throw LogoLightError.commandFailed(exitCode: 1, message: "sudo: a password is required") }
+        guard isAllowed else { throw LogoLightError.commandFailed(exitCode: 1, message: "sudo: a password is required") }
         try mac.execute(command.shellString)
     }
 
-    func canRun(_ command: PrivilegedCommand) async -> Bool { allowed }
+    func canRun(_ command: PrivilegedCommand) async -> Bool { isAllowed }
 }
 
 /// A stand-in for corebrightnessd's light emitter module. It logs every change it's sent,
@@ -253,8 +283,9 @@ struct Fixture {
     init(backlightMode: Int? = nil, ruleInstalled: Bool = false, sudoAllows: Bool? = nil, direct: Bool = false,
          timeDriven: Bool = false) {
         mac = SimulatedMac(backlightMode: backlightMode)
+        mac.ruleInstalled = ruleInstalled
         admin = FakeAdminShell(mac: mac)
-        sudo = FakeSudo(mac: mac, allowed: sudoAllows ?? ruleInstalled)
+        sudo = FakeSudo(mac: mac, allowed: sudoAllows)
         daemon = FakeDaemon()
         daemon.mode = backlightMode == 0 ? 0 : 2
         if timeDriven {
@@ -270,7 +301,7 @@ struct Fixture {
             emitter: direct ? LightEmitter(service: daemon) : nil,
             admin: admin,
             sudo: sudo,
-            isRuleInstalled: { ruleInstalled },
+            isRuleInstalled: { [mac] in mac.ruleInstalled },
             verificationTimeout: .milliseconds(300),
             sleep: { try await clock.sleep($0) }
         )
@@ -392,5 +423,70 @@ func controllerTests(_ t: TestHarness) async {
         let f = Fixture(ruleInstalled: true)
         try f.controller.disablePasswordless()
         t.expectEqual(f.admin.scripts, [PasswordlessRule.removeScript])
+        t.expect(!f.controller.isPasswordlessEnabled)
+    }
+
+    print("\nController: a password only once")
+
+    await t.test("the first password dialog also installs the rule, and the next switch needs none") {
+        let f = Fixture()
+        f.controller.autoEnablesPasswordless = true
+        try await f.controller.set(.off)
+        t.expectEqual(f.admin.scripts.count, 1)
+        let script = f.admin.scripts.first ?? ""
+        t.expect(script.contains("/usr/sbin/visudo"), "the dialog's script should install the rule")
+        t.expect(script.hasSuffix(CoreBrightnessSetting.command(for: .off).shellString), "and then run the command")
+        t.expect(f.admin.prompts.first?.contains("without your password") == true, "the dialog should say so")
+        t.expectEqual(f.mac.backlightMode, 0)
+        t.expect(f.controller.isPasswordlessEnabled)
+
+        try await f.controller.set(.on)
+        t.expectEqual(f.admin.scripts.count, 1)
+        t.expectEqual(f.sudo.commands, [CoreBrightnessSetting.command(for: .on)])
+        t.expectEqual(f.mac.backlightMode, nil)
+    }
+
+    await t.test("turning on when it's already on still succeeds when the rule is installed with it") {
+        let f = Fixture(backlightMode: nil)
+        f.controller.autoEnablesPasswordless = true
+        let status = try await f.controller.set(.on)
+        t.expectEqual(status.setting, .on)
+        t.expectEqual(f.admin.scripts.count, 1)
+        t.expect(f.controller.isPasswordlessEnabled)
+    }
+
+    await t.test("a rule that fails to install doesn't stop the switch") {
+        let f = Fixture()
+        f.controller.autoEnablesPasswordless = true
+        f.mac.installsRule = false
+        try await f.controller.set(.off)
+        t.expectEqual(f.mac.backlightMode, 0)
+        t.expect(!f.controller.isPasswordlessEnabled)
+    }
+
+    await t.test("after the rule was removed on purpose, the dialog only runs the command") {
+        let f = Fixture()
+        f.controller.autoEnablesPasswordless = false
+        try await f.controller.set(.off)
+        t.expectEqual(f.admin.scripts, [CoreBrightnessSetting.command(for: .off).shellString])
+        t.expectEqual(f.admin.prompts, ["LogoLight wants to turn off the illuminated Apple logo."])
+        t.expect(!f.controller.isPasswordlessEnabled)
+    }
+
+    await t.test("a rule that sudo doesn't honor falls back to a dialog that only runs the command") {
+        let f = Fixture(ruleInstalled: true, sudoAllows: false)
+        f.controller.autoEnablesPasswordless = true
+        try await f.controller.set(.off)
+        t.expectEqual(f.admin.scripts, [CoreBrightnessSetting.command(for: .off).shellString])
+    }
+
+    await t.test("with direct control, nothing is installed") {
+        let f = Fixture(direct: true)
+        f.controller.autoEnablesPasswordless = true
+        f.controller.switchFadeDuration = 0
+        try await f.controller.set(.off)
+        try await f.controller.set(.on)
+        t.expect(f.admin.scripts.isEmpty, "no password dialog expected")
+        t.expect(!f.controller.isPasswordlessEnabled)
     }
 }

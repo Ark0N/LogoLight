@@ -62,7 +62,8 @@ func commandTests(_ t: TestHarness) {
     t.test("generated admin AppleScripts compile") {
         // Compiling checks the escaping without running anything or showing a dialog.
         let rule = try PasswordlessRule(userName: "lee")
-        for script in [CoreBrightnessSetting.command(for: .off).shellString, rule.installScript, PasswordlessRule.removeScript] {
+        for script in [CoreBrightnessSetting.command(for: .off).shellString, rule.installScript, PasswordlessRule.removeScript,
+                       rule.installScript(thenRunning: CoreBrightnessSetting.command(for: .on))] {
             let source = AppleScriptAdminShell.source(script: script, prompt: #"A "quoted" prompt"#)
             var error: NSDictionary?
             let compiled = NSAppleScript(source: source)?.compileAndReturnError(&error) ?? false
@@ -117,6 +118,23 @@ func passwordlessRuleTests(_ t: TestHarness) {
         t.expect(script.contains(" && "), "each step must stop the script if it fails")
     }
 
+    t.test("installing the rule then running a command is valid sh, and ends with the command") {
+        let command = CoreBrightnessSetting.command(for: .off)
+        let script = try PasswordlessRule(userName: "lee").installScript(thenRunning: command)
+        t.expectEqual(runSyncStatus("/bin/sh", ["-n", "-c", script]), 0)
+        t.expect(script.hasSuffix("; " + command.shellString), script)
+    }
+
+    t.test("a script that installs the rule first gives the command's result, whatever the install did") {
+        // Stand-ins: an install that's noisy, changes the umask and fails, then a command that fails.
+        let script = PasswordlessRule.script(installing: "echo noise; echo noise >&2; umask 077; exit 1",
+                                             thenRunning: "umask; echo out; echo err >&2; exit 3")
+        let result = runSyncAll("/bin/sh", ["-c", script])
+        t.expectEqual(result.status, 3)
+        t.expectEqual(result.output, runSync("/bin/sh", ["-c", "umask"]) + "out\n")
+        t.expectEqual(result.error, "err\n")
+    }
+
     t.test("the install script writes exactly the rule's contents") {
         // Run only the printf step, redirected to a scratch file, and compare.
         let rule = try PasswordlessRule(userName: "lee")
@@ -139,6 +157,21 @@ func runSync(_ executable: String, _ arguments: [String]) -> String {
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     return String(decoding: data, as: UTF8.self)
+}
+
+/// Runs a program and returns its exit status, standard output and standard error.
+func runSyncAll(_ executable: String, _ arguments: [String]) -> (status: Int32, output: String, error: String) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    let output = Pipe(), error = Pipe()
+    process.standardOutput = output
+    process.standardError = error
+    try? process.run()
+    let out = output.fileHandleForReading.readDataToEndOfFile()
+    let err = error.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return (process.terminationStatus, String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self))
 }
 
 func runSyncStatus(_ executable: String, _ arguments: [String]) -> Int32 {
