@@ -1,7 +1,7 @@
 APP := build/LogoLight.app
 INSTALL_DIR ?= /Applications
 
-.PHONY: build test app run install uninstall clean
+.PHONY: build test app dist run install uninstall clean
 
 ## build: compile everything (debug)
 build:
@@ -14,6 +14,12 @@ test:
 ## app: build build/LogoLight.app
 app:
 	scripts/build-app.sh
+
+## dist: build, sign, notarize and zip into dist/ (needs SIGN_IDENTITY and NOTARY_PROFILE)
+dist:
+	@test -n "$(SIGN_IDENTITY)" || { echo "Set SIGN_IDENTITY to your Developer ID Application identity"; exit 1; }
+	scripts/build-app.sh
+	scripts/notarize.sh
 
 ## run: build and open the app
 run: app

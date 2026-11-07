@@ -34,7 +34,10 @@ sed -e "s/\$(BUNDLE_ID)/$BUNDLE_ID/" \
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 
 echo "==> Signing ($SIGN_IDENTITY)"
-codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP"
+# Always with the hardened runtime (notarization requires it), so ad-hoc test builds run
+# the same way as signed releases. A real identity also gets a secure timestamp.
+if [ "$SIGN_IDENTITY" = "-" ]; then TIMESTAMP="--timestamp=none"; else TIMESTAMP="--timestamp"; fi
+codesign --force --sign "$SIGN_IDENTITY" --options runtime "$TIMESTAMP" "$APP"
 codesign --verify --strict "$APP"
 
 echo "==> Built $APP ($VERSION, build $BUILD_NUMBER)"

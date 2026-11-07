@@ -43,7 +43,9 @@ turning off fades out over a second first, and turning on starts from dark and f
 The effects are loops of the same fades. They pause when the logo is off or the display
 sleeps, and normal lighting is restored when you choose **None** or quit.
 
-This is private API, found by inspecting CoreBrightness. LogoLight loads it dynamically and,
+This is private API, found by inspecting CoreBrightness (the details, measurements and
+the tools used are in [docs/corebrightnessd.md](docs/corebrightnessd.md) and
+[tools/probes](tools/probes)). LogoLight loads it dynamically and,
 if it's missing or `corebrightnessd` doesn't take a change, falls back to running Apple's
 documented command as root (see below). Effects need direct control.
 
@@ -94,13 +96,18 @@ make install   # copy it to /Applications and open it
 
 `make run` builds and opens the app from `build/` without installing it.
 
-The app is ad-hoc signed. To sign with your Developer ID instead:
+The app is ad-hoc signed, with the hardened runtime. To sign it with your Developer ID,
+notarize it and zip it for distribution:
 
 ```sh
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" make app
+xcrun notarytool store-credentials logolight --apple-id YOU@EXAMPLE.COM --team-id TEAMID   # once
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" NOTARY_PROFILE=logolight make dist
 ```
 
 Other overrides for `scripts/build-app.sh`: `VERSION`, `BUILD_NUMBER`, `BUNDLE_ID`.
+
+LogoLight can't go on the Mac App Store: it uses private API, and the App Store requires the
+App Sandbox, which rules out both direct control and the admin-command fallback.
 
 ## Uninstall
 
@@ -121,6 +128,10 @@ the logo back on without the app:
 | `Sources/LogoLightTests` | The test suite (`swift run LogoLightTests`) |
 | `Resources/Info.plist` | App bundle metadata (template) |
 | `scripts/build-app.sh` | Builds and signs `LogoLight.app` |
+| `scripts/notarize.sh` | Notarizes, staples and zips a Developer ID build (`make dist`) |
+| `docs/corebrightnessd.md` | Research notes: the keys, the fade curve, holding a level |
+| `tools/probes` | The command-line tools used for that research |
+| `CLAUDE.md` | Notes for picking up work on the project |
 
 The tests are a plain executable instead of an XCTest bundle, because XCTest and
 swift-testing only ship with a full Xcode install. They cover the exact commands,
