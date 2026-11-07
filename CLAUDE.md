@@ -178,7 +178,8 @@ run `tools/livecheck` and watch the logo):
   can't take the signal until it's answered, so after 2 s they kill it instead (checked with a
   stand-in process only).
 - Closing the lid with an external display attached pauses an effect, and opening it resumes
-  it; connecting an external display with the lid open changes nothing.
+  it; connecting an external display with the lid open changes nothing, also after a sleep and
+  wake during which a display was unplugged.
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only

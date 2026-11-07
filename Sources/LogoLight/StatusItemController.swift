@@ -317,7 +317,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
             observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.controller.displayDidSleep() }
+                MainActor.assumeIsolated { self?.displayDidSleep() }
             })
         }
         for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
@@ -334,18 +334,34 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     /// A display was added, removed or changed. Only the built-in display going or coming back counts,
-    /// so connecting an external display doesn't restart an effect.
+    /// so connecting an external display doesn't restart an effect. `wasBuiltInDisplayAwake` is what
+    /// was handled last, by this or by a sleep or wake.
     private func screensDidChange() {
         guard let isAwake = displayReader.isDisplayAwake() else { return }
         defer { wasBuiltInDisplayAwake = isAwake }
         guard let wasAwake = wasBuiltInDisplayAwake, wasAwake != isAwake else { return }
-        if isAwake { scheduleWake() } else { controller.displayDidSleep() }
+        if !isAwake {
+            displayDidSleep()
+        } else if controller.animator?.isPlaying != true {
+            // (An effect still playing means nothing was paused: handling a wake would restart it.)
+            scheduleWake()
+        }
+    }
+
+    /// The display or the Mac went to sleep.
+    private func displayDidSleep() {
+        controller.displayDidSleep()
+        wasBuiltInDisplayAwake = false
     }
 
     /// Handles a wake once, a second after the last notification of it: a system wake posts more than
     /// one, and corebrightnessd relights the logo for the display itself first.
     private func scheduleWake() {
-        controller.scheduleWake(after: 1) { [weak self] in self?.refresh() }
+        controller.scheduleWake(after: 1) { [weak self] in
+            guard let self else { return }
+            wasBuiltInDisplayAwake = displayReader.isDisplayAwake()
+            refresh()
+        }
     }
 
     /// Unchecking removes the rule and remembers that, so the next password doesn't install it again.
