@@ -114,7 +114,10 @@ the other sliders get greyed out, when its on then the other sliders are for the
 effects". So "slider" meant iOS-style switches: one for the logo and one per effect (at most one
 on), all greyed out while the logo is off, keeping their state. The Brightness slider is the one
 real slider, and greys out with them. The user then asked for the whole menu to be "much more
-narrower" (it's 216 points wide) and for a live view "so fully synced up": `LogoPreview` shows
+narrower", then "a little bit more narrow" and "remove the about logolight option"
+and "the Q shortcut it terrible off to the right side". It's 180 points wide, the least the
+"Apple Logo" row allows; the menu has no About item and no ⌘Q, whose shortcut column alone would make
+it 190. They also asked for a live view "so fully synced up": `LogoPreview` shows
 `LogoController.liveGlow`, read from the hardware 30 times a second while the menu is open. The
 menu bar icon doesn't animate, so nothing polls while the menu is closed.
 

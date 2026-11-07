@@ -24,11 +24,16 @@ final class ControlPanel: NSView {
     var onBrightnessChanged: ((Double) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
 
-    private static let width: CGFloat = 216
-    private static let inset: CGFloat = 8
+    /// As narrow as the rows allow: "Apple Logo" (69 pt at 13 pt) still fits between its tile and switch.
+    /// The menu's own items need only 143.
+    private static let width: CGFloat = 180
+    private static let inset: CGFloat = 6
     private static let rowHeight: CGFloat = 36
     /// Where row text starts inside a card.
-    private static let textColumn: CGFloat = 44
+    fileprivate static let textColumn: CGFloat = 40
+    /// Where the icon tiles start inside a card, and their size.
+    private static let tileInset: CGFloat = 8
+    fileprivate static let tileSize: CGFloat = 24
 
     private let stack = NSStackView()
     private let preview = LogoPreview()
@@ -175,11 +180,11 @@ final class ControlPanel: NSView {
         }
         NSLayoutConstraint.activate([
             row.heightAnchor.constraint(equalToConstant: Self.rowHeight),
-            tile.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+            tile.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Self.tileInset),
             tile.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             label.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Self.textColumn),
             label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -8),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -6),
             toggle.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
             toggle.centerYAnchor.constraint(equalTo: row.centerYAnchor),
         ])
@@ -194,7 +199,7 @@ final class ControlPanel: NSView {
         NSLayoutConstraint.activate([
             brightnessRow.heightAnchor.constraint(equalToConstant: Self.rowHeight),
             // The small sun sits under the icon tiles, and the track starts at the text column.
-            dimIcon.centerXAnchor.constraint(equalTo: brightnessRow.leadingAnchor, constant: 22),
+            dimIcon.centerXAnchor.constraint(equalTo: brightnessRow.leadingAnchor, constant: Self.tileInset + Self.tileSize / 2),
             dimIcon.centerYAnchor.constraint(equalTo: brightnessRow.centerYAnchor),
             brightnessSlider.leadingAnchor.constraint(equalTo: brightnessRow.leadingAnchor,
                                                       constant: Self.textColumn - LogoSlider.knobDiameter / 2),
@@ -367,7 +372,8 @@ private final class Separator: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor.separatorColor.setFill()
         let thickness = 1 / (window?.backingScaleFactor ?? 2)
-        NSRect(x: 44, y: 0, width: max(0, bounds.width - 44), height: thickness).fill()
+        let start = ControlPanel.textColumn
+        NSRect(x: start, y: 0, width: max(0, bounds.width - start), height: thickness).fill()
     }
 }
 
@@ -387,8 +393,8 @@ private final class IconTile: NSView {
         image.translatesAutoresizingMaskIntoConstraints = false
         addSubview(image)
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 24),
-            heightAnchor.constraint(equalToConstant: 24),
+            widthAnchor.constraint(equalToConstant: ControlPanel.tileSize),
+            heightAnchor.constraint(equalToConstant: ControlPanel.tileSize),
             image.centerXAnchor.constraint(equalTo: centerXAnchor),
             image.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
@@ -496,14 +502,11 @@ final class LogoSlider: NSView {
 @MainActor
 enum PanelRenderer {
     static func render(to folder: String) {
-        let on = PanelState(isSupported: true, isOn: true, canAnimate: true, effect: .heartbeat, brightness: 0.6,
-                            footer: "Heartbeat · adapts to light")
+        let on = PanelState(isSupported: true, isOn: true, canAnimate: true, effect: .heartbeat, brightness: 0.6)
         var off = on
         off.isOn = false
-        off.footer = "Off for all users"
         var fallback = on
         fallback.canAnimate = false
-        fallback.footer = "Adapts to ambient light"
         var unsupported = PanelState()
         unsupported.footer = "Needs a MacBook Pro with PROLED XDR Display"
 

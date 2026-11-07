@@ -74,16 +74,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         launchAtLoginItem.target = self
         launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
 
-        let aboutItem = NSMenuItem(title: "About LogoLight", action: #selector(showAbout), keyEquivalent: "")
-        aboutItem.target = self
-        let quitItem = NSMenuItem(title: "Quit LogoLight", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        // No ⌘Q: its shortcut column would make the whole menu wider than the panel.
+        let quitItem = NSMenuItem(title: "Quit LogoLight", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
 
         menu.items = [
             panelItem,
             .separator(),
             passwordlessItem, launchAtLoginItem,
             .separator(),
-            aboutItem, quitItem,
+            quitItem,
         ]
     }
 
@@ -161,7 +160,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             canAnimate: controller.canControlDirectly,
             effect: controller.effect,
             brightness: controller.brightness,
-            footer: detailText
+            footer: status.isSupported ? "" : "Needs a MacBook Pro with PROLED XDR Display"
         ))
 
         // Only needed when the logo can't be controlled directly; kept visible if a rule is
@@ -170,23 +169,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.state = controller.isPasswordlessEnabled ? .on : .off
         passwordlessItem.isEnabled = status.isSupported && !isBusy
         launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
-    }
-
-    private var detailText: String {
-        guard status.isSupported else { return "Needs a MacBook Pro with PROLED XDR Display" }
-        switch status.setting {
-        case .off:
-            return "Off for all users"
-        case .on where status.isLit == false:
-            return "Dark while the display is off"
-        case .on where controller.effect != .none:
-            return "\(controller.effect.title) · adapts to light"
-        case .on:
-            guard let level = status.outputLevel else { return "Adapts to ambient light" }
-            return "Glowing at \(Int((level * 100).rounded()))% · adapts to light"
-        case nil:
-            return ""
-        }
     }
 
     // MARK: - Actions
@@ -251,18 +233,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             show(error, title: "Couldn't change Launch at Login")
         }
         updateMenu()
-    }
-
-    @objc private func showAbout() {
-        NSApp.activate()
-        let credits = NSAttributedString(
-            string: "Turns the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display on and off, "
-                + "sets its brightness, and animates it with fades and effects. The on/off setting is the one described in Apple's "
-                + "support article “About the illuminated Apple logo”.",
-            attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-                         .foregroundColor: NSColor.secondaryLabelColor]
-        )
-        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
 
     /// Runs a privileged operation, then refreshes and reports any error.
