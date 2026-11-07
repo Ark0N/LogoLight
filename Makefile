@@ -1,6 +1,10 @@
 APP := build/LogoLight.app
 INSTALL_DIR ?= /Applications
 
+# Quits a running LogoLight (yours only) and waits up to 2 s for it to exit. It quits cleanly, returning
+# the logo to normal first, and `open` would otherwise find the old one still running.
+QUIT_APP = pkill -x -U "$$(id -u)" LogoLight; for i in $$(seq 20); do pgrep -x -U "$$(id -u)" LogoLight > /dev/null || break; sleep 0.1; done; true
+
 .PHONY: build test app dist run install uninstall clean
 
 ## build: compile everything (debug)
@@ -21,21 +25,21 @@ dist:
 	scripts/build-app.sh
 	scripts/notarize.sh
 
-## run: build and open the app (pkill quits LogoLight cleanly, returning the logo to normal)
+## run: build and open the app
 run: app
-	-pkill -x LogoLight
+	$(QUIT_APP)
 	open $(APP)
 
 ## install: copy the app to /Applications (override with INSTALL_DIR=...)
 install: app
-	-pkill -x LogoLight
+	$(QUIT_APP)
 	rm -rf "$(INSTALL_DIR)/LogoLight.app"
 	cp -R $(APP) "$(INSTALL_DIR)/"
 	open "$(INSTALL_DIR)/LogoLight.app"
 
 ## uninstall: remove the app (turn off "Toggle Without Password" first to remove its sudoers rule)
 uninstall:
-	-pkill -x LogoLight
+	$(QUIT_APP)
 	rm -rf "$(INSTALL_DIR)/LogoLight.app"
 
 clean:
