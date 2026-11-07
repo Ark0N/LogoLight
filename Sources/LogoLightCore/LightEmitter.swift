@@ -72,6 +72,13 @@ public final class LightEmitter {
         static let unblank = 2
     }
 
+    /// A fade duration so long that a fade started with it never visibly moves. Starting one
+    /// is how the logo is held at a level (see docs/corebrightnessd.md, "Holding a level").
+    static let holdDuration = 1e9
+
+    /// How often the fade level is checked while fading to a level in between.
+    static let pollInterval = 0.01
+
     private let service: LightEmitterService
 
     public init(service: LightEmitterService) {
@@ -90,6 +97,7 @@ public final class LightEmitter {
     }
 
     /// How long the logo takes to fade when it's darkened or relit. 0 restores the automatic duration.
+    /// It applies to the next fade; a fade in progress keeps its duration.
     @discardableResult
     public func setFadeDuration(_ seconds: Double) -> Bool {
         service.setValue(NSNumber(value: max(0, seconds)), forKey: Key.fadeDuration)
@@ -97,9 +105,15 @@ public final class LightEmitter {
 
     /// Fades the logo out (`false`) or back in (`true`) over the fade duration.
     /// Doesn't change the setting: while it's off, the logo stays dark either way.
+    /// Ignored if the logo is already heading that way (or held after doing so).
     @discardableResult
     public func setLit(_ lit: Bool) -> Bool {
         service.setValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank), forKey: Key.logicalState)
+    }
+
+    /// Whether the logo was last told to fade in (`true`) or out (`false`).
+    var isHeadingLit: Bool? {
+        (service.value(forKey: Key.logicalState) as? NSNumber).map { $0.intValue == LogicalState.unblank }
     }
 
     /// Where the logo is in a fade, from 0 (dark) to 1 (fully lit).
@@ -107,9 +121,77 @@ public final class LightEmitter {
         ((service.value(forKey: Key.pwmState) as? [String: Any])?["Factor"] as? NSNumber)?.doubleValue
     }
 
-    /// Back to normal: automatic fade duration, and lit (when the display is on).
+    /// Fades the logo to `level` (0 dark … 1 fully lit) over about `duration` seconds, and holds
+    /// it there until the next change. The logo still adapts to ambient light, scaled by the level.
+    public func fade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws {
+        let target = min(max(level, 0), 1)
+        let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
+        guard abs(target - current) >= 0.005 else { return }
+
+        let lit = target > current
+        let end: Double = lit ? 1 : 0
+        let isAllTheWay = abs(target - end) < 0.001
+
+        // The fade must start now with the new duration, and a fade only starts when it changes
+        // direction. So if it's already heading this way (or held after doing so), stop it first.
+        let heading = isHeadingLit
+        if heading == nil || heading == lit {
+            setFadeDuration(Self.holdDuration)
+            setLit(!lit)
+        }
+        // A fade's duration covers the whole way to 0 or 1, so stretch it to reach the
+        // target in about `duration`.
+        let fadeTime = isAllTheWay ? duration
+            : duration / FadeCurve.timeFraction(toReach: abs(target - current) / abs(end - current))
+        setFadeDuration(fadeTime)
+        setLit(lit)
+
+        if isAllTheWay {
+            try await sleep(duration)
+            return
+        }
+        var waited = 0.0
+        while let now = fadeLevel, lit ? now < target : now > target, waited < fadeTime {
+            try await sleep(Self.pollInterval)
+            waited += Self.pollInterval
+        }
+        hold(headingLit: lit)
+    }
+
+    /// Stops a fade where it is by starting one the other way that's too slow to see.
+    private func hold(headingLit lit: Bool) {
+        setFadeDuration(Self.holdDuration)
+        setLit(!lit)
+    }
+
+    /// Back to normal: fully lit (when the display is on), with the automatic fade duration.
+    /// This also releases a level held by `fade(to:over:sleep:)`.
     public func restore(displayAwake: Bool) {
+        if isHeadingLit != false, (fadeLevel ?? 1) < 0.999 {
+            // Held after fading toward lit: turn it round (without moving) so relighting is a change.
+            setFadeDuration(Self.holdDuration)
+            setLit(false)
+        }
         setFadeDuration(0)
         if displayAwake { setLit(true) }
+    }
+}
+
+/// The shape of the logo's fades, measured on the real hardware (see docs/corebrightnessd.md,
+/// "The fade curve"): progress toward 0 or 1 at each 5% of the fade's duration.
+public enum FadeCurve {
+    static let progress: [Double] = [0, 0.04, 0.13, 0.24, 0.37, 0.48, 0.57, 0.66, 0.74, 0.79, 0.84,
+                                     0.88, 0.91, 0.93, 0.95, 0.97, 0.98, 0.99, 0.995, 1, 1]
+
+    /// The fraction of a fade's duration it takes to cover `fraction` of the way.
+    public static func timeFraction(toReach fraction: Double) -> Double {
+        let goal = min(max(fraction, 0), 1)
+        let step = 1 / Double(progress.count - 1)
+        for i in 1..<progress.count where progress[i] >= goal {
+            let span = progress[i] - progress[i - 1]
+            let within = span > 0 ? (goal - progress[i - 1]) / span : 1
+            return max(0.05, (Double(i - 1) + within) * step)
+        }
+        return 1
     }
 }

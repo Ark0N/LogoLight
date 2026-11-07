@@ -47,19 +47,31 @@ public struct FadeStep: Equatable, Sendable {
     }
 }
 
-/// Plays a `LogoEffect` in a loop.
+/// Animates the logo: plays the chosen effect, or holds it at the chosen brightness.
 @MainActor
-public final class EffectPlayer {
+public final class LogoAnimator {
     public typealias Sleep = @Sendable (Double) async throws -> Void
 
     private let emitter: LightEmitter
     private let isDisplayAwake: @MainActor () -> Bool
     private let sleep: Sleep
-    private var loop: Task<Void, Never>?
+    private var task: Task<Void, Never>?
+    private var isAdjusting = false
+    /// Counts cancellations, so a cancelled task can tell it's been superseded.
+    private var generation = 0
 
     /// The chosen effect. It keeps its value while paused (e.g. the logo is off or the display sleeps).
     public private(set) var effect: LogoEffect = .none
-    public var isRunning: Bool { loop != nil }
+    /// Whether an effect is playing.
+    public private(set) var isPlaying = false
+
+    /// How bright the logo glows (with no effect) or peaks (with one), from 0 (dimmest) to 1.
+    public var brightness: Double = 1 {
+        didSet { brightness = min(max(brightness, 0), 1) }
+    }
+
+    /// How long a change of brightness takes to fade.
+    public var brightnessFadeDuration = 0.25
 
     public init(emitter: LightEmitter, isDisplayAwake: @escaping @MainActor () -> Bool, sleep: @escaping Sleep) {
         self.emitter = emitter
@@ -67,44 +79,92 @@ public final class EffectPlayer {
         self.sleep = sleep
     }
 
+    /// The logo's fade level for a brightness: never quite dark, and perceptually even
+    /// (the eye is more sensitive to changes when the logo is dim).
+    public static func level(forBrightness brightness: Double) -> Double {
+        let b = min(max(brightness, 0), 1)
+        return b >= 1 ? 1 : 0.02 + 0.98 * b * b
+    }
+
+    /// The fade level for the current brightness.
+    public var level: Double { Self.level(forBrightness: brightness) }
+
     /// Chooses an effect without starting it.
     public func select(_ effect: LogoEffect) {
         self.effect = effect
     }
 
-    /// Starts (or restarts) the chosen effect. Does nothing if no effect is chosen.
+    /// Starts (or restarts) the chosen effect, or with no effect, fades to the chosen brightness.
     public func resume() {
-        guard effect != .none else { return }
-        cancelLoop()
-        let cycle = effect.cycle
-        loop = Task { [weak self] in
+        cancel()
+        if effect == .none {
+            adjustBrightness()
+        } else {
+            play(effect.cycle)
+        }
+    }
+
+    /// Applies a new brightness. A playing effect picks it up at its next step.
+    public func brightnessDidChange() {
+        guard !isPlaying else { return }
+        // A fade already under way follows up with the newest value when it's done, so
+        // dragging a slider doesn't restart the fade at every step.
+        if !isAdjusting { adjustBrightness() }
+    }
+
+    /// Stops animating, leaving the logo as it is, e.g. because it's being turned off or the
+    /// display went to sleep.
+    public func pause() {
+        cancel()
+    }
+
+    /// Stops animating and hands the logo back to the system, fully lit, e.g. before quitting.
+    /// The chosen effect and brightness are kept.
+    public func reset() {
+        cancel()
+        emitter.restore(displayAwake: isDisplayAwake())
+    }
+
+    private func play(_ cycle: [FadeStep]) {
+        isPlaying = true
+        task = Task { [weak self] in
             while !Task.isCancelled {
                 for step in cycle {
                     guard let self, !Task.isCancelled else { return }
-                    self.emitter.setFadeDuration(step.fade)
-                    self.emitter.setLit(step.lit)
-                    do { try await self.sleep(step.fade + step.hold) } catch { return }
+                    do {
+                        try await self.emitter.fade(to: step.lit ? self.level : 0, over: step.fade, sleep: self.sleep)
+                        try await self.sleep(step.hold)
+                    } catch {
+                        return
+                    }
                 }
             }
         }
     }
 
-    /// Stops the animation without relighting the logo, e.g. because it's being turned off
-    /// or the display went to sleep (it's relit by the display waking anyway).
-    public func pause() {
-        guard isRunning else { return }
-        cancelLoop()
-        emitter.setFadeDuration(0)
+    private func adjustBrightness() {
+        isAdjusting = true
+        let generation = generation
+        task = Task { [weak self] in
+            var applied: Double?
+            while let self, !Task.isCancelled, applied != self.level {
+                let target = self.level
+                do {
+                    try await self.emitter.fade(to: target, over: self.brightnessFadeDuration, sleep: self.sleep)
+                } catch {
+                    break
+                }
+                applied = target
+            }
+            if let self, self.generation == generation { self.isAdjusting = false }
+        }
     }
 
-    /// Stops the animation and returns the logo to normal. The chosen effect is kept.
-    public func stop() {
-        cancelLoop()
-        emitter.restore(displayAwake: isDisplayAwake())
-    }
-
-    private func cancelLoop() {
-        loop?.cancel()
-        loop = nil
+    private func cancel() {
+        task?.cancel()
+        task = nil
+        generation += 1
+        isPlaying = false
+        isAdjusting = false
     }
 }

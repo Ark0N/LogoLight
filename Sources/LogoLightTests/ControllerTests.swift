@@ -91,23 +91,47 @@ final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
 }
 
 /// A stand-in for corebrightnessd's light emitter module. It logs every change it's sent,
-/// using the real key names, so tests can check the exact sequence.
+/// using the real key names, so tests can check the exact sequence. Like the real one, it
+/// ignores a `DisplayLogicalState` it's already in, and a fade started with a huge duration
+/// doesn't move (which is how a level is held).
 @MainActor
 final class FakeDaemon: LightEmitterService {
     var mode = 2
     var fadeDuration = 0.0
-    var lit = true
+    /// The fade level (`LEPWMState.Factor`), and the `DisplayLogicalState` it's heading for.
+    var level = 1.0
+    var state = 2
+    /// How far the level moves toward 0 or 1 each time it's read during a fade.
+    /// 1 jumps straight there.
+    var stepPerRead = 1.0
+    /// The highest level seen since the test set it.
+    var peak = 0.0
+    private var isMoving = false
     /// When false, every change is rejected (as if the client API stopped working).
     var acceptsChanges = true
     /// When false, changes are accepted but have no effect.
     var appliesChanges = true
     var log: [String] = []
 
+    var lit: Bool { level >= 0.999 }
+    var isHolding: Bool { fadeDuration >= 1e6 }
+
+    /// Puts the logo at a level, as if a fade had stopped there.
+    func setHeld(at level: Double, state: Int) {
+        self.level = level
+        self.state = state
+        isMoving = false
+        peak = level
+    }
+
     func value(forKey key: String) -> Any? {
         switch key {
-        case "LEBacklightMode": NSNumber(value: mode)
-        case "LEPWMState": ["Factor": NSNumber(value: lit ? 1.0 : 0.0)]
-        default: nil
+        case "LEBacklightMode": return NSNumber(value: mode)
+        case "DisplayLogicalState": return NSNumber(value: state)
+        case "LEPWMState":
+            advance(by: stepPerRead)
+            return ["Factor": NSNumber(value: level)]
+        default: return nil
         }
     }
 
@@ -123,10 +147,21 @@ final class FakeDaemon: LightEmitterService {
         switch key {
         case "LEBacklightMode": mode = value.intValue
         case "LEPWMFactorFadeDuration": fadeDuration = value.doubleValue
-        case "DisplayLogicalState": lit = value.intValue == 2
+        case "DisplayLogicalState" where value.intValue != state:
+            state = value.intValue
+            isMoving = !isHolding
+            if stepPerRead >= 1 { advance(by: 1) }
         default: break
         }
         return true
+    }
+
+    private func advance(by step: Double) {
+        guard isMoving else { return }
+        let end: Double = state == 2 ? 1 : 0
+        level = end > level ? min(end, level + step) : max(end, level - step)
+        peak = max(peak, level)
+        if level == end { isMoving = false }
     }
 }
 

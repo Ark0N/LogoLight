@@ -1,9 +1,10 @@
 import Foundation
 
-/// Reads and changes the illuminated logo setting, and plays effects.
+/// Reads and changes the illuminated logo setting, sets its brightness, and plays effects.
 ///
 /// It controls the logo through `corebrightnessd` directly when it can (no password, smooth
-/// fades, effects), and otherwise falls back to Apple's documented `defaults` command as root.
+/// fades, brightness, effects), and otherwise falls back to Apple's documented `defaults`
+/// command as root.
 @MainActor
 public final class LogoController {
     private let reader: LogoStatusReader
@@ -12,12 +13,12 @@ public final class LogoController {
     private let sudo: PasswordlessSudo
     private let isRuleInstalled: @MainActor () -> Bool
     private let verificationTimeout: Duration
-    private let sleep: EffectPlayer.Sleep
+    private let sleep: LogoAnimator.Sleep
     /// The setting this process last applied, for when the hardware can't show it.
     private var lastApplied: LogoIllumination?
 
-    /// Plays effects. `nil` when the logo can't be controlled directly.
-    public let effects: EffectPlayer?
+    /// Plays effects and holds the brightness. `nil` when the logo can't be controlled directly.
+    public let animator: LogoAnimator?
 
     /// How long the logo fades when it's switched on or off directly. 0 switches instantly.
     public var switchFadeDuration: Double = 1.0
@@ -29,7 +30,7 @@ public final class LogoController {
         sudo: PasswordlessSudo,
         isRuleInstalled: @escaping @MainActor () -> Bool,
         verificationTimeout: Duration = .seconds(3),
-        sleep: @escaping EffectPlayer.Sleep = { try await Task.sleep(for: .seconds($0)) }
+        sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0)) }
     ) {
         self.reader = reader
         self.emitter = emitter
@@ -38,8 +39,8 @@ public final class LogoController {
         self.isRuleInstalled = isRuleInstalled
         self.verificationTimeout = verificationTimeout
         self.sleep = sleep
-        effects = emitter.map { emitter in
-            EffectPlayer(emitter: emitter, isDisplayAwake: { reader.isDisplayAwake() ?? false }, sleep: sleep)
+        animator = emitter.map { emitter in
+            LogoAnimator(emitter: emitter, isDisplayAwake: { reader.isDisplayAwake() ?? false }, sleep: sleep)
         }
     }
 
@@ -54,7 +55,7 @@ public final class LogoController {
         )
     }
 
-    /// Whether the logo can be controlled without a password (and effects are available).
+    /// Whether the logo can be controlled without a password (and brightness and effects are available).
     public var canControlDirectly: Bool { emitter != nil }
 
     public func status() -> LogoStatus {
@@ -82,7 +83,7 @@ public final class LogoController {
         if let emitter {
             if try await setDirectly(target, emitter: emitter) {
                 lastApplied = target
-                if target == .on { effects?.resume() }
+                if target == .on { animator?.resume() }
                 return status()
             }
             // corebrightnessd didn't take the change; fall back to the documented command.
@@ -94,7 +95,7 @@ public final class LogoController {
             // Nothing to delete: the setting is already at its default (on).
         }
         lastApplied = target
-        if target == .on { effects?.resume() }
+        if target == .on { animator?.resume() }
         return try await waitForSetting(target)
     }
 
@@ -106,36 +107,45 @@ public final class LogoController {
         return try await set((current.setting ?? .on).toggled)
     }
 
-    // MARK: - Effects
+    // MARK: - Effects and brightness
 
     /// The chosen effect.
-    public var effect: LogoEffect { effects?.effect ?? .none }
+    public var effect: LogoEffect { animator?.effect ?? .none }
 
     /// Chooses an effect, and plays it now if the logo is on and the display is awake.
+    /// Choosing `.none` returns the logo to the chosen brightness.
     public func setEffect(_ effect: LogoEffect) {
-        guard let effects else { return }
-        effects.select(effect)
-        if effect == .none {
-            effects.stop()
-        } else if status().setting == .on, isDisplayAwake {
-            effects.resume()
-        }
+        guard let animator else { return }
+        animator.select(effect)
+        if isLitAndAwake { animator.resume() } else { animator.pause() }
+    }
+
+    /// How bright the logo is (or how bright effects peak), from 0 (dimmest) to 1 (normal).
+    public var brightness: Double { animator?.brightness ?? 1 }
+
+    public func setBrightness(_ brightness: Double) {
+        guard let animator else { return }
+        animator.brightness = brightness
+        if isLitAndAwake { animator.brightnessDidChange() }
     }
 
     /// Call when the display or the Mac goes to sleep.
     public func displayDidSleep() {
-        effects?.pause()
+        animator?.pause()
+        // So corebrightnessd's own fades (when the display sleeps and wakes) work normally,
+        // instead of using a brightness hold's endless duration.
+        emitter?.setFadeDuration(0)
     }
 
     /// Call when the display wakes up.
     public func displayDidWake() {
-        if effect != .none, status().setting == .on { effects?.resume() }
+        if status().setting == .on { animator?.resume() }
     }
 
-    /// Returns the logo to normal, e.g. before quitting or after an effect was interrupted by a crash.
+    /// Returns the logo to normal (fully lit), e.g. before quitting or after an effect was
+    /// interrupted by a crash. The chosen effect and brightness are kept.
     public func restoreNormalLighting() {
-        effects?.stop()
-        emitter?.restore(displayAwake: isDisplayAwake)
+        animator?.reset()
     }
 
     // MARK: - Password-free rule (only used when direct control isn't available)
@@ -164,34 +174,31 @@ public final class LogoController {
 
     private var isDisplayAwake: Bool { reader.isDisplayAwake() ?? false }
 
+    private var isLitAndAwake: Bool { isDisplayAwake && status().setting == .on }
+
     /// Switches through `corebrightnessd`, fading if the display is on.
     /// Returns `false` if the daemon didn't take the change.
     private func setDirectly(_ target: LogoIllumination, emitter: LightEmitter) async throws -> Bool {
-        effects?.pause()
+        animator?.pause()
         let awake = isDisplayAwake
         let fade = awake ? switchFadeDuration : 0
 
-        if fade > 0 {
-            if target == .off {
-                emitter.setFadeDuration(fade)
-                emitter.setLit(false)
-                try? await sleep(fade)
-            } else {
-                // Start from dark, so turning on doesn't flash before the fade begins.
-                emitter.setFadeDuration(0.01)
-                emitter.setLit(false)
-                try? await sleep(0.05)
-            }
+        if target == .off {
+            if fade > 0 { try? await emitter.fade(to: 0, over: fade, sleep: sleep) }
+            let applied = emitter.setSetting(.off) && emitter.setting == .off
+            // Back to normal. While the setting is off, relighting has no visible effect.
+            emitter.restore(displayAwake: awake)
+            return applied
         }
 
-        let applied = emitter.setSetting(target) && emitter.setting == target
-
-        if applied, target == .on, fade > 0 {
-            emitter.setFadeDuration(fade)
-            emitter.setLit(true)
-            try? await sleep(fade)
+        // Start from dark, so turning on doesn't flash before the fade begins.
+        if fade > 0 { try? await emitter.fade(to: 0, over: 0.05, sleep: sleep) }
+        let applied = emitter.setSetting(.on) && emitter.setting == .on
+        if applied, fade > 0 {
+            let level = animator?.level ?? 1
+            try? await emitter.fade(to: level, over: fade, sleep: sleep)
+            if level < 1 { return true } // Now held at the chosen brightness.
         }
-        // Back to normal. While the setting is off, relighting has no visible effect.
         emitter.restore(displayAwake: awake)
         return applied
     }
