@@ -2,21 +2,27 @@
 // Makes the animated examples of LogoLight's glowing logo: GIFs for the README and looping MP4s
 // (with a poster PNG each) for the website.
 //
-// Every frame is the app's own live view, the MacBook lid drawn by `LogoPreview`
-// (Sources/LogoLight/ControlPanel.swift). The debug build draws it at glows 0, 0.01 … 1 without
-// touching the logo (`LOGOLIGHT_RENDER_PANEL`), and the frames in between are blended from the
-// two nearest (accurate to an 8-bit step). Nothing else with a logo is drawn here.
+// Every frame is the app's own drawing: the live view, the MacBook lid drawn by `LogoPreview`
+// (Sources/LogoLight/ControlPanel.swift), and for the menu GIFs the whole menu panel around it. The debug
+// build draws them without touching the logo (`LOGOLIGHT_RENDER_PANEL`): the live view at glows 0, 0.01 … 1,
+// and the panel once, with the live view dark. The glow is pasted into the panel's lid, which gives the same
+// pixels as the panel drawn at that glow (checked byte for byte). Frames in between the steps are blended from
+// the two nearest (accurate to an 8-bit step). Nothing else with a logo is drawn here.
 //
 // Re-run from the repo root (Command Line Tools are enough, no ffmpeg needed):
 //
 //     swift scripts/make-media.swift                  # build, render into .build/media-frames, write the media
-//     swift scripts/make-media.swift --frames DIR     # use renders already in DIR/x3 and DIR/x6
+//     swift scripts/make-media.swift --frames DIR     # use the renders (and logs) a previous run left in DIR
 //
-// It writes docs/media/<clip>.gif (20 fps, lid 348 px wide) and site/media/<clip>.mp4
-// (H.264, 30 fps, lid 696 px wide) with site/media/<clip>.png, the video's poster. The videos are
-// kept outside site/public, so they aren't uploaded: Safari plays <video> only from servers that
-// answer Range requests, which Cloudflare's static assets don't. Move them into public/ with a
-// Worker that does, if the site should show them.
+// It writes:
+// - docs/media/<clip>.gif, the lid alone on the website's #0e1014 (20 fps, lid 348 px wide);
+// - docs/media/menu-breathe-light.gif and menu-breathe-dark.gif, the whole menu (510 × 945, scale 3) on its own
+//   light or dark background, with Breathe on, the slider at the top and the live view breathing, for a
+//   <picture> that follows prefers-color-scheme;
+// - site/media/<clip>.mp4 (H.264, 30 fps, lid 696 px wide) with site/media/<clip>.png, the video's poster.
+//   The videos are kept outside site/public, so they aren't uploaded: Safari plays <video> only from servers
+//   that answer Range requests, which Cloudflare's static assets don't. Move them into public/ with a Worker
+//   that does, if the site should show them.
 //
 // The motion follows the app at brightness 1, where every step fades all the way to dark or lit:
 // - The effects' steps are read from `LogoEffect.cycle` (Sources/LogoLightCore/LogoEffect.swift),
@@ -26,7 +32,7 @@
 //   (docs/corebrightnessd.md, "The fade curve"), from wherever the logo is toward 0 or 1.
 // - The live view shows the square root of the level (`LogoController.liveGlow`).
 // Each clip is whole cycles, starting where the logo is fully lit (a still of a paused GIF shows it
-// lit), so it loops seamlessly.
+// lit), so it loops seamlessly. The menu GIFs play the same cycle as breathe.gif.
 
 import Accelerate
 import AVFoundation
@@ -52,6 +58,10 @@ let clips = [
     Clip(name: "on-off", motion: "on-off", finish: "black"),
     Clip(name: "pulse-silver", motion: "pulse", finish: "silver"),
 ]
+
+/// The menu GIFs (`menu-<effect>-light.gif`, `menu-<effect>-dark.gif`): the whole panel with this effect
+/// switched on and its live view playing it, drawn at `gifFormat`'s scale and frame rate.
+let menuEffect = "breathe"
 
 /// On/Off: how long the logo stays dark after the fade out, and lit after the fade back in. These
 /// are the clip's own pauses, not the app's.
@@ -102,6 +112,7 @@ while let argument = arguments.popFirst() {
 }
 
 func renders(_ format: Format) -> URL { framesFolder.appendingPathComponent("x\(format.scale)") }
+func renderLog(_ format: Format) -> URL { framesFolder.appendingPathComponent("render-x\(format.scale).log") }
 
 // MARK: - Rendering the live view
 
@@ -139,11 +150,16 @@ if shouldRender {
         print("Rendering the live view at scale \(format.scale)…")
         let folder = renders(format)
         try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        // The panels (`on-dark.png`, `on-light.png`) are drawn as the menu GIFs need them: Breathe on, the
+        // slider at the top, and the live view dark, for the glow to be pasted in.
         let status = run(repo.appendingPathComponent(".build/debug/LogoLight").path, [], environment: [
             "LOGOLIGHT_RENDER_PANEL": folder.path,
             "LOGOLIGHT_RENDER_SCALE": String(format.scale),
             "LOGOLIGHT_RENDER_GLOWS": glows,
-        ], log: framesFolder.appendingPathComponent("render-x\(format.scale).log"))
+            "LOGOLIGHT_RENDER_EFFECT": menuEffect,
+            "LOGOLIGHT_RENDER_BRIGHTNESS": "1",
+            "LOGOLIGHT_RENDER_GLOW": "0",
+        ], log: renderLog(format))
         guard status == 0 else { fail("the renderer failed (exit \(status)), see \(framesFolder.path)") }
     }
 }
@@ -272,44 +288,119 @@ func canvas(width: Int, height: Int, bitmapInfo: UInt32 = CGImageAlphaInfo.noneS
     return context
 }
 
-/// The live view at each glow step, on the background with its margin: opaque, so two can be blended.
+/// Pixels from the top left, inclusive.
+struct PixelBox {
+    var left: Int
+    var top: Int
+    var right: Int
+    var bottom: Int
+
+    func contains(x: Int, y: Int) -> Bool { x >= left && x <= right && y >= top && y <= bottom }
+}
+
+/// An image's bytes as RGBA, premultiplied, in sRGB (the renders' own format, so they're unchanged).
+func rgba(_ image: CGImage) -> [UInt8] {
+    var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+    guard let context = CGContext(data: &bytes, width: image.width, height: image.height, bitsPerComponent: 8,
+                                  bytesPerRow: image.width * 4, space: sRGB,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { fail("can't read an image") }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return bytes
+}
+
+func loadImage(_ url: URL) -> CGImage {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { fail("missing \(url.path); render the frames again") }
+    return image
+}
+
+/// The live view at each glow step, and how a frame is made from them.
 struct Levels {
+    /// Everything that doesn't change with the glow, if the steps don't cover the whole frame.
+    let base: CGImage?
+    /// The live view at each glow step: opaque wherever they're drawn, so two can be blended.
     let images: [CGImage]
+    /// Where the steps are drawn, in CoreGraphics' coordinates (from the bottom left).
+    let rect: CGRect
+    /// The only part of them drawn over `base`.
+    let clip: CGRect?
     let width: Int
     let height: Int
+    /// Where the steps differ, in the frame: nothing outside it ever changes.
+    let changed: PixelBox
 
+    /// The live view on the website's background, with a margin.
     init(finish: String, format: Format) {
-        var images: [CGImage] = []
-        var size = (width: 0, height: 0)
-        for step in 0...glowSteps {
-            let url = renders(format).appendingPathComponent("live-\(finish)-\(step).png")
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let lid = CGImageSourceCreateImageAtIndex(source, 0, nil)
-            else { fail("missing \(url.path); render the frames again") }
-            size = (lid.width + 2 * format.padding, lid.height + 2 * format.padding)
-            let context = canvas(width: size.width, height: size.height)
+        let lids = (0...glowSteps).map { loadImage(renders(format).appendingPathComponent("live-\(finish)-\($0).png")) }
+        let (width, height) = (lids[0].width + 2 * format.padding, lids[0].height + 2 * format.padding)
+        let context = canvas(width: width, height: height)
+        images = lids.map { lid in
             context.setFillColor(CGColor(srgbRed: CGFloat(background.red) / 255, green: CGFloat(background.green) / 255,
                                          blue: CGFloat(background.blue) / 255, alpha: 1))
-            context.fill(CGRect(x: 0, y: 0, width: size.width, height: size.height))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             context.draw(lid, in: CGRect(x: format.padding, y: format.padding, width: lid.width, height: lid.height))
-            images.append(context.makeImage()!)
+            return context.makeImage()!
         }
-        self.images = images
-        (width, height) = size
+        (self.width, self.height) = (width, height)
+        (base, rect, clip) = (nil, CGRect(x: 0, y: 0, width: width, height: height), nil)
+        changed = Self.difference(images).box
     }
 
-    /// Draws the live view at `glow`, blended from the two nearest steps.
+    /// The whole menu panel (`panel`, drawn with the live view dark), with the live view's glow pasted in at
+    /// `lid` (its top left in the panel, in pixels). The glow stays inside the lid, where the live view is opaque,
+    /// so this gives the same pixels as the panel drawn at each glow.
+    init(panel: CGImage, lid: (x: Int, y: Int), finish: String, format: Format) {
+        images = (0...glowSteps).map { loadImage(renders(format).appendingPathComponent("live-\(finish)-\($0).png")) }
+        let (box, isOpaque) = Self.difference(images)
+        guard isOpaque else { fail("the glow reaches the live view's edge, so it can't be pasted into the panel") }
+        (base, width, height) = (panel, panel.width, panel.height)
+        rect = CGRect(x: lid.x, y: height - lid.y - images[0].height, width: images[0].width, height: images[0].height)
+        clip = CGRect(x: lid.x + box.left, y: height - lid.y - box.bottom - 1,
+                      width: box.right - box.left + 1, height: box.bottom - box.top + 1)
+        changed = PixelBox(left: lid.x + box.left, top: lid.y + box.top, right: lid.x + box.right, bottom: lid.y + box.bottom)
+    }
+
+    /// Where the steps differ from the first, and whether they're opaque there. The glow only adds light, more
+    /// with each step, so the last step differs wherever any does.
+    static func difference(_ images: [CGImage]) -> (box: PixelBox, isOpaque: Bool) {
+        let (first, last) = (rgba(images[0]), rgba(images[images.count - 1]))
+        let width = images[0].width
+        var box = PixelBox(left: width, top: images[0].height, right: -1, bottom: -1)
+        var isOpaque = true
+        for i in stride(from: 0, to: first.count, by: 4)
+        where first[i] != last[i] || first[i + 1] != last[i + 1] || first[i + 2] != last[i + 2] || first[i + 3] != last[i + 3] {
+            let (x, y) = (i / 4 % width, i / 4 / width)
+            box = PixelBox(left: min(box.left, x), top: min(box.top, y), right: max(box.right, x), bottom: max(box.bottom, y))
+            if first[i + 3] != 255 || last[i + 3] != 255 { isOpaque = false }
+        }
+        guard box.right >= 0 else { fail("the live view's steps are all the same") }
+        return (box, isOpaque)
+    }
+
+    /// Draws the frame at a glow step.
+    func draw(step: Int, in context: CGContext) {
+        context.saveGState()
+        defer { context.restoreGState() }
+        if let base { context.draw(base, in: CGRect(x: 0, y: 0, width: width, height: height)) }
+        if let clip { context.clip(to: clip) }
+        context.draw(images[step], in: rect)
+    }
+
+    /// Draws the frame at `glow`, the live view blended from the two nearest steps.
     func draw(glow: Double, in context: CGContext) {
         let x = min(max(glow, 0), 1) * Double(glowSteps)
         let below = min(Int(x), glowSteps - 1)
-        let rect = CGRect(x: 0, y: 0, width: width, height: height)
-        context.setAlpha(1)
+        context.saveGState()
+        defer { context.restoreGState() }
+        if let base { context.draw(base, in: CGRect(x: 0, y: 0, width: width, height: height)) }
+        if let clip { context.clip(to: clip) }
         context.draw(images[below], in: rect)
         let share = x - Double(below)
         if share > 0 {
             context.setAlpha(share)
             context.draw(images[below + 1], in: rect)
-            context.setAlpha(1)
         }
     }
 }
@@ -328,21 +419,65 @@ func glows(_ motion: Motion, fps: Int) -> [Double] {
 // glows in between banded (rings around the logo, a line across the lid), and it re-quantises even an
 // image that comes with its own palette.
 
-/// Calls `body` with each pixel of an RGBX context as 0xRRGGBB, top row first, and its index.
-func forEachPixel(_ context: CGContext, _ body: (Int, UInt32) -> Void) {
+/// Calls `body` with each pixel of an RGBX context in `box` (all of it without one) as 0xRRGGBB, top row first,
+/// and its index in the frame.
+func forEachPixel(_ context: CGContext, in box: PixelBox? = nil, _ body: (Int, UInt32) -> Void) {
     let bytes = context.data!.assumingMemoryBound(to: UInt8.self)
     let row = context.bytesPerRow
-    for y in 0..<context.height {
-        for x in 0..<context.width {
+    let box = box ?? PixelBox(left: 0, top: 0, right: context.width - 1, bottom: context.height - 1)
+    for y in box.top...box.bottom {
+        for x in box.left...box.right {
             let o = y * row + x * 4
             body(y * context.width + x, UInt32(bytes[o]) << 16 | UInt32(bytes[o + 1]) << 8 | UInt32(bytes[o + 2]))
         }
     }
 }
 
-/// The colours of every glow step of a finish, cut down to 255 by median cut (the box with the widest range in
-/// a channel is split at its middle). All 101 steps use well under a thousand, so each colour is within about
-/// a level of its own and the GIF needs no dithering. Index 255 is left transparent.
+/// Every colour drawn inside `box` (all of the frame without one) over all the glow steps, sorted.
+func colors(of levels: Levels, in box: PixelBox? = nil) -> [UInt32] {
+    var isUsed = [Bool](repeating: false, count: 1 << 24)
+    let context = canvas(width: levels.width, height: levels.height)
+    for step in 0...glowSteps {
+        levels.draw(step: step, in: context)
+        forEachPixel(context, in: box) { _, color in isUsed[Int(color)] = true }
+    }
+    return isUsed.indices.filter { isUsed[$0] }.map(UInt32.init)
+}
+
+/// Cuts `colors` down to at most `count` by median cut: the box with the widest range in a channel is split at its
+/// middle, and each box gives its mean.
+func medianCut(_ colors: [UInt32], to count: Int) -> [UInt32] {
+    var boxes = colors.isEmpty || count < 1 ? [] : [colors]
+    func widest(_ box: [UInt32]) -> (extent: UInt32, shift: UInt32, middle: UInt32) {
+        var best: (extent: UInt32, shift: UInt32, middle: UInt32) = (0, 0, 0)
+        for shift: UInt32 in [16, 8, 0] {
+            let values = box.map { ($0 >> shift) & 0xFF }
+            let (low, high) = (values.min() ?? 0, values.max() ?? 0)
+            if high - low > best.extent { best = (high - low, shift, (low + high + 1) / 2) }
+        }
+        return best
+    }
+    var splits = boxes.map(widest)
+    while boxes.count < count, let i = splits.indices.max(by: { splits[$0].extent < splits[$1].extent }),
+          splits[i].extent > 0 {
+        let (box, shift, middle) = (boxes[i], splits[i].shift, splits[i].middle)
+        boxes[i] = box.filter { ($0 >> shift) & 0xFF < middle }
+        boxes.append(box.filter { ($0 >> shift) & 0xFF >= middle })
+        splits[i] = widest(boxes[i])
+        splits.append(widest(boxes[boxes.count - 1]))
+    }
+    return boxes.map { box in
+        let count = UInt32(box.count)
+        return [16, 8, 0].reduce(UInt32(0)) { color, shift in
+            let sum = box.reduce(UInt32(0)) { $0 + ($1 >> shift) & 0xFF }
+            return color | ((sum + count / 2) / count) << shift
+        }
+    }
+}
+
+/// Up to 255 colours: `exact` as they are, and the rest cut from `colors`. The live view's glow steps use well
+/// under a thousand, so each is within about a level of its own and the GIF needs no dithering. Index 255 is left
+/// transparent.
 final class Palette {
     static let transparent: UInt8 = 255
     /// 0xRRGGBB.
@@ -350,39 +485,9 @@ final class Palette {
     /// The index of the nearest colour for each 0xRRGGBB, found on first use (`.max` until then).
     private var nearest = [UInt16](repeating: .max, count: 1 << 24)
 
-    init(_ levels: Levels) {
-        var isUsed = [Bool](repeating: false, count: 1 << 24)
-        let context = canvas(width: levels.width, height: levels.height)
-        for image in levels.images {
-            context.draw(image, in: CGRect(x: 0, y: 0, width: levels.width, height: levels.height))
-            forEachPixel(context) { _, color in isUsed[Int(color)] = true }
-        }
-        var boxes = [isUsed.indices.filter { isUsed[$0] }.map(UInt32.init)]
-        func widest(_ box: [UInt32]) -> (extent: UInt32, shift: UInt32, middle: UInt32) {
-            var best: (extent: UInt32, shift: UInt32, middle: UInt32) = (0, 0, 0)
-            for shift: UInt32 in [16, 8, 0] {
-                let values = box.map { ($0 >> shift) & 0xFF }
-                let (low, high) = (values.min() ?? 0, values.max() ?? 0)
-                if high - low > best.extent { best = (high - low, shift, (low + high + 1) / 2) }
-            }
-            return best
-        }
-        var splits = boxes.map(widest)
-        while boxes.count < 255, let i = splits.indices.max(by: { splits[$0].extent < splits[$1].extent }),
-              splits[i].extent > 0 {
-            let (box, shift, middle) = (boxes[i], splits[i].shift, splits[i].middle)
-            boxes[i] = box.filter { ($0 >> shift) & 0xFF < middle }
-            boxes.append(box.filter { ($0 >> shift) & 0xFF >= middle })
-            splits[i] = widest(boxes[i])
-            splits.append(widest(boxes[boxes.count - 1]))
-        }
-        colors = boxes.map { box in
-            let count = UInt32(box.count)
-            return [16, 8, 0].reduce(UInt32(0)) { color, shift in
-                let sum = box.reduce(UInt32(0)) { $0 + ($1 >> shift) & 0xFF }
-                return color | ((sum + count / 2) / count) << shift
-            }
-        }
+    init(cutting colors: [UInt32], keeping exact: [UInt32] = []) {
+        guard exact.count < 255 || colors.isEmpty else { fail("too many colours to keep exactly (\(exact.count))") }
+        self.colors = exact + medianCut(colors, to: 255 - exact.count)
     }
 
     func index(of color: UInt32) -> UInt8 {
@@ -399,6 +504,27 @@ final class Palette {
     }
 }
 
+/// A colour table for the first frame of a GIF whose later frames only change `box`. The first frame draws the
+/// whole picture, and the menu's 1,300 or so colours don't fit one table with the glow's: cut together, the glow
+/// came out 4–5 levels off, which flickered each time the GIF looped back to this frame. So the 32 commonest
+/// colours outside the box (the flat areas, 92% of the menu) are kept exactly, 96 entries go to the glow box (within
+/// 2 levels, as close as the later frames get) and the rest to the other colours (within 8 levels, apart from
+/// a few dozen pixels on coloured edges).
+func firstFramePalette(_ context: CGContext, changing box: PixelBox) -> Palette {
+    var inside = Set<UInt32>()
+    var outside: [UInt32: Int] = [:]
+    forEachPixel(context) { i, color in
+        if box.contains(x: i % context.width, y: i / context.width) {
+            inside.insert(color)
+        } else {
+            outside[color, default: 0] += 1
+        }
+    }
+    let common = outside.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(32).map(\.key)
+    let rest = Set(outside.keys).subtracting(common).sorted()
+    return Palette(cutting: rest, keeping: common.sorted() + medianCut(inside.sorted(), to: 96))
+}
+
 /// A GIF89a with one global palette that loops forever. Each frame after the first holds only the box that
 /// changed, with the pixels that didn't transparent, and stays on screen under the next (disposal 1).
 struct GIFWriter {
@@ -406,8 +532,8 @@ struct GIFWriter {
     let width: Int
     let height: Int
     let palette: Palette
-    /// The palette indices on screen.
-    private var shown: [UInt8]?
+    /// The colours on screen.
+    private var shown: [UInt32]?
 
     init(width: Int, height: Int, palette: Palette) {
         (self.width, self.height, self.palette) = (width, height, palette)
@@ -415,10 +541,7 @@ struct GIFWriter {
         append16(width)
         append16(height)
         data.append(contentsOf: [0xF7, 0, 0]) // a global palette of 256 colours, background 0, square pixels
-        for i in 0..<256 {
-            let color = i < palette.colors.count ? palette.colors[i] : 0
-            data.append(contentsOf: [UInt8(color >> 16), UInt8((color >> 8) & 0xFF), UInt8(color & 0xFF)])
-        }
+        appendTable(palette)
         data.append(contentsOf: [0x21, 0xFF, 0x0B] + Array("NETSCAPE2.0".utf8) + [0x03, 0x01, 0x00, 0x00, 0x00]) // loop forever
     }
 
@@ -426,35 +549,48 @@ struct GIFWriter {
         data.append(contentsOf: [UInt8(value & 0xFF), UInt8(value >> 8)])
     }
 
-    /// Adds the frame drawn in an RGBX `context`, shown for `delay` hundredths of a second.
-    mutating func add(_ context: CGContext, delay: Int) {
-        var indices = [UInt8](repeating: 0, count: width * height)
-        forEachPixel(context) { i, color in indices[i] = palette.index(of: color) }
-        var (left, top, right, bottom) = (0, 0, width - 1, height - 1)
-        var pixels = indices
-        if let shown {
-            (left, top, right, bottom) = (width, height, -1, -1)
-            for y in 0..<height {
-                for x in 0..<width where indices[y * width + x] != shown[y * width + x] {
-                    (left, top, right, bottom) = (min(left, x), min(top, y), max(right, x), max(bottom, y))
-                }
-            }
-            if right < 0 { (left, top, right, bottom) = (0, 0, 0, 0) } // unchanged: one transparent pixel
-            pixels = []
-            for y in top...bottom {
-                for x in left...right {
-                    let i = y * width + x
-                    pixels.append(indices[i] == shown[i] ? Palette.transparent : indices[i])
-                }
-            }
+    private mutating func appendTable(_ palette: Palette) {
+        for i in 0..<256 {
+            let color = i < palette.colors.count ? palette.colors[i] : 0
+            data.append(contentsOf: [UInt8(color >> 16), UInt8((color >> 8) & 0xFF), UInt8(color & 0xFF)])
+        }
+    }
+
+    /// Adds the frame drawn in an RGBX `context`, shown for `delay` hundredths of a second. After the first frame,
+    /// only `changing` is looked at (the caller knows nothing outside it changes). `framePalette` gives the frame
+    /// its own colour table instead of the GIF's.
+    mutating func add(_ context: CGContext, delay: Int, changing: PixelBox? = nil, framePalette: Palette? = nil) {
+        let palette = framePalette ?? self.palette
+        let isFirst = shown == nil
+        var shown = self.shown ?? [UInt32](repeating: 0, count: width * height)
+        var indices = [UInt8](repeating: Palette.transparent, count: width * height)
+        var (left, top, right, bottom) = (width, height, -1, -1)
+        forEachPixel(context, in: isFirst ? nil : changing) { i, color in
+            let index = palette.index(of: color)
+            let drawn = palette.colors[Int(index)]
+            guard isFirst || drawn != shown[i] else { return }
+            indices[i] = index
+            shown[i] = drawn
+            let (x, y) = (i % width, i / width)
+            (left, top, right, bottom) = (min(left, x), min(top, y), max(right, x), max(bottom, y))
+        }
+        if right < 0 { (left, top, right, bottom) = (0, 0, 0, 0) } // unchanged: one transparent pixel
+        var pixels: [UInt8] = []
+        for y in top...bottom {
+            pixels.append(contentsOf: indices[(y * width + left)...(y * width + right)])
         }
         // Graphic control: leave the frame in place, the transparent index after the first frame, the delay.
-        data.append(contentsOf: [0x21, 0xF9, 0x04, shown == nil ? 0x04 : 0x05])
+        data.append(contentsOf: [0x21, 0xF9, 0x04, isFirst ? 0x04 : 0x05])
         append16(delay)
         data.append(contentsOf: [Palette.transparent, 0])
         data.append(0x2C)
         for value in [left, top, right - left + 1, bottom - top + 1] { append16(value) }
-        data.append(0) // no local palette, not interlaced
+        if let framePalette {
+            data.append(0x87) // its own table of 256 colours, not interlaced
+            appendTable(framePalette)
+        } else {
+            data.append(0) // the global table, not interlaced
+        }
         data.append(8) // the LZW code size for 256 colours
         let compressed = Self.lzw(pixels)
         for start in stride(from: 0, to: compressed.count, by: 255) {
@@ -463,7 +599,7 @@ struct GIFWriter {
             data.append(contentsOf: block)
         }
         data.append(0)
-        shown = indices
+        self.shown = shown
     }
 
     mutating func finish() -> Data {
@@ -514,14 +650,18 @@ struct GIFWriter {
     }
 }
 
-func writeGIF(_ glows: [Double], levels: Levels, palette: Palette, fps: Int, to url: URL) {
+/// Writes a GIF of `levels` at each glow. With `ownFirstPalette`, the first frame gets its own colour table
+/// (see `firstFramePalette`), for pictures with more colours than the glow, and `palette` is only the glow's.
+func writeGIF(_ glows: [Double], levels: Levels, palette: Palette, ownFirstPalette: Bool = false, fps: Int, to url: URL) {
     // A GIF's delays are in hundredths of a second.
     guard 100 % fps == 0 else { fail("a GIF can't play at \(fps) fps exactly; use one that divides 100") }
     var gif = GIFWriter(width: levels.width, height: levels.height, palette: palette)
     let context = canvas(width: levels.width, height: levels.height)
-    for glow in glows {
+    for (frame, glow) in glows.enumerated() {
         levels.draw(glow: glow, in: context)
-        gif.add(context, delay: 100 / fps)
+        let framePalette = frame == 0 && ownFirstPalette
+            ? firstFramePalette(context, changing: levels.changed) : nil
+        gif.add(context, delay: 100 / fps, changing: levels.changed, framePalette: framePalette)
     }
     do { try gif.finish().write(to: url) } catch { fail("can't write \(url.path): \(error)") }
 }
@@ -642,7 +782,7 @@ func size(_ url: URL) -> String {
 for (format, isGIF) in [(gifFormat, true), (videoFormat, false)] {
     for finish in Set(clips.map(\.finish)).sorted() {
         let levels = Levels(finish: finish, format: format)
-        let palette = isGIF ? Palette(levels) : nil
+        let palette = isGIF ? Palette(cutting: colors(of: levels)) : nil
         for clip in clips where clip.finish == finish {
             let clipMotion = motion(clip.motion)
             let frames = glows(clipMotion, fps: format.fps)
@@ -662,6 +802,29 @@ for (format, isGIF) in [(gifFormat, true), (videoFormat, false)] {
             }
         }
     }
+}
+
+// The menu, with the effect on and its live view playing it. The panels were drawn with the live view dark; the
+// renderer says where the lid is in each.
+let menuFrames = glows(motion(menuEffect), fps: gifFormat.fps)
+let renderOutput = (try? String(contentsOf: renderLog(gifFormat), encoding: .utf8)) ?? ""
+for appearance in ["light", "dark"] {
+    let name = "on-\(appearance).png"
+    let place = try! NSRegularExpression(pattern: NSRegularExpression.escapedPattern(for: "/\(name): lid at x ")
+                                         + #"([0-9.]+), y ([0-9.]+)"#)
+    guard let match = place.firstMatch(in: renderOutput, range: NSRange(renderOutput.startIndex..., in: renderOutput)),
+          let x = Double(renderOutput[Range(match.range(at: 1), in: renderOutput)!]),
+          let y = Double(renderOutput[Range(match.range(at: 2), in: renderOutput)!])
+    else { fail("the renderer didn't say where the lid is in \(name); render the frames again") }
+    let lid = (x: x * Double(gifFormat.scale), y: y * Double(gifFormat.scale))
+    guard lid.x == lid.x.rounded(), lid.y == lid.y.rounded() else { fail("the lid isn't on whole pixels in \(name)") }
+    let levels = Levels(panel: loadImage(renders(gifFormat).appendingPathComponent(name)), lid: (Int(lid.x), Int(lid.y)),
+                        finish: "black", format: gifFormat)
+    let url = gifFolder.appendingPathComponent("menu-\(menuEffect)-\(appearance).gif")
+    writeGIF(menuFrames, levels: levels, palette: Palette(cutting: colors(of: levels, in: levels.changed)),
+             ownFirstPalette: true, fps: gifFormat.fps, to: url)
+    print("\(url.path): \(levels.width) × \(levels.height), \(menuFrames.count) frames, "
+          + String(format: "%.2f s, ", Double(menuFrames.count) / Double(gifFormat.fps)) + size(url))
 }
 
 try? fileManager.removeItem(at: videoWork)

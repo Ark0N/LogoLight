@@ -24,20 +24,12 @@
 
 <br>
 
-<table align="center">
-  <tr>
-    <td align="center" valign="middle">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/menu-dark.png">
-        <img src="docs/menu-light.png" width="250" alt="LogoLight's menu: a Backlight switch at the top, then a live view of the glowing logo on the lid, then a brightness slider, then a switch each for the Breathe, Pulse and Heartbeat effects, with Heartbeat on.">
-      </picture>
-    </td>
-    <td align="center" valign="middle">
-      <img src="docs/media/breathe.gif" width="400" alt="LogoLight's live view of the lid: the Apple logo slowly fades out and back in (Breathe).">
-      <br><sub>The live view at the top of the menu, breathing</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
+    <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider and the effect switches.">
+  </picture>
+</p>
 
 ## Features
 
