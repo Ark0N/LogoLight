@@ -91,6 +91,47 @@ func effectTests(_ t: TestHarness) async {
         t.expectEqual(LogoEffect.none.cycle, [])
     }
 
+    t.test("an effect's cycle can start with a rise or a fall") {
+        for effect in LogoEffect.allCases where effect != .none {
+            for lit in [true, false] {
+                let turned = effect.cycle(startingLit: lit)
+                t.expectEqual(turned.first?.lit, lit)
+                let twice = effect.cycle + effect.cycle
+                t.expect(effect.cycle.indices.contains { Array(twice[$0..<$0 + turned.count]) == turned },
+                         "\(effect) should keep its steps in order")
+            }
+        }
+    }
+
+    await t.test("turning on with an effect starts it from dark, with a rise") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setEffect(.breathe)
+        f.clock.budget = 3
+        try await f.controller.set(.on)
+        await settle()
+        let rise = LogoEffect.breathe.cycle(startingLit: true)[0]
+        let afterSwitchingOn = Array(f.daemon.log.drop(while: { $0 != "mode=2" }).dropFirst())
+        t.expectEqual(Array(afterSwitchingOn.prefix(2)), ["fade=\(rise.fade)", "unblank"])
+        t.expect(!f.daemon.log.contains("fade=1.0"), "no separate fade in before the effect")
+    }
+
+    await t.test("an effect restarts with a fall when a wake has relit the logo") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        f.controller.setEffect(.pulse)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.daemon.setHeld(at: 1, state: 2) // corebrightnessd relights the logo on wake
+        f.mac.displayAwake = true
+        f.daemon.log.removeAll()
+        f.clock.budget = 2
+        f.controller.displayDidWake()
+        await settle()
+        let fall = LogoEffect.pulse.cycle(startingLit: false)[0]
+        // The heading is unknown after a wake, so it turns round first (ignored here).
+        t.expectEqual(Array(f.daemon.log.prefix(4)), ["fade=1000000000.0", "unblank", "fade=\(fall.fade)", "blank"])
+    }
+
     await t.test("plays the effect's steps in a loop") {
         let f = Fixture(direct: true)
         f.clock.budget = 8
@@ -226,6 +267,16 @@ func brightnessTests(_ t: TestHarness) async {
         t.expect(f.daemon.isHolding)
     }
 
+    await t.test("turning on at a brightness fades once, with no correction after") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        try await f.controller.set(.on)
+        let count = f.daemon.log.count
+        await settle()
+        t.expectEqual(f.daemon.log.count, count)
+        t.expect(!f.controller.animator!.isAnimating)
+    }
+
     await t.test("turns the logo on at the chosen brightness by fading straight up from dark") {
         let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
         f.controller.setBrightness(0.5)
@@ -316,7 +367,7 @@ func brightnessTests(_ t: TestHarness) async {
     await t.test("effects keep moving when the peak is a held level") {
         let f = Fixture(direct: true)
         f.daemon.setHeld(at: 0, state: 1)
-        f.clock.budget = 3 // stops during the second dark step
+        f.clock.budget = 4 // from dark it starts with a rise, and stops during the second dark step
         f.controller.setBrightness(0.5)
         f.controller.setEffect(.pulse)
         await settle()

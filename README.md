@@ -45,9 +45,9 @@ CoreBrightness's `BrightnessSystemClient`, the interface Control Center uses for
 | `LEPWMState` | Live state, e.g. `Factor` (fade position), `FinalNits`, `Lux` (read only). |
 
 LogoLight uses these to switch the logo without a password and to fade it smoothly:
-turning off fades out over a second first, and turning on starts from dark and fades in.
-The effects are loops of the same fades. They pause when the logo is off or the display
-sleeps.
+turning off fades out over a second first, and turning on starts from dark and fades in
+(with an effect chosen, the effect's first rise is the fade in). The effects are loops of
+the same fades. They pause when the logo is off or the display sleeps.
 
 The keyboard backlight also listens to `DisplayLogicalState`, so right after every Blank,
 LogoLight tells the keyboard alone that the display is still on, which keeps it lit. When the

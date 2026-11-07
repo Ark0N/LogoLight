@@ -90,9 +90,9 @@ public final class LogoController {
         defer { isSwitching = false }
 
         if let emitter {
-            if try await setDirectly(target, emitter: emitter) {
-                lastApplied = target
-                if target == .on, isDisplayAwake { animator?.resume() }
+            let outcome = try await setDirectly(target, emitter: emitter)
+            if outcome != .notApplied {
+                didApply(target, atChosenLevel: outcome == .appliedAtLevel)
                 return status()
             }
             // corebrightnessd didn't take the change; fall back to the documented command.
@@ -103,9 +103,15 @@ public final class LogoController {
         } catch where target == .on && CoreBrightnessSetting.isMissingKeyError(error) {
             // Nothing to delete: the setting is already at its default (on).
         }
-        lastApplied = target
-        if target == .on, isDisplayAwake { animator?.resume() }
+        didApply(target, atChosenLevel: false)
         return try await waitForSetting(target)
+    }
+
+    /// After the setting has changed: starts the chosen effect or brightness, unless the logo is
+    /// already held at that brightness.
+    private func didApply(_ target: LogoIllumination, atChosenLevel: Bool) {
+        lastApplied = target
+        if target == .on, !atChosenLevel, isDisplayAwake { animator?.resume() }
     }
 
     /// Flips the current setting.
@@ -200,11 +206,20 @@ public final class LogoController {
 
     private var isLitAndAwake: Bool { isDisplayAwake && status().setting == .on }
 
+    /// What `setDirectly` did.
+    private enum SwitchOutcome {
+        /// corebrightnessd didn't take the change.
+        case notApplied
+        /// The setting changed. The chosen effect or brightness still needs starting.
+        case applied
+        /// The setting changed, and the logo is at the chosen brightness, with no effect chosen.
+        case appliedAtLevel
+    }
+
     /// Switches through `corebrightnessd`, fading if the display is on.
-    /// Returns `false` if the daemon didn't take the change.
     ///
     /// The display can sleep or wake during a fade, so it's checked again after each one.
-    private func setDirectly(_ target: LogoIllumination, emitter: LightEmitter) async throws -> Bool {
+    private func setDirectly(_ target: LogoIllumination, emitter: LightEmitter) async throws -> SwitchOutcome {
         animator?.pause()
         let fade = isDisplayAwake ? switchFadeDuration : 0
 
@@ -213,19 +228,29 @@ public final class LogoController {
             let applied = emitter.setSetting(.off) && emitter.setting == .off
             // Back to normal. While the setting is off, relighting has no visible effect.
             emitter.restore(displayAwake: isDisplayAwake)
-            return applied
+            return applied ? .applied : .notApplied
         }
 
         // Start from dark, so turning on doesn't flash before the fade begins.
         if fade > 0 { await switchFade(to: 0, over: 0.05, emitter: emitter) }
-        let applied = emitter.setSetting(.on) && emitter.setting == .on
-        if applied, fade > 0, isDisplayAwake {
+        guard emitter.setSetting(.on), emitter.setting == .on else {
+            emitter.restore(displayAwake: isDisplayAwake)
+            return .notApplied
+        }
+        if fade > 0, isDisplayAwake {
+            // An effect takes over from dark, starting with a rising step.
+            if effect != .none { return .applied }
             let level = animator?.level ?? 1
             await switchFade(to: level, over: fade, emitter: emitter)
-            if level < 1, isDisplayAwake { return true } // Now held at the chosen brightness.
+            if isDisplayAwake {
+                // Below full it's now held at the level; at full it goes back to normal.
+                if level >= 1 { emitter.restore(displayAwake: true) }
+                // An effect or brightness chosen during the fade still needs applying.
+                return effect == .none && animator?.level == level ? .appliedAtLevel : .applied
+            }
         }
         emitter.restore(displayAwake: isDisplayAwake)
-        return applied
+        return .applied
     }
 
     /// One of the switch's fades. `displayDidSleep()` cancels it, so it stops without a hold,

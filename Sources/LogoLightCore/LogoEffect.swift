@@ -32,6 +32,13 @@ public enum LogoEffect: String, CaseIterable, Sendable {
              FadeStep(lit: true, fade: 0.12, hold: 0.05), FadeStep(lit: false, fade: 0.6, hold: 0.9)]
         }
     }
+
+    /// The cycle, turned to start with its first step toward lit (`true`) or toward dark.
+    public func cycle(startingLit lit: Bool) -> [FadeStep] {
+        let steps = cycle
+        let start = steps.firstIndex { $0.lit == lit } ?? 0
+        return Array(steps[start...] + steps[..<start])
+    }
 }
 
 /// Fade to dark or lit over `fade` seconds, then wait `hold` seconds.
@@ -97,12 +104,15 @@ public final class LogoAnimator {
     }
 
     /// Starts (or restarts) the chosen effect, or with no effect, fades to the chosen brightness.
+    /// An effect starts with the step that leads away from where the logo is: a rise when it's
+    /// dark (e.g. just turned on), a fall when it's lit (e.g. relit by a wake).
     public func resume() {
         cancel()
         if effect == .none {
             adjustBrightness()
         } else {
-            play(effect.cycle)
+            let isDark = (emitter.fadeLevel ?? 1) < level / 2
+            play(effect.cycle(startingLit: isDark))
         }
     }
 
