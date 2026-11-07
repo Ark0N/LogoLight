@@ -124,7 +124,8 @@ followed the same curve, scaled to the remaining 0.49.
 The table fits a critically damped spring, `p(s) = 1 - (1 + k·s)·exp(-k·s)` with `k = 6.51`
 and `s` the share of the duration elapsed, to within 0.009 rms. Its top speed is at
 `s = 0.154`. As far as has been measured, every fade starts from rest: a new fade doesn't
-keep the speed of the one it replaces. The fake `corebrightnessd` in the tests uses this curve.
+keep the speed of the one it replaces. The fake `corebrightnessd` in the tests uses this curve,
+moved in the daemon's frames (see "Easing onto a level").
 
 ## Holding a level
 
@@ -132,7 +133,8 @@ There's no key for the logo's brightness, but the fade can be stopped at any lev
 
 1. Start a normal fade toward the level: set the duration, then write the state that heads
    that way.
-2. Poll `LEPWMState.Factor` (every 10 ms is fine) until it passes the level.
+2. Poll `LEPWMState.Factor` (every 10 ms is fine) until it passes the level (or ease onto it,
+   see "Easing onto a level").
 3. Set `LEPWMFactorFadeDuration` to a huge value (`1e9` s is accepted) and write the
    **opposite** state. That starts a new fade from the current factor which, at that speed,
    never visibly moves. It was measured flat to 2 decimals over 2–3.5 s; at 1e9 s it would
@@ -160,7 +162,48 @@ target. It stayed flat over 3 s, moving up or down from a held level works, and 
 60 Hz slider drag ended exactly on target (that was before the fade started following the
 drag, which hasn't been checked on the MacBook yet). Effects peak at the level; Heartbeat's
 quickest beats overshoot a little (0.30 for a level of 0.265), because polling can't stop a
-very fast fade precisely.
+very fast fade precisely. All of that was with the fade cut short at the level; LogoLight now
+eases onto it instead (next section), which hasn't been through `tools/livecheck` yet.
+
+## Easing onto a level
+
+Cutting a fade short at a level stops the logo at speed. Measured on 2026-11-07, with LogoLight
+quit and a sampler reading `Factor` and the PWM duty of `bklb-backlight` and `kbd-backlight`
+every ~6 ms (known keys only, ending with the normal-lighting restore):
+
+- **The daemon moves in frames.** `Factor` and the logo's PWM change about every 17.5 ms
+  (median; p10 12.4 ms, p90 19.3 ms), so about 57 times a second, not on every read. A new fade
+  first moves 18–20 ms after the state write, in both directions. Restarting a fade at 60 Hz
+  mostly stalls it, since each restart costs about a frame: a 60 Hz glide up to 0.8 ended at 0.727.
+- **Cut short**, with a stretched fade polled every 10 ms: 0.25 s slider moves (1 → 0.265,
+  0.265 → 0.7, 0.7 → 0.3) stopped at 44–75% of the move's top speed (2.2–3.1 per second just
+  before the stop). An effect-style rise from 0 to 0.265 over 3.5 s stopped at 89% of it.
+- **The keyboard** rests at a duty of 0.197–0.200. One Blank and its correction (a move) dip
+  it to about 0.19, 4–6 of them in quick succession to 0.168–0.173, and about 70 (a 20 Hz glide
+  over 1.2 s) to 0.129, which is visible.
+
+What LogoLight does now (`LightEmitter`), which is the hybrid that worked: the stretched fade
+carries the logo until it has covered 70% of the way to the level, measuring its speed `v`.
+Then it eases out, following `1 - (1 - u)²` over `L = 2·|r| / |v|` (kept between 0.15 and
+1.2 s), where `r` is the distance left, so the ease starts at the fade's speed. That's done in
+a fixed few segments, 4 (6 when `L` is 0.4 s or more), each `max(0.05, L / N)` long. Each segment
+starts a fade (turning round first) with the duration that covers its part of the way by the
+segment's end, after the start latency: `(segment − 0.018) / t(delta / D)`, with `t` the spring's
+inverse (by bisection) and `D` the distance to 0 or 1. The hold ends it. Measured:
+
+- Slider moves with 4–5 segments (0.7 → 0.3, 0.3 → 0.8, 0.8 → 0.265) stopped at 0.24–0.51 per
+  second, 10–17% of the top speed, landing within 0.003, 0.022 and 0.002. The keyboard dipped
+  to 0.168–0.173.
+- The effect-style rise with 6 segments stopped at 0.03 per second (11%) instead of 0.14 (89%),
+  landed at 0.265 and took 0.5 s longer. The keyboard dipped to 0.182.
+
+In LogoLight, a move to 0 or 1 stays a plain fade. A level is eased onto only once its target
+has stayed put for two polls, so a slider being dragged is followed as before, and a change
+while easing on stops it short for a new fade. An effect shortens the hold after a peak by
+the time its fade overran. In the tests' fake (which moves in frames, as above), slider clicks
+land within 0.002 and stop at 6–13% of the top speed, and Breathe and Pulse keep their cycle
+within 0.1 s. Heartbeat's holds after its beats are too short to make up for easing on, so at
+brightness 0.5 its cycle takes about 1.8 s instead of 1.55 s.
 
 Not tested yet: what `corebrightnessd` does with a held level when the display **really**
 sleeps and wakes, since its own Blank/Unblank could use the huge duration. LogoLight resets the

@@ -31,7 +31,9 @@ runs but says the logo isn't available. So:
   `Sources/LogoLightTests/ControllerTests.swift` (`SimulatedMac`, `FakeDaemon`, which logs every
   key it's sent, and `FakeClock`) model the real hardware's behaviour. Use
   `Fixture(timeDriven: true)` for new tests: the fake's fades then move as the code sleeps, along
-  the measured curve, so landings, overshoots and timing look like the real logo's. (The older
+  the measured curve in the daemon's 17.5 ms frames, so landings, overshoots and timing look like
+  the real logo's. It can trace the level every millisecond, and `FakeClock.returnsWhenCancelledLate`
+  makes a sleep that's cancelled once its time is up return normally, as `Task.sleep` does. (The older
   tests move a fade a step per read instead.)
 - Anything that changes what the LED does must be checked on the MacBook before it's called
   done, with `tools/livecheck`. Say so explicitly if it wasn't.
@@ -144,6 +146,19 @@ changed).
 
 **Changed since the last check on the MacBook** (logic tested with the time-driven fake only;
 run `tools/livecheck` and watch the logo):
+- A level in between is now eased onto with a few short fades instead of a fade cut short at
+  speed (docs/corebrightnessd.md, "Easing onto a level"): the slider, turning on at a brightness,
+  a wake or launch, and effect peaks, whose hold is shortened to make up for it. Watch that it
+  slows to a stop and the keyboard doesn't visibly dim; livecheck prints the speed at the stop
+  and the keyboard's lowest duty. At a brightness below full, Heartbeat beats slower (about 1.8 s
+  a cycle instead of 1.55 s at 0.5), since its holds are too short to absorb it. Ask the user.
+- A slow drag no longer holds the logo again at every step (which flipped `DisplayLogicalState`
+  60 times a second), and nudging the slider at the top and back ends at normal full brightness.
+  A followed target missed by more than 0.02 gets a new fade, and a fade cancelled as its sleep
+  returns writes nothing more.
+- `tools/livecheck` now also relaunches (a fresh `LogoController.start` after a level held in
+  Blank), turns on with Pulse chosen, and handles a wake through `scheduleWake`, so those
+  bullets below are covered by it too. It hasn't been run since; it builds.
 - The slider's fade now follows a drag instead of restarting at each step.
 - Effects have longer rises than falls (starting values in `LogoEffect.cycle`, to tune by eye),
   and turning on with an effect starts it with a rise from dark instead of a separate fade in.
