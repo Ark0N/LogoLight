@@ -226,6 +226,28 @@ func fadeTests(_ t: TestHarness) async {
         }
     }
 
+    await t.test("a slow drag doesn't flip the logo's state at every step") {
+        // Most steps are within 0.005 of the logo, which stays where it is. Holding it again at
+        // each one flipped the state 60 times a second, and every Blank dims the keyboard a little.
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.4)
+        await settle()
+        try await pass(f, 0.5)
+        f.daemon.timeline.removeAll()
+        for i in 1...120 {
+            f.controller.setBrightness(0.4 + 0.2 * Double(i) / 120)
+            try await pass(f, 1.0 / 60)
+        }
+        await settle()
+        try await pass(f, 1.5)
+        // A fade starts with up to two flips (turning round, then the fade), and one holds it.
+        let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }.count
+        let flips = f.daemon.timeline.filter { $0.entry == "blank" || $0.entry == "unblank" }.count
+        t.expect(flips <= 3 * fades + 1, "\(flips) flips for \(fades) fades")
+        let target = LogoAnimator.level(forBrightness: 0.6)
+        t.expect(abs(f.daemon.level - target) <= 0.01, "held at \(f.daemon.level), not \(target)")
+    }
+
     await t.test("a nudge at the top of the slider and straight back ends fully lit, not held") {
         for nudge in [0.99, 0.97, 0.95] {
             for frames in 1...4 {

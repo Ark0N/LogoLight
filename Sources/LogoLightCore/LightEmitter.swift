@@ -406,9 +406,11 @@ public final class LightEmitter {
                 setFadeDuration(duration)
                 setLit(lit)
             }
-        } else {
+        } else if isHeadingLit == nil || !lastDurationWasHold {
             hold()
         }
+        // Otherwise this has already held it. Holding it again would only flip the state, at
+        // every step of a slow drag, and every Blank dims the keyboard a little.
     }
 
     /// Back to normal: fully lit (when the display is on), with the automatic fade duration.
