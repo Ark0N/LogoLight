@@ -64,8 +64,6 @@ public final class LogoAnimator {
     private let sleep: Sleep
     private var task: Task<Void, Never>?
     private var isAdjusting = false
-    /// Counts cancellations, so a cancelled task can tell it's been superseded.
-    private var generation = 0
 
     /// The chosen effect. It keeps its value while paused (e.g. the logo is off or the display sleeps).
     public private(set) var effect: LogoEffect = .none
@@ -165,7 +163,6 @@ public final class LogoAnimator {
     /// at the slider's speed.
     private func adjustBrightness(over duration: Double) {
         isAdjusting = true
-        let generation = generation
         task = Task { [weak self] in
             var applied: Double?
             var duration = duration
@@ -179,22 +176,22 @@ public final class LogoAnimator {
                 applied = target
                 duration = self.brightnessFadeDuration
             }
-            if let self, self.generation == generation { self.isAdjusting = false }
+            self?.taskDidEnd()
         }
     }
 
-    /// Clears up after a task that stopped by itself. One that was cancelled has been replaced
-    /// or stopped by `cancel()`, which has already done this.
+    /// Clears up after a task that stopped by itself. A running task is only ever replaced or
+    /// stopped through `cancel()`, which has already done this, so a cancelled one leaves it.
     private func taskDidEnd() {
         guard !Task.isCancelled else { return }
         task = nil
         isPlaying = false
+        isAdjusting = false
     }
 
     private func cancel() {
         task?.cancel()
         task = nil
-        generation += 1
         isPlaying = false
         isAdjusting = false
     }
