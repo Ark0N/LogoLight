@@ -117,7 +117,9 @@ real slider, and greys out with them. The user then asked for the whole menu to 
 narrower", then "a little bit more narrow" and "remove the about logolight option"
 and "the Q shortcut it terrible off to the right side". It's 180 points wide, the least the
 "Apple Logo" row allows; the menu has no About item and no ⌘Q, whose shortcut column alone would make
-it 190. They also asked for a live view "so fully synced up": `LogoPreview` shows
+it 190. The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
+its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
+Launch Services' device types). They also asked for a live view "so fully synced up": `LogoPreview` shows
 `LogoController.liveGlow`, read from the hardware 30 times a second while the menu is open. The
 menu bar icon doesn't animate, so nothing polls while the menu is closed.
 

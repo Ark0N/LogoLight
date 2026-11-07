@@ -10,7 +10,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
 
-    private let panel = ControlPanel()
+    private let panel = ControlPanel(finish: MacFinish.current() ?? .spaceBlack)
     private let panelItem = NSMenuItem()
     private let passwordlessItem = NSMenuItem()
     private let launchAtLoginItem = NSMenuItem()

@@ -36,7 +36,7 @@ final class ControlPanel: NSView {
     fileprivate static let tileSize: CGFloat = 24
 
     private let stack = NSStackView()
-    private let preview = LogoPreview()
+    private let preview: LogoPreview
     private let logoTile = IconTile(symbol: "lightbulb.fill", color: .systemOrange)
     private let logoLabel = NSTextField(labelWithString: "Apple Logo")
     private let logoSwitch = LogoSwitch()
@@ -54,7 +54,9 @@ final class ControlPanel: NSView {
 
     private var state = PanelState()
 
-    init() {
+    /// `finish` is the colour of this Mac's case, which the live view copies.
+    init(finish: MacFinish = .spaceBlack) {
+        preview = LogoPreview(finish: finish)
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 100))
         build()
     }
@@ -270,29 +272,58 @@ final class ControlPanel: NSView {
     }
 }
 
-/// A live view of the logo: a dark MacBook lid with the logo glowing on it.
+/// A live view of the logo: the back of the MacBook Pro in its own finish (space black or silver) and
+/// in the lid's real proportions, with the logo glowing on it.
 private final class LogoPreview: NSView {
-    private let logo = CALayer()
-    private let logoSize = NSSize(width: 44, height: 44)
+    /// The 14-inch MacBook Pro's lid is 31.3 × 22.1 cm.
+    private static let lidSize = NSSize(width: 116, height: 82)
+    /// A little larger than on the real lid, so the glow reads at this size.
+    private static let logoSize = NSSize(width: 26, height: 26)
 
-    init() {
+    private let lid = CAGradientLayer()
+    /// The logo as it looks unlit: a faint polished shape in the aluminium.
+    private let mark = CALayer()
+    /// Its light, faded in by the glow.
+    private let logo = CALayer()
+
+    init(finish: MacFinish) {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.cornerCurve = .continuous
-        layer?.backgroundColor = NSColor(white: 0.14, alpha: 1).cgColor
-        heightAnchor.constraint(equalToConstant: 74).isActive = true
+        heightAnchor.constraint(equalToConstant: Self.lidSize.height).isActive = true
+
+        // Anodised aluminium: a faint sheen toward the top, and a fine machined edge.
+        let (top, bottom, edge, markColor, markOpacity): (NSColor, NSColor, NSColor, NSColor, Float) = switch finish {
+        case .spaceBlack:
+            (NSColor(srgbRed: 0.17, green: 0.17, blue: 0.18, alpha: 1), NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1),
+             NSColor(white: 1, alpha: 0.14), .white, 0.08)
+        case .silver:
+            (NSColor(srgbRed: 0.86, green: 0.865, blue: 0.87, alpha: 1), NSColor(srgbRed: 0.72, green: 0.725, blue: 0.735, alpha: 1),
+             NSColor(white: 0, alpha: 0.16), .black, 0.12)
+        }
+        lid.colors = [top.cgColor, bottom.cgColor]
+        lid.cornerRadius = 7
+        lid.cornerCurve = .continuous
+        lid.borderWidth = 0.5
+        lid.borderColor = edge.cgColor
+        layer?.addSublayer(lid)
 
         let symbol = NSImage(systemSymbolName: "apple.logo", accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "lightbulb.fill", accessibilityDescription: nil)
-        logo.contents = symbol?.withSymbolConfiguration(
-            NSImage.SymbolConfiguration(pointSize: logoSize.height, weight: .regular)
-                .applying(NSImage.SymbolConfiguration(paletteColors: [.white])))
-        logo.contentsGravity = .resizeAspect
+        func logoImage(_ color: NSColor) -> NSImage? {
+            symbol?.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(pointSize: Self.logoSize.height, weight: .regular)
+                    .applying(NSImage.SymbolConfiguration(paletteColors: [color])))
+        }
+        for layer in [mark, logo] {
+            layer.contentsGravity = .resizeAspect
+            lid.addSublayer(layer)
+        }
+        mark.contents = logoImage(markColor)
+        mark.opacity = markOpacity
+        logo.contents = logoImage(.white)
         logo.shadowColor = NSColor.white.cgColor
         logo.shadowOffset = .zero
-        logo.shadowRadius = 10
-        layer?.addSublayer(logo)
+        logo.shadowRadius = 7
         show(glow: 0)
 
         setAccessibilityElement(true)
@@ -307,15 +338,19 @@ private final class LogoPreview: NSView {
 
     override func layout() {
         super.layout()
+        let lidSize = Self.lidSize, logoSize = Self.logoSize
         withoutAnimation {
-            logo.frame = NSRect(x: bounds.midX - logoSize.width / 2, y: bounds.midY - logoSize.height / 2,
-                                width: logoSize.width, height: logoSize.height)
+            lid.frame = NSRect(x: (bounds.width - lidSize.width) / 2, y: 0, width: lidSize.width, height: lidSize.height)
+            let logoFrame = NSRect(x: (lidSize.width - logoSize.width) / 2, y: (lidSize.height - logoSize.height) / 2,
+                                   width: logoSize.width, height: logoSize.height)
+            mark.frame = logoFrame
+            logo.frame = logoFrame
         }
     }
 
     func show(glow: Double) {
         withoutAnimation {
-            logo.opacity = Float(0.08 + 0.92 * glow) // an unlit logo is still faintly visible on the lid
+            logo.opacity = Float(glow)
             logo.shadowOpacity = Float(glow)
         }
     }
@@ -516,10 +551,14 @@ enum PanelRenderer {
                 write(state, appearance: appearance, to: "\(folder)/\(name)-\(suffix).png")
             }
         }
+        for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
+            write(on, finish: .silver, appearance: appearance, to: "\(folder)/on-silver-\(suffix).png")
+        }
     }
 
-    private static func write(_ state: PanelState, appearance: NSAppearance.Name, to path: String) {
-        let panel = ControlPanel()
+    private static func write(_ state: PanelState, finish: MacFinish = .spaceBlack, appearance: NSAppearance.Name,
+                              to path: String) {
+        let panel = ControlPanel(finish: finish)
         panel.update(state)
         panel.showGlow(state.isOn ? 0.75 : 0)
         let window = NSWindow(contentRect: panel.bounds, styleMask: .borderless, backing: .buffered, defer: false)
