@@ -600,12 +600,14 @@ strong {
   width: calc(var(--pt) * 27);
 }
 
+/* The glyphs' viewBoxes are the SF Symbols' boxes at 13 points, drawn at 12/13 of that size. */
 .glyph-wifi {
-  width: calc(var(--pt) * 17);
+  width: calc(var(--pt) * 16.6);
 }
 
 .glyph-controls {
-  width: calc(var(--pt) * 16);
+  width: calc(var(--pt) * 14.8);
+  height: calc(var(--pt) * 12.9);
 }
 
 .clock {
