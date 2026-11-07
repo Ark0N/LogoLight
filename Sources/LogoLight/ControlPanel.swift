@@ -559,44 +559,145 @@ final class LogoSlider: NSView {
 
 #if DEBUG
 /// Draws the panel in each state to a PNG, for checking how it looks.
+///
+/// Optional settings, for pictures of the app (e.g. the website's). Without them the output is as before:
+/// - `LOGOLIGHT_RENDER_SCALE`: pixels per point, 2 by default, up to 16 (e.g. 4 for a larger, crisp picture,
+///   or 14 for a live view about 800 points wide on a Retina screen). With a scale given, layer images and
+///   shadows are drawn as a screen at that scale draws them: the logo sharp, and its glow as wide as in the
+///   menu. (Without one, the logo is drawn at the screen's scale and its glow in pixels, as before.)
+/// - `LOGOLIGHT_RENDER_TRANSPARENT`: leaves the background clear instead of a menu-like grey, so the
+///   picture can be placed on any backdrop (the cards are translucent, as in the real menu).
+/// - `LOGOLIGHT_RENDER_GLOW`, `LOGOLIGHT_RENDER_BRIGHTNESS`, `LOGOLIGHT_RENDER_EFFECT`: the live view's
+///   glow (0.75), the slider (0.6) and the effect that's on (`heartbeat`) in the panels.
+/// - `LOGOLIGHT_RENDER_GLOWS`: glow levels, e.g. `0,0.5,1`, to also draw the live view alone at each
+///   level, in both finishes (`live-black-50.png`, `live-silver-50.png`). It also prints where the lid is
+///   in each panel, to place those pictures over it.
+/// - `LOGOLIGHT_RENDER_LIGHT`: also draws the logo's light alone, fully lit, lid-sized on clear: with its glow
+///   (`live-light.png`) and without it (`live-light-shape.png`). Over `live-black-0.png`, the first at opacity g
+///   with the second on top, both in a group at opacity g, give the live view at glow g, as `show(glow:)` draws
+///   it (the glow's own opacity is g as well, so it shows at g²). The light is the same in both finishes.
+/// - `LOGOLIGHT_RENDER_ICON`: also draws the menu bar icon while the logo is on (`icon-on.png`, black
+///   on clear, as the template the menu bar tints).
 @MainActor
 enum PanelRenderer {
+    private struct Options {
+        var scale = 2
+        /// Without a scale given, the window draws at the screen's, as it always has.
+        var scaleIsSet = false
+        var transparent = false
+        var glow = 0.75
+        var brightness = 0.6
+        var effect = LogoEffect.heartbeat
+        var glows: [Double] = []
+        var light = false
+        var icon = false
+
+        init(_ environment: [String: String]) {
+            if let scale = environment["LOGOLIGHT_RENDER_SCALE"].flatMap(Int.init), (1...16).contains(scale) {
+                self.scale = scale
+                scaleIsSet = true
+            }
+            transparent = environment["LOGOLIGHT_RENDER_TRANSPARENT"] != nil
+            if let glow = environment["LOGOLIGHT_RENDER_GLOW"].flatMap(Double.init) { self.glow = min(max(glow, 0), 1) }
+            if let brightness = environment["LOGOLIGHT_RENDER_BRIGHTNESS"].flatMap(Double.init) {
+                self.brightness = min(max(brightness, 0), 1)
+            }
+            if let effect = environment["LOGOLIGHT_RENDER_EFFECT"].flatMap(LogoEffect.init(rawValue:)) { self.effect = effect }
+            glows = (environment["LOGOLIGHT_RENDER_GLOWS"] ?? "").split(separator: ",")
+                .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.map { min(max($0, 0), 1) }
+            light = environment["LOGOLIGHT_RENDER_LIGHT"] != nil
+            icon = environment["LOGOLIGHT_RENDER_ICON"] != nil
+        }
+    }
+
+    /// Drawing assumes top-down layers, as in the panel.
+    private final class FlippedView: NSView {
+        override var isFlipped: Bool { true }
+    }
+
+    /// A window that draws its views at any scale, not just the screen's, so text and symbols stay sharp.
+    private final class RenderWindow: NSWindow {
+        var scale: CGFloat?
+        override var backingScaleFactor: CGFloat { scale ?? super.backingScaleFactor }
+    }
+
     static func render(to folder: String) {
+        let options = Options(ProcessInfo.processInfo.environment)
         func state(_ setting: LogoIllumination, isSupported: Bool = true, canControlDirectly: Bool = true) -> PanelState {
             let status = LogoStatus(isSupported: isSupported, setting: isSupported ? setting : nil, source: .daemon,
                                     isLit: setting == .on, outputLevel: 0.2)
-            return PanelState(status: status, canControlDirectly: canControlDirectly, effect: .heartbeat, brightness: 0.6)
+            return PanelState(status: status, canControlDirectly: canControlDirectly, effect: options.effect,
+                              brightness: options.brightness)
         }
         let on = state(.on)
         let states = [("on", on), ("off", state(.off)), ("fallback", state(.on, canControlDirectly: false)),
                       ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {
             for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
-                write(state, appearance: appearance, to: "\(folder)/\(name)-\(suffix).png")
+                write(state, appearance: appearance, options: options, to: "\(folder)/\(name)-\(suffix).png")
             }
         }
         for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
-            write(on, finish: .silver, appearance: appearance, to: "\(folder)/on-silver-\(suffix).png")
+            write(on, finish: .silver, appearance: appearance, options: options, to: "\(folder)/on-silver-\(suffix).png")
+        }
+        for glow in options.glows {
+            for (name, finish) in [("black", MacFinish.spaceBlack), ("silver", .silver)] {
+                let preview = LogoPreview(finish: finish)
+                preview.frame = NSRect(origin: .zero, size: LogoPreview.renderedLidSize)
+                preview.show(glow: glow)
+                draw(preview, options: options, background: nil,
+                     to: "\(folder)/live-\(name)-\(Int((glow * 100).rounded())).png")
+            }
+        }
+        if options.light {
+            for (name, withGlow) in [("live-light", true), ("live-light-shape", false)] {
+                let preview = LogoPreview(finish: .spaceBlack)
+                preview.frame = NSRect(origin: .zero, size: LogoPreview.renderedLidSize)
+                preview.showLightAlone(withGlow: withGlow)
+                draw(preview, options: options, background: nil, to: "\(folder)/\(name).png")
+            }
+        }
+        if options.icon, let symbol = NSImage(systemSymbolName: on.symbolName, accessibilityDescription: nil) {
+            // The status item's button draws its template image at its own size, in the menu bar's text colour.
+            let icon = NSImageView(image: symbol)
+            icon.contentTintColor = .black
+            icon.frame = NSRect(origin: .zero, size: symbol.size)
+            let container = FlippedView(frame: icon.frame)
+            container.addSubview(icon)
+            draw(container, options: options, background: nil, to: "\(folder)/icon-on.png")
         }
     }
 
     private static func write(_ state: PanelState, finish: MacFinish = .spaceBlack, appearance: NSAppearance.Name,
-                              to path: String) {
+                              options: Options, to path: String) {
         let panel = ControlPanel(finish: finish)
         panel.update(state)
-        panel.showGlow(state.isOn ? 0.75 : 0)
-        let window = NSWindow(contentRect: panel.bounds, styleMask: .borderless, backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: appearance)
-        window.backgroundColor = appearance == .darkAqua ? NSColor(white: 0.2, alpha: 1) : NSColor(white: 0.9, alpha: 1)
-        window.isOpaque = true
-        window.contentView = panel
-        window.setContentSize(panel.frame.size)
-        window.displayIfNeeded()
-        reportTruncatedLabels(in: panel, path: path)
+        panel.showGlow(state.isOn ? options.glow : 0)
+        let background = appearance == .darkAqua ? NSColor(white: 0.2, alpha: 1) : NSColor(white: 0.9, alpha: 1)
+        draw(panel, appearance: appearance, options: options, background: options.transparent ? nil : background,
+             to: path)
+    }
 
-        guard let layer = panel.layer ?? window.contentView?.layer else { return }
-        let scale = 2
-        let size = panel.bounds.size
+    /// Draws `view` into a PNG at the options' scale, on `background`, or on clear without one.
+    private static func draw(_ view: NSView, appearance: NSAppearance.Name = .darkAqua, options: Options,
+                             background: NSColor?, to path: String) {
+        let window = RenderWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
+        if options.scaleIsSet { window.scale = CGFloat(options.scale) }
+        window.appearance = NSAppearance(named: appearance)
+        window.backgroundColor = background ?? .clear
+        window.isOpaque = background != nil
+        window.contentView = view
+        window.setContentSize(view.frame.size)
+        window.displayIfNeeded()
+        if let panel = view as? ControlPanel {
+            reportTruncatedLabels(in: panel, path: path)
+            if !options.glows.isEmpty { reportLid(in: panel, path: path) }
+        }
+
+        guard let layer = view.layer ?? window.contentView?.layer else { return }
+        let scale = options.scale
+        if options.scaleIsSet { drawAsScreen(layer, scale: CGFloat(scale)) }
+        let size = view.bounds.size
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * scale,
                                          pixelsHigh: Int(size.height) * scale, bitsPerSample: 8, samplesPerPixel: 4,
                                          hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
@@ -604,13 +705,48 @@ enum PanelRenderer {
               let context = NSGraphicsContext(bitmapImageRep: rep)
         else { return }
         let cg = context.cgContext
-        cg.setFillColor(window.backgroundColor.cgColor)
-        cg.fill(CGRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh))
-        // The panel's layers are top-down, the bitmap's context bottom-up.
+        if let background {
+            cg.setFillColor(background.cgColor)
+            cg.fill(CGRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh))
+        } else {
+            cg.clear(CGRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh))
+        }
+        // The view's layers are top-down, the bitmap's context bottom-up.
         cg.translateBy(x: 0, y: CGFloat(rep.pixelsHigh))
         cg.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
         layer.render(in: cg)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+
+    /// `render(in:)` draws an image set as a layer's contents (the live view's logo) as it would for the screen, and
+    /// shadows in the bitmap's pixels whatever its scale. A screen at `scale` draws images at that scale and shadows
+    /// in points, so this sets each layer up to match.
+    private static func drawAsScreen(_ layer: CALayer, scale: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        func prepare(_ layer: CALayer) {
+            layer.contentsScale = scale
+            if let image = layer.contents as? NSImage {
+                // Made into a bitmap at this scale; left as it is, it would be one made for the screen.
+                layer.contents = image.layerContents(forContentsScale: scale)
+            }
+            layer.shadowRadius *= scale
+            layer.shadowOffset = CGSize(width: layer.shadowOffset.width * scale, height: layer.shadowOffset.height * scale)
+            layer.sublayers?.forEach(prepare)
+        }
+        prepare(layer)
+        CATransaction.commit()
+    }
+
+    /// Prints the live view's lid frame in the panel, in points, and the panel's size.
+    private static func reportLid(in panel: ControlPanel, path: String) {
+        func previews(in view: NSView) -> [LogoPreview] {
+            view.subviews.flatMap { ($0 as? LogoPreview).map { [$0] } ?? previews(in: $0) }
+        }
+        guard let preview = previews(in: panel).first, !preview.isHiddenOrHasHiddenAncestor else { return }
+        let lid = panel.convert(preview.renderedLidFrame, from: preview)
+        print("\(path): lid at x \(lid.minX), y \(lid.minY), \(lid.width) × \(lid.height) in a panel "
+              + "\(panel.bounds.width) × \(panel.bounds.height) pt")
     }
 
     /// Says which visible one-line labels are narrower than their text, so a narrower panel can be checked.
@@ -634,6 +770,25 @@ enum PanelRenderer {
             }
             reportTruncatedLabels(in: subview, path: path)
         }
+    }
+}
+
+private extension LogoPreview {
+    /// The live view's size without the panel around it: just the lid.
+    static var renderedLidSize: NSSize { lidSize }
+
+    /// Where the lid is drawn in the view (centred at the top, as `layout()` places it).
+    var renderedLidFrame: NSRect {
+        NSRect(x: (bounds.width - Self.lidSize.width) / 2, y: 0, width: Self.lidSize.width, height: Self.lidSize.height)
+    }
+
+    /// Leaves only the logo's light, fully lit, with or without its glow: no lid and no unlit mark.
+    func showLightAlone(withGlow: Bool) {
+        lid.colors = nil
+        lid.borderWidth = 0
+        mark.isHidden = true
+        logo.opacity = 1
+        logo.shadowOpacity = withGlow ? 1 : 0
     }
 }
 #endif
