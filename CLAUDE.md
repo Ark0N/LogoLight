@@ -152,29 +152,31 @@ become an option.
 Seen working in the real menu: the effect switches and the slider (the user's saved settings
 changed).
 
-**Changed since the last check on the MacBook** (logic tested with the time-driven fake only;
-run `tools/livecheck` and watch the logo):
-- A level in between is now eased onto with a few short fades instead of a fade cut short at
+**Checked on the MacBook with `tools/livecheck`** (2026-11-07, build 87; not yet watched by eye):
+- A level in between is eased onto with a few short fades instead of a fade cut short at
   speed (docs/corebrightnessd.md, "Easing onto a level"): the slider, turning on at a brightness,
-  a wake or launch, and effect peaks, whose hold is shortened to make up for it. Watch that it
-  slows to a stop and the keyboard doesn't visibly dim; livecheck prints the speed at the stop,
-  how far it went back, and the keyboard's lowest duty. The time a peak's easing takes is taken
-  from the holds after it, so effects keep their cycle length; Heartbeat's rest gets shorter by
-  about 0.26 s at brightness 0.5, since its holds after the beats are too short. Ask the user
-  whether that rhythm looks right, or whether its beats should stay sharp instead.
-- A slow drag no longer holds the logo again at every step (which flipped `DisplayLogicalState`
-  60 times a second), and nudging the slider at the top and back ends at normal full brightness.
-  A followed target missed by more than 0.02 gets a new fade, and a fade cancelled as its sleep
-  returns writes nothing more.
-- `tools/livecheck` now also relaunches (a fresh `LogoController.start` after a level held in
-  Blank), turns on with Pulse chosen, and handles a wake through `scheduleWake`, so those
-  bullets below are covered by it too. It hasn't been run since; it builds.
-- The slider's fade now follows a drag instead of restarting at each step.
+  a wake or launch, and effect peaks, whose hold is shortened to make up for it. Five slider
+  clicks each took 0.35–0.42 s, slowed to 7–19% of their top speed in the last 60 ms, went back
+  0.000 and ended within 0.002 of the level. The keyboard's duty dipped by 0.02–0.03 from about
+  0.15 during each; whether that shows is for the eye.
+- A drag ends at its level; a relaunch after a level held going up goes straight to the saved
+  level with no bump; turning on with Pulse chosen rises steadily from dark; a wake handled
+  through `scheduleWake` keeps the level; Pulse, Heartbeat and Breathe peak at the brightness
+  (Heartbeat 0.007 above it).
+
+**Changed since the last look by eye** (watch the logo):
+- The landings above: that each slows to a stop and the keyboard doesn't visibly dim.
+- The time a peak's easing takes is taken from the holds after it, so effects keep their cycle
+  length; Heartbeat's rest gets shorter by about 0.26 s at brightness 0.5, since its holds after
+  the beats are too short. Ask the user whether that rhythm looks right, or whether its beats
+  should stay sharp instead.
 - Effects have longer rises than falls (starting values in `LogoEffect.cycle`, to tune by eye),
   and turning on with an effect starts it with a rise from dark instead of a separate fade in.
-- Choosing None, a wake and launch fade over 0.8 s instead of 0.25 s. Launch
-  (`LogoController.start`) goes straight to a saved level instead of relighting to full first.
-- Sleeps have a 2 ms tolerance, and App Nap is held off while animating.
+- Nudging the slider at the top and back should end at normal full brightness (livecheck only
+  goes back to 1 from a level in between). A followed target missed by more than 0.02 gets a
+  new fade, and a fade cancelled as its sleep returns writes nothing more.
+- Choosing None, a wake and launch fade over 0.8 s instead of 0.25 s. Sleeps have a 2 ms
+  tolerance, and App Nap is held off while animating.
 - Without direct control, the first admin dialog also installs the sudoers rule, in one script
   (the install, quietly, then the command), and says so in its prompt; the user asked for the
   password to be needed only once, by default. The menu item is now **Disable Password**.
