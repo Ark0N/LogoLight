@@ -233,6 +233,111 @@ func brightnessTests(_ t: TestHarness) async {
         t.expectEqual(f.daemon.fadeDuration, 0)
     }
 
+    await t.test("keeps the keyboard lit while fading the logo out") {
+        let f = Fixture(direct: true)
+        try await f.controller.set(.off)
+        t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
+    await t.test("keeps the keyboard lit while a level is held after fading up") {
+        let f = Fixture(direct: true)
+        f.daemon.stepPerRead = 0.05
+        f.daemon.setHeld(at: 0.05, state: 2)
+        f.controller.setBrightness(0.5)
+        await settle()
+        t.expectEqual(f.daemon.state, 1) // a level reached going up is held in Blank
+        t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
+    await t.test("moves down from a level it reached going up") {
+        // Held in Blank, with the keyboard told Unblank, which is what reads back.
+        let f = Fixture(direct: true)
+        f.daemon.stepPerRead = 0.05
+        f.daemon.setHeld(at: 0.05, state: 2)
+        f.controller.setBrightness(0.5)
+        await settle()
+        let held = f.daemon.level
+        f.controller.setBrightness(0.3)
+        await settle()
+        t.expect(f.daemon.level < held - 0.1, "moved from \(held) to \(f.daemon.level)")
+        t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
+    await t.test("effects keep moving when the peak is a held level") {
+        let f = Fixture(direct: true)
+        f.daemon.setHeld(at: 0, state: 1)
+        f.clock.budget = 3 // stops during the second dark step
+        f.controller.setBrightness(0.5)
+        f.controller.setEffect(.pulse)
+        await settle()
+        t.expectEqual(f.daemon.level, 0)
+    }
+
+    await t.test("keeps the keyboard lit through an effect") {
+        let f = Fixture(direct: true)
+        f.clock.budget = 5 // stops during the second dark step
+        f.controller.setEffect(.breathe)
+        await settle()
+        t.expectEqual(f.daemon.state, 1)
+        t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
+    t.test("lets the keyboard go dark with the display, and relights it on wake") {
+        let f = Fixture(direct: true)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        t.expectEqual(f.daemon.keyboardState, 1)
+        f.mac.displayAwake = true
+        f.controller.displayDidWake()
+        t.expectEqual(f.daemon.keyboardState, 2)
+        f.controller.restoreNormalLighting()
+    }
+
+    t.test("doesn't relight the keyboard on a wake that leaves the display off") {
+        let f = Fixture(direct: true)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.controller.displayDidWake()
+        t.expectEqual(f.daemon.keyboardState, 1)
+    }
+
+    t.test("releasing a level with the display off doesn't relight the keyboard") {
+        let f = Fixture(direct: true)
+        f.daemon.setHeld(at: 0.25, state: 2)
+        f.mac.displayAwake = false
+        f.controller.restoreNormalLighting()
+        t.expectEqual(f.daemon.keyboardState, 1)
+    }
+
+    await t.test("doesn't start animating when turned on with the display off") {
+        let f = Fixture(backlightMode: 0, direct: true)
+        f.mac.displayAwake = false
+        f.controller.setEffect(.pulse)
+        try await f.controller.set(.on)
+        t.expect(!f.controller.animator!.isPlaying)
+        t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
+    t.test("the live glow reads the real fade level, scaled like the slider") {
+        let f = Fixture(direct: true)
+        t.expectEqual(f.controller.liveGlow, 1)
+        f.daemon.setHeld(at: 0.25, state: 2)
+        t.expectEqual(f.controller.liveGlow, 0.5)
+        f.daemon.setHeld(at: 0, state: 1)
+        t.expectEqual(f.controller.liveGlow, 0)
+    }
+
+    t.test("the live glow is dark while the setting is off, whatever the fade level") {
+        let f = Fixture(backlightMode: 0, direct: true)
+        t.expectEqual(f.daemon.level, 1)
+        t.expectEqual(f.controller.liveGlow, 0)
+    }
+
+    t.test("the live glow still works without direct control") {
+        t.expectEqual(Fixture().controller.liveGlow, 1)
+        t.expectEqual(Fixture(backlightMode: 0).controller.liveGlow, 0)
+    }
+
     t.test("the fade curve's timing grows with the distance to cover") {
         t.expectEqual(FadeCurve.timeFraction(toReach: 0), 0.05)
         t.expect(abs(FadeCurve.timeFraction(toReach: 1) - 0.95) < 1e-9, "all the way at 95%")

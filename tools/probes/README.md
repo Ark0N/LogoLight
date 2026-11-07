@@ -28,6 +28,7 @@ is ignored, so a held level isn't released by a lone `DisplayLogicalState=2`.
 | --- | --- |
 | `props KEY…` | Prints `copyPropertyForKey:` for each key, e.g. `LEPWMState`, `LEBacklightMode`, `DisplayLogicalState`, `LEPWMBrightnessNitsMapping`. |
 | `status` | Prints the big `StatusInfo` dump. |
+| `ledsample [SECONDS]` | Prints the logo's fade level and the real output of the logo and keyboard LEDs about 3 times a second, from the I/O Registry. Run it while something else changes the logo, to see side effects. |
 | `classes` | Lists CoreBrightness's Objective-C classes (filtered to clients and LE classes). |
 | `methods CLASS…` | Lists a class's methods, e.g. `methods BrightnessSystemClient CBLEPWMControlModule`. |
 
@@ -50,6 +51,8 @@ CoreBrightness lives in the dyld shared cache, so there's no file to open in a d
 | Tool | What it does |
 | --- | --- |
 | `refs.py cb.asm 'SYMBOL'…` | Lists the CFString constants each function references, which is how the LE keys were found. Example: `python3 refs.py cb.asm '-[CBLEPWMControlModule setProperty:forKey:]'`. It needs `cfstr` and `cfstrings.txt` in the same folder. |
+| `whoref.py cb.asm KEY…` | The reverse: lists the functions that reference a key, e.g. to find everything that reads `DisplayLogicalState`. |
+| `calls.py cb.asm 'SYMBOL'…` | Prints what a function does, in order: selectors sent, keys referenced and branches. It needs `stubs` too. |
 | `cfstr ADDR…` | Resolves `__cfstring` addresses (as printed in `cb.asm`) to their text, by reading them in-process with the image's slide. |
 | `cstr ADDR:LEN…` | Same for C strings. |
 | `stubs ADDR…` | Decodes `objc_msgSend` selector stubs (`adrp` plus `add x1`) to selector names. |

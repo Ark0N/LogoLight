@@ -6,6 +6,8 @@ import ObjectiveC
 public protocol LightEmitterService: AnyObject {
     func value(forKey key: String) -> Any?
     func setValue(_ value: NSNumber, forKey key: String) -> Bool
+    /// Sends a key to the keyboard backlights only.
+    func setKeyboardValue(_ value: NSNumber, forKey key: String)
 }
 
 /// Talks to `corebrightnessd` through CoreBrightness's `BrightnessSystemClient`.
@@ -16,12 +18,16 @@ public protocol LightEmitterService: AnyObject {
 public final class CoreBrightnessService: LightEmitterService {
     private typealias CopyFunction = @convention(c) (AnyObject, Selector, NSString) -> Unmanaged<AnyObject>?
     private typealias SetFunction = @convention(c) (AnyObject, Selector, AnyObject, NSString) -> Bool
+    private typealias SetForKeyboardFunction = @convention(c) (AnyObject, Selector, AnyObject, NSString, UInt64) -> Bool
 
     private let client: NSObject
     private let copySelector = NSSelectorFromString("copyPropertyForKey:")
     private let setSelector = NSSelectorFromString("setProperty:forKey:")
+    private let keyboardSetSelector = NSSelectorFromString("setProperty:withKey:keyboardID:")
     private let copyFunction: CopyFunction
     private let setFunction: SetFunction
+    private let setForKeyboardFunction: SetForKeyboardFunction?
+    private let keyboardIDs: [UInt64]
 
     public init?() {
         let path = "/System/Library/PrivateFrameworks/CoreBrightness.framework/CoreBrightness"
@@ -32,6 +38,19 @@ public final class CoreBrightnessService: LightEmitterService {
         client = type.init()
         copyFunction = unsafeBitCast(client.method(for: copySelector), to: CopyFunction.self)
         setFunction = unsafeBitCast(client.method(for: setSelector), to: SetFunction.self)
+        setForKeyboardFunction = type.instancesRespond(to: keyboardSetSelector)
+            ? unsafeBitCast(client.method(for: keyboardSetSelector), to: SetForKeyboardFunction.self)
+            : nil
+        keyboardIDs = Self.copyKeyboardIDs()
+    }
+
+    private static func copyKeyboardIDs() -> [UInt64] {
+        let selector = NSSelectorFromString("copyKeyboardBacklightIDs")
+        guard let type = NSClassFromString("KeyboardBrightnessClient") as? NSObject.Type,
+              type.instancesRespond(to: selector)
+        else { return [] }
+        let ids = type.init().perform(selector)?.takeRetainedValue() as? [NSNumber]
+        return ids?.map(\.uint64Value) ?? []
     }
 
     public func value(forKey key: String) -> Any? {
@@ -41,6 +60,13 @@ public final class CoreBrightnessService: LightEmitterService {
 
     public func setValue(_ value: NSNumber, forKey key: String) -> Bool {
         setFunction(client, setSelector, value, key as NSString)
+    }
+
+    public func setKeyboardValue(_ value: NSNumber, forKey key: String) {
+        guard let setForKeyboardFunction else { return }
+        for id in keyboardIDs {
+            _ = setForKeyboardFunction(client, keyboardSetSelector, value, key as NSString, id)
+        }
     }
 }
 
@@ -57,6 +83,7 @@ public final class LightEmitter {
         /// The fade duration in seconds when the logo is darkened or relit. 0 = automatic.
         static let fadeDuration = "LEPWMFactorFadeDuration"
         /// The display state the logo follows: it fades out on "Blank" and back in on "Unblank".
+        /// The keyboard backlight follows it too, but the screen doesn't.
         static let logicalState = "DisplayLogicalState"
         /// Live state, including `Factor` (0–1, the fade position).
         static let pwmState = "LEPWMState"
@@ -80,6 +107,9 @@ public final class LightEmitter {
     static let pollInterval = 0.01
 
     private let service: LightEmitterService
+    /// Which way the logo was last told to fade (`true` is toward lit). It has to be remembered:
+    /// `DisplayLogicalState` reads back the last value sent to anything, including the keyboard.
+    private var lastHeadingLit: Bool?
 
     public init(service: LightEmitterService) {
         self.service = service
@@ -106,14 +136,35 @@ public final class LightEmitter {
     /// Fades the logo out (`false`) or back in (`true`) over the fade duration.
     /// Doesn't change the setting: while it's off, the logo stays dark either way.
     /// Ignored if the logo is already heading that way (or held after doing so).
+    ///
+    /// The keyboard backlight would darken too, so it's told straight away that the display is
+    /// still on, which it can do without its light visibly changing.
     @discardableResult
-    public func setLit(_ lit: Bool) -> Bool {
-        service.setValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank), forKey: Key.logicalState)
+    public func setLit(_ lit: Bool, keepingKeyboardLit keepKeyboard: Bool = true) -> Bool {
+        let sent = service.setValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
+                                    forKey: Key.logicalState)
+        lastHeadingLit = lit
+        if !lit, keepKeyboard { setKeyboardLit(true) }
+        return sent
+    }
+
+    /// Call when the display sleeps or wakes: `corebrightnessd` changes the state it sends
+    /// the logo itself, and the keyboard should follow the display again.
+    public func displayDidChange(isAwake: Bool) {
+        lastHeadingLit = nil
+        setKeyboardLit(isAwake)
+    }
+
+    /// Tells the keyboard backlight whether the display is on, without affecting the logo.
+    private func setKeyboardLit(_ lit: Bool) {
+        service.setKeyboardValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
+                                 forKey: Key.logicalState)
     }
 
     /// Whether the logo was last told to fade in (`true`) or out (`false`).
     var isHeadingLit: Bool? {
-        (service.value(forKey: Key.logicalState) as? NSNumber).map { $0.intValue == LogicalState.unblank }
+        lastHeadingLit
+            ?? (service.value(forKey: Key.logicalState) as? NSNumber).map { $0.intValue == LogicalState.unblank }
     }
 
     /// Where the logo is in a fade, from 0 (dark) to 1 (fully lit).
@@ -170,7 +221,7 @@ public final class LightEmitter {
         if isHeadingLit != false, (fadeLevel ?? 1) < 0.999 {
             // Held after fading toward lit: turn it round (without moving) so relighting is a change.
             setFadeDuration(Self.holdDuration)
-            setLit(false)
+            setLit(false, keepingKeyboardLit: displayAwake)
         }
         setFadeDuration(0)
         if displayAwake { setLit(true) }

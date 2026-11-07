@@ -18,7 +18,7 @@ for file in "$SRC"/*.swift; do
     echo "==> $name"
     swiftc -O -suppress-warnings "$file" -o "$OUT/$name"
 done
-cp "$SRC/refs.py" "$OUT/"
+cp "$SRC"/*.py "$OUT/"
 
 LIB=/System/Library/PrivateFrameworks/CoreBrightness.framework/CoreBrightness
 echo "==> Dumping $LIB"

@@ -83,7 +83,7 @@ public final class LogoController {
         if let emitter {
             if try await setDirectly(target, emitter: emitter) {
                 lastApplied = target
-                if target == .on { animator?.resume() }
+                if target == .on, isDisplayAwake { animator?.resume() }
                 return status()
             }
             // corebrightnessd didn't take the change; fall back to the documented command.
@@ -95,7 +95,7 @@ public final class LogoController {
             // Nothing to delete: the setting is already at its default (on).
         }
         lastApplied = target
-        if target == .on { animator?.resume() }
+        if target == .on, isDisplayAwake { animator?.resume() }
         return try await waitForSetting(target)
     }
 
@@ -129,16 +129,29 @@ public final class LogoController {
         if isLitAndAwake { animator.brightnessDidChange() }
     }
 
+    /// How brightly the logo is glowing at this moment, from 0 (dark) to 1 (fully lit), for a live
+    /// view. It's read from the hardware on every call, so it follows effects and changes made
+    /// elsewhere, and it's scaled about like the brightness slider rather than in raw light output.
+    public var liveGlow: Double {
+        guard let emitter else { return status().isLit == true ? 1 : 0 }
+        guard emitter.setting == .on, let level = emitter.fadeLevel else { return 0 }
+        return min(max(level, 0), 1).squareRoot()
+    }
+
     /// Call when the display or the Mac goes to sleep.
     public func displayDidSleep() {
         animator?.pause()
         // So corebrightnessd's own fades (when the display sleeps and wakes) work normally,
         // instead of using a brightness hold's endless duration.
         emitter?.setFadeDuration(0)
+        // A fade just before the display slept may have told the keyboard it was still on.
+        emitter?.displayDidChange(isAwake: false)
     }
 
     /// Call when the display wakes up.
     public func displayDidWake() {
+        guard isDisplayAwake else { return }
+        emitter?.displayDidChange(isAwake: true)
         if status().setting == .on { animator?.resume() }
     }
 

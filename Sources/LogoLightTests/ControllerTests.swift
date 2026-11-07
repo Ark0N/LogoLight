@@ -92,8 +92,9 @@ final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
 
 /// A stand-in for corebrightnessd's light emitter module. It logs every change it's sent,
 /// using the real key names, so tests can check the exact sequence. Like the real one, it
-/// ignores a `DisplayLogicalState` it's already in, and a fade started with a huge duration
-/// doesn't move (which is how a level is held).
+/// ignores a `DisplayLogicalState` it's already in, a fade started with a huge duration doesn't
+/// move (which is how a level is held), and reading `DisplayLogicalState` gives the last value
+/// sent to anything, even if that was only the keyboard.
 @MainActor
 final class FakeDaemon: LightEmitterService {
     var mode = 2
@@ -106,6 +107,9 @@ final class FakeDaemon: LightEmitterService {
     var stepPerRead = 1.0
     /// The highest level seen since the test set it.
     var peak = 0.0
+    /// The `DisplayLogicalState` the keyboard backlight follows, which is dark on 1.
+    var keyboardState = 2
+    private var lastStateSent = 2
     private var isMoving = false
     /// When false, every change is rejected (as if the client API stopped working).
     var acceptsChanges = true
@@ -120,6 +124,7 @@ final class FakeDaemon: LightEmitterService {
     func setHeld(at level: Double, state: Int) {
         self.level = level
         self.state = state
+        lastStateSent = state
         isMoving = false
         peak = level
     }
@@ -127,7 +132,7 @@ final class FakeDaemon: LightEmitterService {
     func value(forKey key: String) -> Any? {
         switch key {
         case "LEBacklightMode": return NSNumber(value: mode)
-        case "DisplayLogicalState": return NSNumber(value: state)
+        case "DisplayLogicalState": return NSNumber(value: lastStateSent)
         case "LEPWMState":
             advance(by: stepPerRead)
             return ["Factor": NSNumber(value: level)]
@@ -147,13 +152,22 @@ final class FakeDaemon: LightEmitterService {
         switch key {
         case "LEBacklightMode": mode = value.intValue
         case "LEPWMFactorFadeDuration": fadeDuration = value.doubleValue
-        case "DisplayLogicalState" where value.intValue != state:
+        case "DisplayLogicalState":
+            lastStateSent = value.intValue
+            keyboardState = value.intValue
+            guard value.intValue != state else { break }
             state = value.intValue
             isMoving = !isHolding
             if stepPerRead >= 1 { advance(by: 1) }
         default: break
         }
         return true
+    }
+
+    func setKeyboardValue(_ value: NSNumber, forKey key: String) {
+        guard key == "DisplayLogicalState" else { return }
+        keyboardState = value.intValue
+        lastStateSent = value.intValue
     }
 
     private func advance(by step: Double) {
