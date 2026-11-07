@@ -109,7 +109,9 @@ public final class LogoController {
         } catch where target == .on && CoreBrightnessSetting.isMissingKeyError(error) {
             // Nothing to delete: the setting is already at its default (on).
         }
-        didApply(target, atChosenLevel: false)
+        lastApplied = target // so a status read while the screen is off shows it
+        // At the end, so a choice made while waiting is applied too.
+        defer { didApply(target, atChosenLevel: false) }
         return try await waitForSetting(target)
     }
 
