@@ -164,7 +164,7 @@ final class ControlPanel: NSView {
         // Only on a Mac without the logo, where nothing else is shown.
         messageLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         messageLabel.textColor = .secondaryLabelColor
-        messageLabel.maximumNumberOfLines = 2
+        messageLabel.maximumNumberOfLines = 0 // as many as it needs: the panel resizes to fit
         messageLabel.preferredMaxLayoutWidth = Self.cardWidth - 2 * Self.textIndent
         addIndented(messageLabel, in: messageContainer)
 
@@ -620,6 +620,15 @@ enum PanelRenderer {
                 let width = label.alignmentRect(forFrame: label.frame).width
                 if width < label.intrinsicContentSize.width - 0.5 {
                     print("\(path): \"\(label.stringValue)\" is truncated (\(width) of \(label.intrinsicContentSize.width) pt)")
+                }
+            } else if let label = subview as? NSTextField {
+                // A wrapping label cut to fewer lines than it needs drops its last words silently.
+                let rect = label.alignmentRect(forFrame: label.frame)
+                let needed = label.attributedStringValue.boundingRect(
+                    with: NSSize(width: rect.width, height: 10_000), options: [.usesLineFragmentOrigin, .usesFontLeading]
+                ).height.rounded(.up)
+                if rect.height < needed - 0.5 {
+                    print("\(path): \"\(label.stringValue)\" is cut (\(rect.height) of \(needed) pt high)")
                 }
             }
             reportTruncatedLabels(in: subview, path: path)
