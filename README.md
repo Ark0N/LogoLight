@@ -53,6 +53,10 @@ Or [build it from source](#build-from-source).
 2. Search for **LogoLight**.
 3. Drag **Backlight** into Control Center, or straight into the menu bar.
 
+<p align="center">
+  <img src="docs/control-center.png" width="720" alt="Control Center with LogoLight's Backlight button at the top left. An arrow points to it: one tap turns the glowing logo on your lid on or off, shown as the lid lit and dark. A second arrow points to Edit Controls, with the steps to add it: open Control Center, click Edit Controls, search for LogoLight, drag Backlight in.">
+</p>
+
 Apple only lets apps add switches and buttons to Control Center, so the brightness slider stays
 in LogoLight's own menu.
 
