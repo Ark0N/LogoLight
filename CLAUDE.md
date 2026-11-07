@@ -34,9 +34,9 @@ runs but says the logo isn't available. So:
   the measured curve in the daemon's 17.5 ms frames, so landings and overshoots look like the
   real logo's. Its timing is exact, though, and the real one isn't: a 10 ms sleep runs about 2 ms
   late, and frames come 12–19 ms apart. So timing-sensitive tests also run under the `Timing`
-  variations in `FadeTests.swift` (late and jittered polls, 16 and 19 ms frames); a landing that
+  variations in `FadeTests.swift` (polls up to 15 ms late, frames 12–19 ms apart); a landing that
   counted its sleeps instead of reading the clock passed with exact timing and bounced with late
-  polls. `LightEmitter` takes the clock (the fake's `daemon.time` in tests). The fake can trace
+  polls. The full suite takes about 20 s. `LightEmitter` takes the clock (the fake's `daemon.time` in tests). The fake can trace
   the level every millisecond, and `FakeClock.returnsWhenCancelledLate`
   makes a sleep that's cancelled once its time is up return normally, as `Task.sleep` does. (The older
   tests move a fade a step per read instead.)

@@ -194,7 +194,9 @@ counting polls, and a segment's fade is held once it has covered three quarters 
 a real 10 ms sleep runs about 2 ms late (median; 5 ms at p90), so a 50 ms segment counted in
 polls let a third daemon frame through at the spring's top speed, and the next segment
 overcorrected (in the fake, a click bounced and was held up to 0.06 off). The probe timed its
-segments by the clock too. The hold ends it. Measured:
+segments by the clock too. A segment that finds the logo already past its point (a short frame
+or a very late poll) holds it there instead of turning back, and after a stall, segments whose
+time is up are skipped rather than started and replaced at once. The hold ends it. Measured:
 
 - Slider moves with 4–5 segments (0.7 → 0.3, 0.3 → 0.8, 0.8 → 0.265) stopped at 0.24–0.51 per
   second, 10–17% of the top speed, landing within 0.003, 0.022 and 0.002. The keyboard dipped
@@ -206,7 +208,7 @@ In LogoLight, a move to 0 or 1 stays a plain fade. A level is eased onto only on
 has stayed put for two polls, so a slider being dragged is followed as before, and a change
 while easing on stops it short for a new fade. The time a peak's fade overran (on the clock)
 is taken from the holds that follow, so an effect keeps its cycle length. In the tests' fake
-(which moves in frames, as above), with exact, late and jittered polls and 16–19 ms frames,
+(which moves in frames, as above), with exact and late polls (up to 15 ms) and frames 12–19 ms apart,
 slider clicks land within 0.01 without going back and stop under 25% of the top speed, and
 Breathe, Pulse and Heartbeat keep their cycle within 0.1 s at brightness 0.5. Heartbeat's holds
 after its beats are too short to make up for easing on, so its rest is about 0.26 s shorter.
