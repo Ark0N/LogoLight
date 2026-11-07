@@ -17,19 +17,23 @@ public enum LogoEffect: String, CaseIterable, Sendable {
     }
 
     /// One cycle of the effect, repeated while it plays.
+    ///
+    /// To the eye, a rise from dark looks about twice as fast as a fall from lit over the same
+    /// time, so rises are longer than falls, with short holds at the top. These are starting
+    /// values, still to be tuned by eye on the MacBook.
     public var cycle: [FadeStep] {
         switch self {
         case .none:
             []
         case .breathe:
             // Slow and soft, like the old MacBook sleep light.
-            [FadeStep(lit: false, fade: 2.2, hold: 0.3), FadeStep(lit: true, fade: 2.2, hold: 1.2)]
+            [FadeStep(lit: false, fade: 2.0, hold: 0.5), FadeStep(lit: true, fade: 3.5, hold: 0.3)]
         case .pulse:
-            [FadeStep(lit: false, fade: 0.7, hold: 0.05), FadeStep(lit: true, fade: 0.7, hold: 0.35)]
+            [FadeStep(lit: false, fade: 0.7, hold: 0.1), FadeStep(lit: true, fade: 1.2, hold: 0.15)]
         case .heartbeat:
-            // Two quick beats from dark, then a rest.
+            // Two quick beats from dark, then a rest (about 1.55 s a cycle).
             [FadeStep(lit: true, fade: 0.12, hold: 0.05), FadeStep(lit: false, fade: 0.18, hold: 0.08),
-             FadeStep(lit: true, fade: 0.12, hold: 0.05), FadeStep(lit: false, fade: 0.6, hold: 0.9)]
+             FadeStep(lit: true, fade: 0.12, hold: 0.05), FadeStep(lit: false, fade: 0.5, hold: 0.45)]
         }
     }
 

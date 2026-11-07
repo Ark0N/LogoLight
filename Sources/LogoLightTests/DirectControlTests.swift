@@ -91,6 +91,15 @@ func effectTests(_ t: TestHarness) async {
         t.expectEqual(LogoEffect.none.cycle, [])
     }
 
+    t.test("Breathe and Pulse rise more slowly than they fall, and Heartbeat keeps a quick rhythm") {
+        for effect in [LogoEffect.breathe, .pulse] {
+            let rise = effect.cycle.first { $0.lit }!, fall = effect.cycle.first { !$0.lit }!
+            t.expect(rise.fade > fall.fade, "\(effect)")
+        }
+        let period = LogoEffect.heartbeat.cycle.reduce(0) { $0 + $1.fade + $1.hold }
+        t.expect(abs(period - 1.55) < 0.01, "a beat every \(period) s")
+    }
+
     t.test("an effect's cycle can start with a rise or a fall") {
         for effect in LogoEffect.allCases where effect != .none {
             for lit in [true, false] {
@@ -140,8 +149,8 @@ func effectTests(_ t: TestHarness) async {
         await settle()
         t.expectEqual(Array(f.daemon.log.prefix(10)),
                       ["fade=1000000000.0", "unblank", // the heading isn't known yet
-                       "fade=2.2", "blank", "fade=2.2", "unblank", "fade=2.2", "blank", "fade=2.2", "unblank"])
-        t.expectEqual(Array(f.clock.slept.prefix(4)), [2.2, 0.3, 2.2, 1.2])
+                       "fade=2.0", "blank", "fade=3.5", "unblank", "fade=2.0", "blank", "fade=3.5", "unblank"])
+        t.expectEqual(Array(f.clock.slept.prefix(4)), [2.0, 0.5, 3.5, 0.3])
     }
 
     await t.test("waits for the logo to be on before playing") {
