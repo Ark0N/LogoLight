@@ -39,6 +39,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LogoLight"
 fill Resources/Info.plist "$APP/Contents/Info.plist"
+# Drawn by scripts/make-icon.swift.
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # The Control Center control: a WidgetKit extension, built the way Xcode builds one, without a project.
 # The system needs its App Intents metadata, which Xcode's appintentsmetadataprocessor extracts from

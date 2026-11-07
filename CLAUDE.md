@@ -229,7 +229,8 @@ the extension (CF shares one remote port per name, and an invalidate lost other 
 answers), a request that reached the app but wasn't answered isn't sent again (the app may be
 showing the password dialog), a request for the state the switch already shows does nothing
 (it used to fade the logo out and in), a tap the fallback path drops while busy fails as "busy",
-and the slider reloads the controls (coalesced). chronod logs "purging instead because we shouldn't cache it ... isApple? false"
+and the slider reloads the controls (coalesced). The app has an icon (`scripts/make-icon.swift`;
+the gallery showed a blank one before), with no Apple logo, which Apple doesn't allow in icons. chronod logs "purging instead because we shouldn't cache it ... isApple? false"
 for this extension, as it did for every ad-hoc and Developer ID probe; that may only mean it
 fetches the control's description when the gallery is opened.
 
