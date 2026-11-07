@@ -12,17 +12,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest"><img src="https://img.shields.io/github/v/release/Ark0N/LogoLight?style=flat-square&label=release&color=0a84ff" alt="Latest release"></a>
-  <a href="https://github.com/Ark0N/LogoLight/releases"><img src="https://img.shields.io/github/downloads/Ark0N/LogoLight/total?style=flat-square&color=0a84ff" alt="Downloads"></a>
-  <img src="https://img.shields.io/badge/macOS-14%2B-1f1f24?style=flat-square" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/notarized-Developer%20ID-1f1f24?style=flat-square" alt="Notarized by Apple">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f1f24?style=flat-square" alt="MIT license"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><b>⬇ Download LogoLight</b></a>
-  &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://logolight.app"><b>logolight.app</b></a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="https://buymeacoffee.com/arkon"><b>☕ Buy me a coffee</b></a>
 </p>
@@ -80,8 +75,8 @@ Plus **Launch at Login**, and nothing to set up: it remembers your brightness an
 
 ## 📦 Install
 
-1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip)**
-   (or from [logolight.app](https://logolight.app)). It's signed with a Developer ID and notarized by Apple.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip)**.
+   It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
 Needs a MacBook Pro with PROLED XDR Display and macOS 14 or later (these Macs ship with macOS 27).
