@@ -55,7 +55,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(statusItemClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            // On the press, like the other menu bar items, not when the button comes back up.
+            button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         }
 
         refresh()
