@@ -14,6 +14,8 @@ public enum ControlLink {
     public static let backlightKind = "Backlight"
     public static let brighterKind = "Brighter"
     public static let dimmerKind = "Dimmer"
+    /// The button that opens the app's menu, whose slider Control Center can't have.
+    public static let sliderKind = "BrightnessSlider"
     /// How much Brighter and Dimmer change the brightness, as a share of the slider.
     public static let brightnessStep = 0.1
     /// What the extension's bundle ID adds to the app's.
@@ -31,6 +33,8 @@ public enum ControlLink {
         case brighter = 4
         /// One step dimmer, while the logo is on.
         case dimmer = 5
+        /// Opens the app's menu, with its brightness slider.
+        case showMenu = 6
     }
 
     /// The brightness after a step from `brightness`: to the next multiple of `brightnessStep`
@@ -40,7 +44,7 @@ public enum ControlLink {
         let step: Double = switch request {
         case .brighter: (steps + 1e-6).rounded(.down) + 1
         case .dimmer: (steps - 1e-6).rounded(.up) - 1
-        case .state, .turnOn, .turnOff: steps
+        case .state, .turnOn, .turnOff, .showMenu: steps
         }
         return min(max(step * brightnessStep, 0), 1)
     }

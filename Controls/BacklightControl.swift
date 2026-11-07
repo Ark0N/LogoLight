@@ -13,6 +13,7 @@ import WidgetKit
 struct LogoLightControls: WidgetBundle {
     var body: some Widget {
         BacklightControl()
+        BrightnessSliderControl()
         BrighterControl()
         DimmerControl()
     }
@@ -83,6 +84,30 @@ struct DimmerControl: ControlWidget {
         }
         .displayName("Backlight Dimmer")
         .description("Makes the logo dimmer.")
+    }
+}
+
+/// Opens LogoLight's menu, with its brightness slider: Apple doesn't let apps put a slider in
+/// Control Center itself.
+struct BrightnessSliderControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: ControlLink.sliderKind, provider: BrightnessValue()) { percent in
+            ControlWidgetButton(action: ShowSliderIntent()) {
+                BrightnessLabel(title: "Brightness", symbol: "slider.horizontal.below.sun.max", percent: percent)
+            }
+        }
+        .displayName("Backlight Brightness")
+        .description("Opens LogoLight's brightness slider, under the menu bar.")
+    }
+}
+
+struct ShowSliderIntent: AppIntent {
+    static let title: LocalizedStringResource = "Show Backlight Brightness"
+    static let description = IntentDescription("Opens LogoLight's menu, with its brightness slider.")
+
+    func perform() async throws -> some IntentResult {
+        _ = try await ContainingApp.ask(.showMenu)
+        return .result()
     }
 }
 

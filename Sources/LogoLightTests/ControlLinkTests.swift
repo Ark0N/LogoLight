@@ -69,6 +69,7 @@ func controlLinkTests(_ t: TestHarness) {
             case .state: break
             case .turnOn, .turnOff: isOn = request == .turnOn
             case .brighter, .dimmer: brightness = ControlLink.brightness(after: request, from: brightness)
+            case .showMenu: break
             }
             return ControlLink.State(isOn: isOn, isAvailable: true, canAdjust: true, brightness: brightness)
         }) else { return t.expect(false, "couldn't register the port") }

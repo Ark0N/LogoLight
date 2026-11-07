@@ -291,6 +291,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             setBrightness(ControlLink.brightness(after: request, from: controller.brightness))
             if !panelState.isOn { setLogo(.on) }
             updateMenu()
+        case .showMenu:
+            // A moment later: Control Center closes first, and the answer can't wait for the menu,
+            // which runs until it's closed.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, !self.isMenuOpen else { return }
+                    self.openMenu()
+                }
+            }
         }
         return controlState(panelState)
     }

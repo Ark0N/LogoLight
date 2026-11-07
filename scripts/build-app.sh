@@ -39,8 +39,35 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LogoLight"
 fill Resources/Info.plist "$APP/Contents/Info.plist"
-# Drawn by scripts/make-icon.swift.
+# Drawn by scripts/make-icon.swift. With Xcode's actool, it also goes in an asset catalog
+# (CFBundleIconName), which newer parts of macOS, like Control Center's gallery, look for.
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+if ACTOOL="$(xcrun --find actool 2>/dev/null)"; then
+    ASSETS="build/assets/Assets.xcassets"
+    rm -rf build/assets
+    mkdir -p "$ASSETS/AppIcon.appiconset"
+    iconutil -c iconset Resources/AppIcon.icns -o build/assets/AppIcon.iconset
+    cp build/assets/AppIcon.iconset/*.png "$ASSETS/AppIcon.appiconset/"
+    {
+        printf '{ "images": [\n'
+        sep=""
+        for size in 16 32 128 256 512; do
+            for scale in 1 2; do
+                [ "$scale" = 1 ] && file="icon_${size}x${size}.png" || file="icon_${size}x${size}@2x.png"
+                printf '%s  { "idiom": "mac", "size": "%sx%s", "scale": "%sx", "filename": "%s" }' "$sep" "$size" "$size" "$scale" "$file"
+                sep=",
+"
+            done
+        done
+        printf '\n], "info": { "version": 1, "author": "xcode" } }\n'
+    } > "$ASSETS/AppIcon.appiconset/Contents.json"
+    printf '{ "info": { "version": 1, "author": "xcode" } }\n' > "$ASSETS/Contents.json"
+    "$ACTOOL" --compile "$APP/Contents/Resources" --platform macosx --minimum-deployment-target 14.0 \
+        --app-icon AppIcon --output-partial-info-plist build/assets/partial.plist \
+        --output-format human-readable-text --errors "$ASSETS" > build/assets/actool.log 2>&1 \
+        || { cat build/assets/actool.log >&2; exit 1; }
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist"
+fi
 
 # The Control Center control: a WidgetKit extension, built the way Xcode builds one, without a project.
 # The system needs its App Intents metadata, which Xcode's appintentsmetadataprocessor extracts from
