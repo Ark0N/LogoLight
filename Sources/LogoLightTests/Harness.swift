@@ -6,6 +6,8 @@ import Foundation
 final class TestHarness {
     private var passed = 0
     private var skipped = 0
+    private var failed = 0
+    /// Every failed expectation, for the summary (a test can have several).
     private var failures: [String] = []
     private var currentTest = ""
     private var currentTestFailed = false
@@ -41,7 +43,7 @@ final class TestHarness {
 
     /// Prints the summary and exits with a failing status if any test failed.
     func finish() -> Never {
-        print("\n\(passed) passed, \(failures.count) failed, \(skipped) skipped")
+        print("\n\(passed) passed, \(failed) failed, \(skipped) skipped")
         for failure in failures { print("  ✗ \(failure)") }
         exit(failures.isEmpty ? 0 : 1)
     }
@@ -71,6 +73,7 @@ final class TestHarness {
     }
 
     private func fail(_ message: String) {
+        if !currentTestFailed { failed += 1 }
         currentTestFailed = true
         failures.append("\(currentTest): \(message)")
         print("  ✗ \(currentTest): \(message)")
