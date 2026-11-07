@@ -363,6 +363,37 @@ func brightnessTests(_ t: TestHarness) async {
         }
     }
 
+    await t.test("changes during a fade end on the newest value") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.8)
+        for _ in 0..<5 { await Task.yield() }
+        f.controller.setBrightness(0.6)
+        for _ in 0..<5 { await Task.yield() }
+        f.controller.setBrightness(0.5)
+        await settle()
+        let target = LogoAnimator.level(forBrightness: 0.5)
+        t.expect(abs(f.daemon.level - target) <= 0.02, "held at \(f.daemon.level), not \(target)")
+        t.expect(f.daemon.isHolding)
+    }
+
+    await t.test("a held level comes back after the display sleeps and wakes") {
+        // This models what corebrightnessd is assumed to do, which hasn't been traced on the
+        // MacBook yet: blank the logo with the display, and relight it fully on wake.
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        await settle()
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.daemon.setHeld(at: 0, state: 1)
+        f.mac.displayAwake = true
+        f.daemon.setHeld(at: 1, state: 2)
+        f.controller.displayDidWake()
+        await settle()
+        t.expect(abs(f.daemon.level - 0.265) <= 0.02, "held at \(f.daemon.level)")
+        t.expect(f.daemon.isHolding)
+        t.expectEqual(f.daemon.keyboardState, 2)
+    }
+
     await t.test("a drag that turns round ends on the newest value") {
         let f = Fixture(direct: true, timeDriven: true)
         f.controller.setBrightness(0.3)
