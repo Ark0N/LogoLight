@@ -222,8 +222,13 @@ public final class LightEmitter {
         setFadeDuration(fadeTime)
         setLit(lit)
 
+        // After every sleep, a cancelled fade stops without writing anything more. `Task.sleep`
+        // returns normally when it's cancelled after its time is up but before the task resumes,
+        // e.g. when the display sleeps then: a hold written after that would relight the keyboard
+        // and leave the endless duration.
         if isAllTheWay {
             try await sleep(duration)
+            try Task.checkCancellation()
             return target
         }
         var waited = 0.0
@@ -241,6 +246,7 @@ public final class LightEmitter {
             }
             if lit ? now >= target : now <= target { break }
             try await sleep(Self.pollInterval)
+            try Task.checkCancellation()
             waited += Self.pollInterval
         }
         turnRound(from: lit) // and hold it there

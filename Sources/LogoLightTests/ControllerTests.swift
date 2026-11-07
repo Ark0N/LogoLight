@@ -256,6 +256,10 @@ final class FakeClock {
     /// The total time slept so far, by every task.
     private(set) var now = 0.0
     var onSleep: (@MainActor (Double) -> Void)?
+    /// When true, a sleep cancelled once its time has passed (in `onSleep`, or while it waits for
+    /// the main actor) returns normally, as the real `Task.sleep` does. By default it throws,
+    /// which ends loops sooner.
+    var returnsWhenCancelledLate = false
 
     func sleep(_ seconds: Double) async throws {
         try Task.checkCancellation()
@@ -265,7 +269,7 @@ final class FakeClock {
         now += seconds
         onSleep?(seconds)
         await Task.yield()
-        try Task.checkCancellation()
+        if !returnsWhenCancelledLate { try Task.checkCancellation() }
     }
 }
 
