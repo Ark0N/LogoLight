@@ -6,10 +6,15 @@ import AppKit
 /// menu's window key, a moment after the menu appears, and is grey until then. This one uses the accent
 /// colour from the first frame, like `LogoSlider`, and animates only when it's flipped.
 final class LogoSwitch: NSControl {
-    static let size = NSSize(width: 40, height: 24)
+    /// The size of a regular `NSSwitch` on macOS 27, measured from one drawn offscreen: a 54 × 24 track
+    /// with a 32 × 20 capsule for a knob, 2 points in from the edges.
+    static let size = NSSize(width: 54, height: 24)
+    private static let knobSize = NSSize(width: 32, height: 20)
     private static let knobInset: CGFloat = 2
+    /// How far the pointer moves before a press becomes a drag of the knob.
+    private static let dragThreshold: CGFloat = 3
 
-    /// Whether the switch is on. A click flips it (animated) before the action is sent.
+    /// Whether the switch is on. A click or a drag flips it (animated) before the action is sent.
     private(set) var isOn = false
 
     /// When false, clicks are ignored without the switch looking disabled, e.g. while the change it
@@ -23,10 +28,18 @@ final class LogoSwitch: NSControl {
     private let track = CALayer()
     private let fill = CALayer()
     private let knob = CALayer()
+    /// Where a press started, while the mouse button is down.
+    private var pressX: CGFloat?
+    private var isDragging = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        // Always its full size: a row that's too narrow truncates the label instead.
+        for orientation in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
+            setContentHuggingPriority(.required, for: orientation)
+            setContentCompressionResistancePriority(.required, for: orientation)
+        }
         track.addSublayer(fill)
         track.addSublayer(knob)
         layer?.addSublayer(track)
@@ -45,20 +58,25 @@ final class LogoSwitch: NSControl {
     /// Turns the switch on or off without sending its action.
     func setOn(_ on: Bool, animated: Bool) {
         guard on != isOn else { return }
+        isOn = on
+        NSAccessibility.post(element: self, notification: .valueChanged)
+        settle(animated: animated)
+    }
+
+    /// Moves the knob and the colour to match `isOn`, springing from wherever they are now.
+    private func settle(animated: Bool) {
         let fromX = (knob.presentation() ?? knob).position.x
         let fromOpacity = (fill.presentation() ?? fill).opacity
-        isOn = on
         withoutAnimation {
             knob.position = knobCenter
-            fill.opacity = on ? 1 : 0
+            fill.opacity = isOn ? 1 : 0
         }
-        NSAccessibility.post(element: self, notification: .valueChanged)
         guard animated, window != nil else {
             knob.removeAllAnimations()
             fill.removeAllAnimations()
             return
         }
-        let slide = CASpringAnimation(perceptualDuration: 0.35, bounce: 0.15)
+        let slide = CASpringAnimation(perceptualDuration: 0.3, bounce: 0.15)
         slide.keyPath = "position.x"
         slide.fromValue = fromX
         slide.toValue = knob.position.x
@@ -68,7 +86,7 @@ final class LogoSwitch: NSControl {
         let tint = CABasicAnimation(keyPath: "opacity")
         tint.fromValue = fromOpacity
         tint.toValue = fill.opacity
-        tint.duration = 0.2
+        tint.duration = 0.3
         tint.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         fill.add(tint, forKey: "tint")
     }
@@ -92,18 +110,22 @@ final class LogoSwitch: NSControl {
         withoutAnimation {
             track.frame = bounds
             fill.frame = track.bounds
-            let diameter = bounds.height - 2 * Self.knobInset
-            knob.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+            knob.bounds = CGRect(origin: .zero, size: Self.knobSize)
             for layer in [track, fill] { layer.cornerRadius = bounds.height / 2 }
-            knob.cornerRadius = diameter / 2
+            knob.cornerRadius = Self.knobSize.height / 2
             knob.position = knobCenter
             fill.opacity = isOn ? 1 : 0
         }
     }
 
+    /// The knob's centre when it's off and when it's on.
+    private var knobRange: ClosedRange<CGFloat> {
+        let offX = Self.knobInset + Self.knobSize.width / 2
+        return offX...max(offX, bounds.width - offX)
+    }
+
     private var knobCenter: CGPoint {
-        let radius = bounds.height / 2
-        return CGPoint(x: isOn ? bounds.width - radius : radius, y: bounds.midY)
+        CGPoint(x: isOn ? knobRange.upperBound : knobRange.lowerBound, y: bounds.midY)
     }
 
     private func withoutAnimation(_ changes: () -> Void) {
@@ -115,13 +137,39 @@ final class LogoSwitch: NSControl {
 
     // MARK: - Events
 
+    // Not calling super in these keeps the click from going up to the menu.
+
     override func mouseDown(with event: NSEvent) {
-        // Handled on mouse-up. Not calling super keeps the click from going up to the menu.
+        guard isEnabled, acceptsInput else { return }
+        pressX = convert(event.locationInWindow, from: nil).x
+        isDragging = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let pressX else { return }
+        let offset = convert(event.locationInWindow, from: nil).x - pressX
+        if !isDragging, abs(offset) < Self.dragThreshold { return }
+        isDragging = true
+        // The knob follows the pointer along the track.
+        let range = knobRange
+        let start = isOn ? range.upperBound : range.lowerBound
+        withoutAnimation {
+            knob.removeAllAnimations()
+            knob.position.x = min(max(start + offset, range.lowerBound), range.upperBound)
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        flipByUser()
+        guard pressX != nil else { return }
+        pressX = nil
+        if isDragging {
+            // A drag ends on the side the knob is nearer.
+            isDragging = false
+            let on = knob.position.x > (knobRange.lowerBound + knobRange.upperBound) / 2
+            if on == isOn || !flipByUser() { settle(animated: true) }
+        } else if bounds.contains(convert(event.locationInWindow, from: nil)) {
+            flipByUser()
+        }
     }
 
     @discardableResult

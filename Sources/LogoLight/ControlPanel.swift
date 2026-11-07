@@ -24,8 +24,8 @@ final class ControlPanel: NSView {
     var onBrightnessChanged: ((Double) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
 
-    /// Narrow, with room for the longest label ("Heartbeat", 61 pt at 13 pt) between its tile and switch.
-    /// The menu's own items need only 143.
+    /// Narrow: the least that fits the longest label ("Heartbeat", 61 pt at 13 pt) between its tile and a
+    /// full-size switch is 179. The menu's own items need only 143.
     private static let width: CGFloat = 180
     private static let inset: CGFloat = 6
     private static let rowHeight: CGFloat = 36
@@ -34,6 +34,10 @@ final class ControlPanel: NSView {
     /// Where the icon tiles start inside a card, and their size.
     private static let tileInset: CGFloat = 8
     fileprivate static let tileSize: CGFloat = 24
+    /// How far a switch sits from the card's edge (the same as the tiles), and the least room between
+    /// it and its label.
+    private static let switchInset: CGFloat = 8
+    private static let labelSpacing: CGFloat = 4
 
     private let stack = NSStackView()
     private let preview: LogoPreview
@@ -186,8 +190,8 @@ final class ControlPanel: NSView {
             tile.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             label.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Self.textColumn),
             label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -6),
-            toggle.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -Self.labelSpacing),
+            toggle.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -Self.switchInset),
             toggle.centerYAnchor.constraint(equalTo: row.centerYAnchor),
         ])
         return row
@@ -569,6 +573,7 @@ enum PanelRenderer {
         panel.update(state)
         window.setContentSize(panel.frame.size)
         window.displayIfNeeded()
+        reportTruncatedLabels(in: panel, path: path)
 
         guard let layer = panel.layer ?? window.contentView?.layer else { return }
         let scale = 2
@@ -587,6 +592,20 @@ enum PanelRenderer {
         cg.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
         layer.render(in: cg)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+
+    /// Says which visible one-line labels are narrower than their text, so a narrower panel can be checked.
+    private static func reportTruncatedLabels(in view: NSView, path: String) {
+        for subview in view.subviews where !subview.isHiddenOrHasHiddenAncestor {
+            // Both widths are without the label's own padding (its alignment rect).
+            if let label = subview as? NSTextField, label.cell?.wraps == false {
+                let width = label.alignmentRect(forFrame: label.frame).width
+                if width < label.intrinsicContentSize.width - 0.5 {
+                    print("\(path): \"\(label.stringValue)\" is truncated (\(width) of \(label.intrinsicContentSize.width) pt)")
+                }
+            }
+            reportTruncatedLabels(in: subview, path: path)
+        }
     }
 }
 #endif
