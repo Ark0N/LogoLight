@@ -143,17 +143,21 @@ public final class LogoAnimator {
     private func play(_ cycle: [FadeStep]) {
         isPlaying = true
         task = Task { [weak self] in
-            while !Task.isCancelled {
+            playing: while true {
                 for step in cycle {
                     guard let self, !Task.isCancelled else { return }
+                    // The display can go away without a sleep notification, e.g. when the lid is
+                    // closed with an external display attached. Stop until the next wake.
+                    guard self.isDisplayAwake() else { break playing }
                     do {
                         try await self.emitter.fade(to: step.lit ? self.level : 0, over: step.fade, sleep: self.sleep)
                         try await self.sleep(step.hold)
                     } catch {
-                        return
+                        break playing
                     }
                 }
             }
+            self?.taskDidEnd()
         }
     }
 
@@ -177,6 +181,14 @@ public final class LogoAnimator {
             }
             if let self, self.generation == generation { self.isAdjusting = false }
         }
+    }
+
+    /// Clears up after a task that stopped by itself. One that was cancelled has been replaced
+    /// or stopped by `cancel()`, which has already done this.
+    private func taskDidEnd() {
+        guard !Task.isCancelled else { return }
+        task = nil
+        isPlaying = false
     }
 
     private func cancel() {

@@ -179,6 +179,19 @@ func effectTests(_ t: TestHarness) async {
         f.controller.restoreNormalLighting()
     }
 
+    await t.test("stops when the display goes away without a sleep notification, and keeps the choice") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setEffect(.pulse)
+        await settle()
+        f.mac.displayAwake = false // e.g. the lid closed with an external display attached
+        await settle()
+        t.expect(!f.controller.animator!.isPlaying)
+        let count = f.daemon.log.count
+        await settle()
+        t.expectEqual(f.daemon.log.count, count)
+        t.expectEqual(f.controller.effect, .pulse)
+    }
+
     await t.test("choosing None stops the effect and fades back to the chosen brightness") {
         let f = Fixture(direct: true)
         f.controller.setEffect(.pulse)
