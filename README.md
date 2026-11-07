@@ -1,14 +1,5 @@
 <p align="center">
-  <img src="docs/icon.png" width="140" height="140" alt="LogoLight's icon: a dark lid with a soft light glowing at its centre">
-</p>
-
-<h1 align="center">LogoLight</h1>
-
-<h3 align="center">Control your glowing Apple logo.</h3>
-
-<p align="center">
-  A free menu bar app for the illuminated Apple logo on the back of your new<br>
-  <b>MacBook Pro with PROLED XDR Display</b>. Turn it off, dim it, or let it breathe, pulse or beat like a heart.
+  <img src="docs/banner.jpg" width="100%" alt="LogoLight: Control your glowing Apple logo. Turn it off, dim it, or let it breathe, pulse or beat like a heart. Right from the menu bar. Free, open source, for the MacBook Pro with PROLED XDR Display. Beside the text, LogoLight's live view shows a large lid with the Apple logo glowing, next to its menu with Backlight and Breathe switched on.">
 </p>
 
 <p align="center">
