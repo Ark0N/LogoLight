@@ -146,6 +146,11 @@ final class FakeDaemon: LightEmitterService {
     /// How often a time-driven fade moves: measured as about every 17.5 ms, and a restarted fade
     /// first moved 18–20 ms after it was started. 0 moves it continuously.
     var frameInterval = 0.0175
+    /// When set, the time to each next frame comes from here instead (the real frames come
+    /// 12–19 ms apart).
+    var frameIntervals: (() -> Double)?
+    private var lastFrame = 0.0
+    private var nextFrame = 0.0
     /// The time passed through `elapse(_:)` so far.
     private(set) var time = 0.0
     /// When set, `elapse(_:)` adds the level here every millisecond.
@@ -205,8 +210,12 @@ final class FakeDaemon: LightEmitterService {
         fade.elapsed += seconds
         let end: Double = state == 2 ? 1 : 0
         // Where its last frame put it, until it reaches the end at its duration.
-        let frames = frameInterval > 0 ? (fade.elapsed / frameInterval + 1e-9).rounded(.down) * frameInterval
+        var frames = frameInterval > 0 ? (fade.elapsed / frameInterval + 1e-9).rounded(.down) * frameInterval
             : fade.elapsed
+        if let frameIntervals {
+            while fade.elapsed + 1e-9 >= nextFrame { lastFrame = nextFrame; nextFrame += frameIntervals() }
+            frames = lastFrame
+        }
         let s = fade.elapsed >= fade.length ? 1 : frames / fade.length
         level = fade.from + (end - fade.from) * Self.progress(s)
         peak = max(peak, level)
@@ -246,6 +255,8 @@ final class FakeDaemon: LightEmitterService {
             isMoving = !isHolding
             // A new fade starts from rest, wherever the last one had got to.
             fade = (from: level, length: fadeDuration > 0 ? fadeDuration : Self.automaticFadeDuration, elapsed: 0)
+            lastFrame = 0
+            nextFrame = frameIntervals?() ?? 0
             if stepPerRead >= 1 { advance(by: 1) }
         default: break
         }

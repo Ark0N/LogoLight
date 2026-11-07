@@ -366,6 +366,9 @@ public final class LightEmitter {
         let landingStart = clock()
         segments: for i in 1...count {
             guard let now = fadeLevel, !isPast(now) else { break }
+            // A segment whose time is up before its fade could start (after a stall) is skipped,
+            // so it doesn't write a fade that's replaced at once. The last one always gets its time.
+            if i < count, landingStart + segment * Double(i) - clock() < Self.startLatency { continue }
             let u = Double(i) / Double(count)
             let waypoint = start + distance * (1 - (1 - u) * (1 - u))
             let delta = waypoint - now
@@ -382,7 +385,8 @@ public final class LightEmitter {
             } else {
                 stop() // close enough for now, so the last segment's fade doesn't carry it on
             }
-            let segmentEnd = landingStart + segment * Double(i)
+            var segmentEnd = landingStart + segment * Double(i)
+            if i == count { segmentEnd = max(segmentEnd, clock() + segment) }
             while true {
                 let left = segmentEnd - clock()
                 guard left > 1e-6 else { break }
