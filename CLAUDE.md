@@ -31,8 +31,13 @@ runs but says the logo isn't available. So:
   `Sources/LogoLightTests/ControllerTests.swift` (`SimulatedMac`, `FakeDaemon`, which logs every
   key it's sent, and `FakeClock`) model the real hardware's behaviour. Use
   `Fixture(timeDriven: true)` for new tests: the fake's fades then move as the code sleeps, along
-  the measured curve in the daemon's 17.5 ms frames, so landings, overshoots and timing look like
-  the real logo's. It can trace the level every millisecond, and `FakeClock.returnsWhenCancelledLate`
+  the measured curve in the daemon's 17.5 ms frames, so landings and overshoots look like the
+  real logo's. Its timing is exact, though, and the real one isn't: a 10 ms sleep runs about 2 ms
+  late, and frames come 12–19 ms apart. So timing-sensitive tests also run under the `Timing`
+  variations in `FadeTests.swift` (late and jittered polls, 16 and 19 ms frames); a landing that
+  counted its sleeps instead of reading the clock passed with exact timing and bounced with late
+  polls. `LightEmitter` takes the clock (the fake's `daemon.time` in tests). The fake can trace
+  the level every millisecond, and `FakeClock.returnsWhenCancelledLate`
   makes a sleep that's cancelled once its time is up return normally, as `Task.sleep` does. (The older
   tests move a fade a step per read instead.)
 - Anything that changes what the LED does must be checked on the MacBook before it's called
@@ -152,9 +157,11 @@ run `tools/livecheck` and watch the logo):
 - A level in between is now eased onto with a few short fades instead of a fade cut short at
   speed (docs/corebrightnessd.md, "Easing onto a level"): the slider, turning on at a brightness,
   a wake or launch, and effect peaks, whose hold is shortened to make up for it. Watch that it
-  slows to a stop and the keyboard doesn't visibly dim; livecheck prints the speed at the stop
-  and the keyboard's lowest duty. At a brightness below full, Heartbeat beats slower (about 1.8 s
-  a cycle instead of 1.55 s at 0.5), since its holds are too short to absorb it. Ask the user.
+  slows to a stop and the keyboard doesn't visibly dim; livecheck prints the speed at the stop,
+  how far it went back, and the keyboard's lowest duty. The time a peak's easing takes is taken
+  from the holds after it, so effects keep their cycle length; Heartbeat's rest gets shorter by
+  about 0.26 s at brightness 0.5, since its holds after the beats are too short. Ask the user
+  whether that rhythm looks right, or whether its beats should stay sharp instead.
 - A slow drag no longer holds the logo again at every step (which flipped `DisplayLogicalState`
   60 times a second), and nudging the slider at the top and back ends at normal full brightness.
   A followed target missed by more than 0.02 gets a new fade, and a fade cancelled as its sleep

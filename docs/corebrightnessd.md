@@ -189,7 +189,12 @@ Then it eases out, following `1 - (1 - u)²` over `L = 2·|r| / |v|` (kept betwe
 a fixed few segments, 4 (6 when `L` is 0.4 s or more), each `max(0.05, L / N)` long. Each segment
 starts a fade (turning round first) with the duration that covers its part of the way by the
 segment's end, after the start latency: `(segment − 0.018) / t(delta / D)`, with `t` the spring's
-inverse (by bisection) and `D` the distance to 0 or 1. The hold ends it. Measured:
+inverse (by bisection) and `D` the distance to 0 or 1. Segments end on the clock, not by
+counting polls, and a segment's fade is held once it has covered three quarters of its part:
+a real 10 ms sleep runs about 2 ms late (median; 5 ms at p90), so a 50 ms segment counted in
+polls let a third daemon frame through at the spring's top speed, and the next segment
+overcorrected (in the fake, a click bounced and was held up to 0.06 off). The probe timed its
+segments by the clock too. The hold ends it. Measured:
 
 - Slider moves with 4–5 segments (0.7 → 0.3, 0.3 → 0.8, 0.8 → 0.265) stopped at 0.24–0.51 per
   second, 10–17% of the top speed, landing within 0.003, 0.022 and 0.002. The keyboard dipped
@@ -199,11 +204,12 @@ inverse (by bisection) and `D` the distance to 0 or 1. The hold ends it. Measure
 
 In LogoLight, a move to 0 or 1 stays a plain fade. A level is eased onto only once its target
 has stayed put for two polls, so a slider being dragged is followed as before, and a change
-while easing on stops it short for a new fade. An effect shortens the hold after a peak by
-the time its fade overran. In the tests' fake (which moves in frames, as above), slider clicks
-land within 0.002 and stop at 6–13% of the top speed, and Breathe and Pulse keep their cycle
-within 0.1 s. Heartbeat's holds after its beats are too short to make up for easing on, so at
-brightness 0.5 its cycle takes about 1.8 s instead of 1.55 s.
+while easing on stops it short for a new fade. The time a peak's fade overran (on the clock)
+is taken from the holds that follow, so an effect keeps its cycle length. In the tests' fake
+(which moves in frames, as above), with exact, late and jittered polls and 16–19 ms frames,
+slider clicks land within 0.01 without going back and stop under 25% of the top speed, and
+Breathe, Pulse and Heartbeat keep their cycle within 0.1 s at brightness 0.5. Heartbeat's holds
+after its beats are too short to make up for easing on, so its rest is about 0.26 s shorter.
 
 Not tested yet: what `corebrightnessd` does with a held level when the display **really**
 sleeps and wakes, since its own Blank/Unblank could use the huge duration. LogoLight resets the
