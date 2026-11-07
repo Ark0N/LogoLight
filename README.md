@@ -13,33 +13,40 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f1f24?style=flat-square" alt="MIT license"></a>
 </p>
 
-<br>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
-    <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider and the effect switches.">
-  </picture>
-</p>
-
 ## Features
 
 <table>
   <tr>
-    <td width="50%" valign="top"><b>Backlight switch</b><br>At the top of the menu, or Option-click the menu bar icon. The logo fades out and back in smoothly, with no password.</td>
-    <td width="50%" valign="top"><b>Brightness</b><br>A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.</td>
-  </tr>
-  <tr>
-    <td valign="top"><b>Effects</b><br>Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.</td>
-    <td valign="top"><b>Live view</b><br>Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.</td>
-  </tr>
-  <tr>
-    <td valign="top"><b>Control Center</b><br>A Backlight control for Control Center or the menu bar (macOS 26 or later).</td>
-    <td valign="top"><b>A password once, at most</b><br>Usually none at all. Where macOS asks, <a href="#fallback-the-documented-command">Disable Password</a> makes it the only time.</td>
+    <td width="290" align="center" valign="middle">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
+        <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider and the effect switches.">
+      </picture>
+    </td>
+    <td valign="middle">
+      <b>Backlight switch</b><br>
+      At the top of the menu, or Option-click the menu bar icon. The logo fades out and back in smoothly, with no password.
+      <br><br>
+      <b>Live view</b><br>
+      Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.
+      <br><br>
+      <b>Brightness</b><br>
+      A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.
+      <br><br>
+      <b>Effects</b><br>
+      Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.
+      <br><br>
+      <b>Control Center</b><br>
+      A Backlight control for Control Center or the menu bar (macOS 26 or later).
+      <br><br>
+      <b>A password once, at most</b><br>
+      Usually none at all. Where macOS asks, <a href="#fallback-the-documented-command">Disable Password</a> makes it the only time.
+      <br><br>
+      <b>Launch at Login</b><br>
+      Nothing to set up: it remembers your brightness and effect.
+    </td>
   </tr>
 </table>
-
-Plus **Launch at Login**, and nothing to set up: it remembers your brightness and effect.
 
 ## See it glow
 
