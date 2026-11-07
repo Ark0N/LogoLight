@@ -1,9 +1,9 @@
 import AppKit
 import LogoLightCore
 
-/// The iOS Settings-style panel at the top of the menu: a live view of the logo, a switch for it
-/// and a brightness slider, then a switch for each effect. Everything below the logo switch is
-/// greyed out while the logo is off.
+/// The iOS Settings-style panel at the top of the menu: a switch for the logo first, where it's
+/// easiest to reach, then a live view of it and a brightness slider, then a switch for each effect.
+/// Everything below the live view is greyed out while the logo is off.
 @MainActor
 final class ControlPanel: NSView {
     var onLogoSwitched: ((Bool) -> Void)?
@@ -42,7 +42,7 @@ final class ControlPanel: NSView {
     private let logoTile = IconTile(symbol: "lightbulb.fill", color: .systemOrange)
     private let logoLabel = NSTextField(labelWithString: "Backlight")
     private let logoSwitch = LogoSwitch()
-    private let brightnessSeparator = Separator()
+    private let brightnessCard = Card()
     private let brightnessRow = NSView()
     private let dimIcon = NSImageView()
     private let brightIcon = NSImageView()
@@ -89,8 +89,7 @@ final class ControlPanel: NSView {
         logoLabel.textColor = state.isSupported ? .labelColor : .tertiaryLabelColor
         logoTile.isDimmed = !state.isSupported
 
-        brightnessRow.isHidden = !state.showsAdjustments
-        brightnessSeparator.isHidden = !state.showsAdjustments
+        brightnessCard.isHidden = !state.showsAdjustments
         effectsHeaderContainer.isHidden = !state.showsAdjustments
         effectsCard.isHidden = !state.showsAdjustments
 
@@ -143,12 +142,16 @@ final class ControlPanel: NSView {
             stack.widthAnchor.constraint(equalToConstant: Self.width),
         ])
 
-        addFullWidth(preview)
-
-        // The logo: on/off and brightness.
+        // The logo: on/off at the top, where the user wanted it (easier to reach than below the live
+        // view), then the live view, then the brightness.
         logoSwitch.target = self
         logoSwitch.action = #selector(logoSwitchChanged)
         logoSwitch.setAccessibilityLabel("Apple logo backlight")
+        let logoCard = Card()
+        logoCard.add([row(tile: logoTile, label: logoLabel, toggle: logoSwitch)])
+        addFullWidth(logoCard)
+
+        addFullWidth(preview)
 
         dimIcon.image = Self.symbol("sun.min.fill", size: 11)
         brightIcon.image = Self.symbol("sun.max.fill", size: 15)
@@ -156,10 +159,8 @@ final class ControlPanel: NSView {
         brightnessSlider.setAccessibilityLabel("Brightness")
         brightnessSlider.onChange = { [weak self] in self?.onBrightnessChanged?($0) }
         layOutBrightnessRow()
-
-        let logoCard = Card()
-        logoCard.add([row(tile: logoTile, label: logoLabel, toggle: logoSwitch), brightnessSeparator, brightnessRow])
-        addFullWidth(logoCard)
+        brightnessCard.add([brightnessRow])
+        addFullWidth(brightnessCard)
 
         // Only on a Mac without the logo, where nothing else is shown.
         messageLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)

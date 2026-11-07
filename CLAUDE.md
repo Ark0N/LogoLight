@@ -152,7 +152,9 @@ wide, measured:
   user chose them over a regular `NSSwitch`'s size on macOS 27 (54 × 24 with a 32 × 20 capsule
   knob, which would need a 179-point panel).
 
-The live view at the top is drawn as the lid of this MacBook Pro in its real proportions and
+The panel's order is the user's: the Backlight switch first ("so its much easier to enable,
+disable it"), then the live view, then the brightness slider (its own card), then the effects.
+The live view is drawn as the lid of this MacBook Pro in its real proportions and
 its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
 Launch Services' device types). They also asked for a live view "so fully synced up": `LogoPreview` shows
 `LogoController.liveGlow`, read from the hardware on each frame (a display link, at 60 Hz) while
