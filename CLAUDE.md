@@ -171,7 +171,9 @@ run `tools/livecheck` and watch the logo):
   on-off-on shouldn't blink the logo (`tools/livecheck` can't flip the panel's switch).
 - A password dialog or an error alert closes the menu first.
 - `pkill LogoLight` now quits cleanly (the logo returns to normal), and the make targets wait
-  for it to exit before opening the new build.
+  for it to exit before opening the new build. One that's blocked (a password dialog is open)
+  can't take the signal until it's answered, so after 2 s they kill it instead (checked with a
+  stand-in process only).
 - Closing the lid with an external display attached pauses an effect, and opening it resumes
   it; connecting an external display with the lid open changes nothing.
 

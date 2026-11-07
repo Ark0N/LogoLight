@@ -2,8 +2,10 @@ APP := build/LogoLight.app
 INSTALL_DIR ?= /Applications
 
 # Quits a running LogoLight (yours only) and waits up to 2 s for it to exit. It quits cleanly, returning
-# the logo to normal first, and `open` would otherwise find the old one still running.
-QUIT_APP = pkill -x -U "$$(id -u)" LogoLight; for i in $$(seq 20); do pgrep -x -U "$$(id -u)" LogoLight > /dev/null || break; sleep 0.1; done; true
+# the logo to normal first, and `open` would otherwise find the old one still running. One that's still
+# running after that is blocked (e.g. showing the password dialog) and would only quit once that's
+# answered, so it's killed, rather than letting the new build start beside it.
+QUIT_APP = pkill -x -U "$$(id -u)" LogoLight; for i in $$(seq 20); do pgrep -x -U "$$(id -u)" LogoLight > /dev/null || break; sleep 0.1; done; if pgrep -x -U "$$(id -u)" LogoLight > /dev/null; then echo 'LogoLight did not quit (waiting for a password?); killing it'; pkill -KILL -x -U "$$(id -u)" LogoLight; sleep 0.2; fi; true
 
 .PHONY: build test app dist run install uninstall clean
 
