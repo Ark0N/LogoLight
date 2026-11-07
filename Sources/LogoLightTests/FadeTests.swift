@@ -132,6 +132,45 @@ func fadeTests(_ t: TestHarness) async {
         }
     }
 
+    await t.test("a slow fade starts again when the target jumps further than it can catch up with") {
+        let daemon = FakeDaemon()
+        daemon.timeDriven = true
+        daemon.stepPerRead = 0
+        let clock = FakeClock()
+        clock.onSleep = { [daemon] in daemon.elapse($0) }
+        let emitter = LightEmitter(service: daemon)
+        var target = 0.7
+        var reads = 0
+        // The 0.8 s transition's stretched fade toward 0.7, then the target drops to 0.05.
+        let result = try await emitter.fade(following: {
+            reads += 1
+            if reads == 5 { target = 0.05 }
+            return target
+        }, over: 0.8, sleep: { try await clock.sleep($0) })
+        t.expect(result == nil, "should stop short for a new fade, got \(String(describing: result))")
+        t.expect(clock.now < 0.1, "crawled for \(clock.now) s")
+    }
+
+    await t.test("with the heading unknown, a fade within reach of its target is frozen either way") {
+        for (state, from) in [(1, 0.6), (2, 0.3)] {
+            let daemon = FakeDaemon()
+            daemon.timeDriven = true
+            daemon.stepPerRead = 0
+            daemon.setHeld(at: from, state: 3 - state)
+            _ = daemon.setValue(2, forKey: "LEPWMFactorFadeDuration")
+            _ = daemon.setValue(NSNumber(value: state), forKey: "DisplayLogicalState") // fading
+            daemon.elapse(0.1)
+            let at = daemon.level
+            let clock = FakeClock()
+            clock.onSleep = { [daemon] in daemon.elapse($0) }
+            let emitter = LightEmitter(service: daemon) // a fresh one: the heading isn't known
+            try await emitter.fade(to: at + (state == 1 ? 0.002 : -0.002), over: 0.25,
+                                   sleep: { try await clock.sleep($0) })
+            daemon.elapse(10)
+            t.expect(abs(daemon.level - at) < 0.01, "heading for \(state): moved from \(at) to \(daemon.level)")
+        }
+    }
+
     await t.test("a nudge at the top of the slider and straight back ends fully lit, not held") {
         for nudge in [0.99, 0.97, 0.95] {
             for frames in 1...4 {
@@ -159,5 +198,45 @@ func fadeTests(_ t: TestHarness) async {
             t.expect(f.daemon.level >= 0.999, "after \(polls) polls: stuck at \(f.daemon.level)")
             t.expect(!f.daemon.isHolding, "after \(polls) polls: left at the hold's duration")
         }
+    }
+}
+
+@MainActor
+func stoppingTests(_ t: TestHarness) async {
+    print("\nEffects and switching: stopping")
+
+    await t.test("an effect replaced by another can still be stopped") {
+        // The replaced effect's task ends after the new one has started. It mustn't clear the
+        // new one's handle, or nothing could cancel it.
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setEffect(.pulse)
+        for _ in 0..<20 { await Task.yield() }
+        f.controller.setEffect(.breathe)
+        for _ in 0..<50 { await Task.yield() }
+        t.expect(f.controller.animator!.isPlaying, "Breathe should still count as playing")
+        f.controller.setEffect(.none)
+        f.controller.displayDidSleep()
+        let count = f.daemon.log.count
+        await settle()
+        t.expectEqual(f.daemon.log.count, count)
+    }
+
+    await t.test("the display sleeping during the dark start of turning on stops the fade in") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        let race = AtSleep(f, number: 1, when: { f.clock.slept.last == 0.05 }) {
+            f.mac.displayAwake = false
+            f.controller.displayDidSleep()
+        }
+        try await f.controller.set(.on)
+        await settle()
+        t.expect(race.ran)
+        t.expectEqual(f.daemon.keyboardState, 1)
+        // Nothing after the setting changes starts a fade toward the level: no Unblank, and no
+        // duration but the hold's (or 0).
+        let after = f.daemon.log.drop(while: { $0 != "mode=2" }).dropFirst()
+        t.expect(!after.isEmpty && !after.contains("unblank"), "relit: \(Array(after))")
+        t.expect(after.allSatisfy { !$0.hasPrefix("fade=") || $0 == "fade=1000000000.0" || $0 == "fade=0.0" },
+                 "started a fade: \(Array(after))")
     }
 }
