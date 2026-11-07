@@ -24,6 +24,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// A flip made while a direct switch is being applied: the latest one, applied next.
     private var queuedSetting: LogoIllumination?
     private var switchTask: Task<Void, Never>?
+    private var isMenuOpen = false
+    /// What's waiting for the menu to close (see `whenMenuClosed(_:)`).
+    private var afterMenuCloses: [@MainActor () -> Void] = []
     private var backgroundRefresh: Timer?
     private var liveRefresh: Timer?
     private var liveView: Timer?
@@ -108,6 +111,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
         refresh()
         // Keep the panel current while the menu is open.
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -134,6 +138,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         liveView?.invalidate()
         liveView = nil
         statusItem.menu = nil
+
+        isMenuOpen = false
+        let actions = afterMenuCloses
+        afterMenuCloses = []
+        // On the next turn, once the menu's tracking has ended.
+        if !actions.isEmpty {
+            DispatchQueue.main.async { MainActor.assumeIsolated { actions.forEach { $0() } } }
+        }
+    }
+
+    /// Runs `action` once the menu is closed, closing it first if it's open. The password dialog
+    /// blocks the app until it's answered, and an alert can't be used inside an open menu, so either
+    /// would otherwise sit over a frozen menu.
+    private func whenMenuClosed(_ action: @escaping @MainActor () -> Void) {
+        guard isMenuOpen else { return action() }
+        afterMenuCloses.append(action)
+        menu.cancelTracking()
     }
 
     // MARK: - State
@@ -207,7 +228,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             } catch LogoLightError.cancelled {
                 // The user closed the password dialog (corebrightnessd didn't take the change).
             } catch {
-                show(error, title: "LogoLight couldn't make the change")
+                report(error, title: "LogoLight couldn't make the change")
             }
             next = queuedSetting == target ? nil : queuedSetting
             queuedSetting = nil
@@ -266,30 +287,39 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         do {
             try LaunchAtLogin.setEnabled(!LaunchAtLogin.isEnabled)
         } catch {
-            show(error, title: "Couldn't change Launch at Login")
+            report(error, title: "Couldn't change Launch at Login")
         }
         updateMenu()
     }
 
-    /// Runs a privileged operation, then refreshes and reports any error.
+    /// Runs a privileged operation, which may ask for a password, once the menu has closed. Then
+    /// refreshes and reports any error.
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) {
         guard !isBusy else { return }
         isBusy = true
         updateMenu()
-        Task { @MainActor in
-            defer {
-                isBusy = false
-                if switchTask == nil { requestedSetting = nil }
-                refresh()
-            }
-            do {
-                try await operation()
-            } catch LogoLightError.cancelled {
-                // The user closed the password dialog.
-            } catch {
-                show(error, title: "LogoLight couldn't make the change")
+        whenMenuClosed { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                defer {
+                    isBusy = false
+                    if switchTask == nil { requestedSetting = nil }
+                    refresh()
+                }
+                do {
+                    try await operation()
+                } catch LogoLightError.cancelled {
+                    // The user closed the password dialog.
+                } catch {
+                    report(error, title: "LogoLight couldn't make the change")
+                }
             }
         }
+    }
+
+    /// Shows an error once the menu has closed.
+    private func report(_ error: Error, title: String) {
+        whenMenuClosed { [weak self] in self?.show(error, title: title) }
     }
 
     private func confirmEnablingPasswordless() -> Bool {
