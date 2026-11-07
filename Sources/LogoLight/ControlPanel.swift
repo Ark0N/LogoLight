@@ -1,20 +1,6 @@
 import AppKit
 import LogoLightCore
 
-/// What the control panel shows.
-struct PanelState {
-    var isSupported = false
-    /// The logo setting is on (or unknown, which is treated as on).
-    var isOn = true
-    /// A change is under way (e.g. waiting for the password dialog).
-    var isBusy = false
-    /// Brightness and effects are available (they need direct control).
-    var canAnimate = false
-    var effect = LogoEffect.none
-    var brightness = 1.0
-    var footer = ""
-}
-
 /// The iOS Settings-style panel at the top of the menu: a live view of the logo, a switch for it
 /// and a brightness slider, then a switch for each effect. Everything below the logo switch is
 /// greyed out while the logo is off.
@@ -56,7 +42,6 @@ final class ControlPanel: NSView {
     private let effectsCard = Card()
     private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
 
-    private var state = PanelState()
 
     /// `finish` is the colour of this Mac's case, which the live view copies.
     init(finish: MacFinish = .spaceBlack) {
@@ -76,27 +61,23 @@ final class ControlPanel: NSView {
     }
 
     func update(_ state: PanelState) {
-        self.state = state
         preview.isHidden = !state.isSupported
-        let isOn = state.isSupported && state.isOn
-        let canAdjust = isOn && state.canAnimate && !state.isBusy
-
         let animated = window?.isVisible == true
 
         // While busy, the switch keeps showing what was just asked for. It only looks disabled while
         // a password is needed; a direct change just ignores clicks until it's done.
-        if !state.isBusy { logoSwitch.setOn(isOn, animated: animated) }
-        logoSwitch.isEnabled = state.isSupported && !(state.isBusy && !state.canAnimate)
+        if !state.isBusy { logoSwitch.setOn(state.isOn, animated: animated) }
+        logoSwitch.isEnabled = state.isSupported && !(state.isBusy && !state.showsAdjustments)
         logoSwitch.acceptsInput = !state.isBusy
         logoLabel.textColor = state.isSupported ? .labelColor : .tertiaryLabelColor
         logoTile.isDimmed = !state.isSupported
 
-        let showsAnimation = state.isSupported && state.canAnimate
-        brightnessRow.isHidden = !showsAnimation
-        brightnessSeparator.isHidden = !showsAnimation
-        effectsHeaderContainer.isHidden = !showsAnimation
-        effectsCard.isHidden = !showsAnimation
+        brightnessRow.isHidden = !state.showsAdjustments
+        brightnessSeparator.isHidden = !state.showsAdjustments
+        effectsHeaderContainer.isHidden = !state.showsAdjustments
+        effectsCard.isHidden = !state.showsAdjustments
 
+        let canAdjust = state.canAdjust
         if !brightnessSlider.isTracking { brightnessSlider.value = state.brightness }
         brightnessSlider.isEnabled = canAdjust
         for icon in [dimIcon, brightIcon] {
@@ -110,8 +91,8 @@ final class ControlPanel: NSView {
             row.tile.isDimmed = !canAdjust
         }
 
-        footerLabel.stringValue = state.footer
-        footerContainer.isHidden = state.footer.isEmpty
+        footerLabel.stringValue = state.message ?? ""
+        footerContainer.isHidden = state.message == nil
         resizeToFit()
     }
 
@@ -541,15 +522,14 @@ final class LogoSlider: NSView {
 @MainActor
 enum PanelRenderer {
     static func render(to folder: String) {
-        let on = PanelState(isSupported: true, isOn: true, canAnimate: true, effect: .heartbeat, brightness: 0.6)
-        var off = on
-        off.isOn = false
-        var fallback = on
-        fallback.canAnimate = false
-        var unsupported = PanelState()
-        unsupported.footer = "Needs a MacBook Pro with PROLED XDR Display"
-
-        let states = [("on", on), ("off", off), ("fallback", fallback), ("unsupported", unsupported)]
+        func state(_ setting: LogoIllumination, isSupported: Bool = true, canControlDirectly: Bool = true) -> PanelState {
+            let status = LogoStatus(isSupported: isSupported, setting: isSupported ? setting : nil, source: .daemon,
+                                    isLit: setting == .on, outputLevel: 0.2)
+            return PanelState(status: status, canControlDirectly: canControlDirectly, effect: .heartbeat, brightness: 0.6)
+        }
+        let on = state(.on)
+        let states = [("on", on), ("off", state(.off)), ("fallback", state(.on, canControlDirectly: false)),
+                      ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {
             for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
                 write(state, appearance: appearance, to: "\(folder)/\(name)-\(suffix).png")

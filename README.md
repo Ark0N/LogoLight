@@ -140,7 +140,7 @@ the logo back on without the app:
 
 | Path | What's there |
 | --- | --- |
-| `Sources/LogoLightCore` | `LogoController`; direct control, brightness and effects (`LightEmitter`, `LogoEffect`); reading the state (I/O Registry); the documented command, the admin dialog and the sudoers rule |
+| `Sources/LogoLightCore` | `LogoController`; direct control, brightness and effects (`LightEmitter`, `LogoEffect`); reading the state (I/O Registry); the documented command, the admin dialog and the sudoers rule; what the menu shows (`PanelState`) |
 | `Sources/LogoLight` | The AppKit menu bar app, including the control panel (`ControlPanel.swift`) |
 | `Sources/LogoLightTests` | The test suite (`swift run LogoLightTests`) |
 | `Resources/Info.plist` | App bundle metadata (template) |

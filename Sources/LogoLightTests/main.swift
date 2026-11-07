@@ -3,6 +3,7 @@
 let harness = TestHarness()
 statusReaderTests(harness)
 macFinishTests(harness)
+panelStateTests(harness)
 commandTests(harness)
 passwordlessRuleTests(harness)
 await controllerTests(harness)

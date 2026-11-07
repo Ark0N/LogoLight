@@ -137,31 +137,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         updateMenu()
     }
 
+    private var panelState: PanelState {
+        PanelState(status: status, canControlDirectly: controller.canControlDirectly, effect: controller.effect,
+                   brightness: controller.brightness, isBusy: isBusy)
+    }
+
     private func updateIcon() {
         guard let button = statusItem.button else { return }
-        let (symbol, description): (String, String) = switch (status.isSupported, status.setting) {
-        case (false, _): ("lightbulb.slash", "No illuminated logo on this Mac")
-        case (true, .off): ("lightbulb.slash", "Logo illumination off")
-        case (true, .on): ("lightbulb.fill", "Logo illumination on")
-        case (true, nil): ("lightbulb", "Logo illumination unknown")
-        }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        let state = panelState
+        let image = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: state.symbolDescription)
         image?.isTemplate = true
         button.image = image
-        button.appearsDisabled = !status.isSupported
-        button.toolTip = "LogoLight: \(description)\nOption-click to toggle"
+        button.appearsDisabled = !state.isSupported
+        button.toolTip = "LogoLight: \(state.symbolDescription)\nOption-click to toggle"
     }
 
     private func updateMenu() {
-        panel.update(PanelState(
-            isSupported: status.isSupported,
-            isOn: status.setting != .off,
-            isBusy: isBusy,
-            canAnimate: controller.canControlDirectly,
-            effect: controller.effect,
-            brightness: controller.brightness,
-            footer: status.isSupported ? "" : "Needs a MacBook Pro with PROLED XDR Display"
-        ))
+        panel.update(panelState)
 
         // Only needed when the logo can't be controlled directly; kept visible if a rule is
         // already installed, so it can be removed.
