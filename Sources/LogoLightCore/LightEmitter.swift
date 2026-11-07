@@ -174,15 +174,32 @@ public final class LightEmitter {
         ((service.value(forKey: Key.pwmState) as? [String: Any])?["Factor"] as? NSNumber)?.doubleValue
     }
 
+    /// How much longer than its `duration` a fade may take to reach a target that moved on
+    /// (see `fade(following:over:sleep:)`) before it's started again instead.
+    static let followSlack = 2.0
+
     /// Fades the logo to `level` (0 dark … 1 fully lit) over about `duration` seconds, and holds
     /// it there until the next change. The logo still adapts to ambient light, scaled by the level.
     public func fade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws {
-        let target = min(max(level, 0), 1)
+        try await fade(following: { level }, over: duration, sleep: sleep)
+    }
+
+    /// Like `fade(to:over:sleep:)`, but reads the target again on every poll, e.g. while a slider
+    /// is dragged. While it keeps moving the same way, the fade carries on and stops where it
+    /// passes the latest target, instead of stopping and starting again from rest each time.
+    /// It stops early, for the caller to start a new fade, when the target turns round, reaches
+    /// 0 or 1, or runs too far ahead for this fade to catch up in time.
+    ///
+    /// Returns the target the logo was stopped at.
+    @discardableResult
+    public func fade(following level: () -> Double, over duration: Double,
+                     sleep: LogoAnimator.Sleep) async throws -> Double {
+        var target = min(max(level(), 0), 1)
         // Unknown: assume the far end, so the fade goes all the way.
         let current = fadeLevel ?? (target < 0.5 ? 1 : 0)
         guard abs(target - current) >= 0.005 else {
             stay(at: target, over: duration)
-            return
+            return target
         }
 
         let lit = target > current
@@ -202,14 +219,24 @@ public final class LightEmitter {
 
         if isAllTheWay {
             try await sleep(duration)
-            return
+            return target
         }
         var waited = 0.0
-        while let now = fadeLevel, lit ? now < target : now > target, waited < fadeTime {
+        while let now = fadeLevel, waited < fadeTime {
+            let latest = min(max(level(), 0), 1)
+            if latest != target {
+                let isAhead = lit ? latest > now : latest < now
+                let reachedIn = fadeTime * FadeCurve.timeFraction(toReach: abs(latest - current) / abs(end - current))
+                guard isAhead, abs(latest - end) >= 0.001, reachedIn - waited <= Self.followSlack * duration
+                else { break }
+                target = latest
+            }
+            if lit ? now >= target : now <= target { break }
             try await sleep(Self.pollInterval)
             waited += Self.pollInterval
         }
         turnRound(from: lit) // and hold it there
+        return target
     }
 
     /// Keeps the logo at a target it has (about) reached. A fade may still be under way, e.g. from

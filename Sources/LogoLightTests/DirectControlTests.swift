@@ -337,6 +337,44 @@ func brightnessTests(_ t: TestHarness) async {
         t.expect(!animator.isAnimating)
     }
 
+    await t.test("a 60 Hz slider drag ends on target, with few stops on the way") {
+        for (from, to) in [(0.8, 0.2), (0.2, 0.8)] {
+            let f = Fixture(direct: true, timeDriven: true)
+            f.controller.setBrightness(from)
+            await settle()
+            f.daemon.log.removeAll()
+            for i in 1...60 {
+                f.controller.setBrightness(from + (to - from) * Double(i) / 60)
+                // A 60th of a second passes. While the logo fades, its own polls pass the time.
+                let next = f.clock.now + 1.0 / 60
+                while f.clock.now < next {
+                    if f.controller.animator!.isAnimating { await Task.yield() }
+                    else { try await f.clock.sleep(next - f.clock.now) }
+                }
+            }
+            await settle()
+            let target = LogoAnimator.level(forBrightness: to)
+            t.expect(abs(f.daemon.level - target) <= 0.01, "\(from) to \(to): ended at \(f.daemon.level), not \(target)")
+            t.expect(f.daemon.isHolding)
+            // Every new fade (and every hold) is a direction flip. Restarting at each step, as
+            // this used to, took 14 or 15.
+            let flips = f.daemon.log.filter { $0 == "blank" || $0 == "unblank" }.count
+            t.expect(flips <= 6, "\(from) to \(to): \(flips) flips")
+        }
+    }
+
+    await t.test("a drag that turns round ends on the newest value") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.3)
+        for _ in 0..<10 { await Task.yield() }
+        t.expect(f.daemon.level < 0.99 && f.daemon.level > 0.3, "should be part way down: \(f.daemon.level)")
+        f.controller.setBrightness(0.9)
+        await settle()
+        let target = LogoAnimator.level(forBrightness: 0.9)
+        t.expect(abs(f.daemon.level - target) <= 0.02, "held at \(f.daemon.level), not \(target)")
+        t.expect(f.daemon.isHolding)
+    }
+
     t.test("restoring normal lighting releases a held level") {
         let f = Fixture(direct: true)
         f.daemon.setHeld(at: 0.25, state: 2)

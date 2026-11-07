@@ -130,8 +130,8 @@ public final class LogoAnimator {
     /// Applies a new brightness. A playing effect picks it up at its next step.
     public func brightnessDidChange() {
         guard !isPlaying else { return }
-        // A fade already under way follows up with the newest value when it's done, so
-        // dragging a slider doesn't restart the fade at every step.
+        // A fade already under way follows the newest value, so dragging a slider doesn't
+        // restart the fade at every step.
         if !isAdjusting { adjustBrightness(over: brightnessFadeDuration) }
     }
 
@@ -169,21 +169,20 @@ public final class LogoAnimator {
         }
     }
 
-    /// Fades to the chosen brightness over `duration`, then follows any changes made meanwhile
-    /// at the slider's speed.
+    /// Fades to the chosen brightness over `duration`. A fade follows changes made meanwhile
+    /// (a slider being dragged), and anything it couldn't follow gets a new fade, at the
+    /// slider's speed.
     private func adjustBrightness(over duration: Double) {
         isAdjusting = true
         task = Task { [weak self] in
             var applied: Double?
             var duration = duration
             while let self, !Task.isCancelled, applied != self.level {
-                let target = self.level
                 do {
-                    try await self.emitter.fade(to: target, over: duration, sleep: self.sleep)
+                    applied = try await self.emitter.fade(following: { self.level }, over: duration, sleep: self.sleep)
                 } catch {
                     break
                 }
-                applied = target
                 duration = self.brightnessFadeDuration
             }
             self?.taskDidEnd()
