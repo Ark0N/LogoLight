@@ -64,6 +64,8 @@ public final class LogoAnimator {
     public private(set) var effect: LogoEffect = .none
     /// Whether an effect is playing.
     public private(set) var isPlaying = false
+    /// Whether an effect is playing or the logo is fading to the chosen brightness.
+    public var isAnimating: Bool { isPlaying || isAdjusting }
 
     /// How bright the logo glows (with no effect) or peaks (with one), from 0 (dimmest) to 1.
     public var brightness: Double = 1 {

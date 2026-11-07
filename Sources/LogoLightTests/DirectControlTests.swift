@@ -428,3 +428,107 @@ func brightnessTests(_ t: TestHarness) async {
 private func settle() async {
     for _ in 0..<500 { await Task.yield() }
 }
+
+@MainActor
+func switchingTests(_ t: TestHarness) async {
+    print("\nSwitching on and off while other things happen")
+
+    await t.test("records an effect and a brightness chosen while switching off") {
+        let f = Fixture(direct: true, timeDriven: true)
+        let midway = Midway()
+        midway.run(f, when: { $0 == 1.0 }) {
+            f.controller.setEffect(.breathe)
+            f.controller.setBrightness(0.3)
+        }
+        try await f.controller.set(.off)
+        await settle()
+        t.expect(midway.ran && !midway.animated, "nothing should start during the switch")
+        t.expect(!f.controller.animator!.isAnimating)
+        t.expectEqual(f.controller.effect, .breathe)
+        t.expectEqual(f.controller.brightness, 0.3)
+        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "unblank", "fade=1.0", "blank", "mode=0", "fade=0.0", "unblank"])
+    }
+
+    await t.test("plays an effect chosen while switching on, once it's on") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        let midway = Midway()
+        midway.run(f, when: { _ in f.daemon.mode == 2 }) { f.controller.setEffect(.pulse) }
+        try await f.controller.set(.on)
+        t.expect(midway.ran && !midway.animated, "nothing should start during the switch")
+        t.expect(f.controller.animator!.isPlaying)
+        f.controller.restoreNormalLighting()
+    }
+
+    await t.test("fades to a brightness chosen while switching on, once it's on") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        let midway = Midway()
+        midway.run(f, when: { _ in f.daemon.mode == 2 }) { f.controller.setBrightness(0.5) }
+        try await f.controller.set(.on)
+        await settle()
+        t.expect(midway.ran && !midway.animated, "nothing should start during the switch")
+        t.expect(abs(f.daemon.level - 0.265) <= 0.02, "held at \(f.daemon.level)")
+        t.expect(f.daemon.isHolding)
+    }
+
+    await t.test("a wake while switching off doesn't restart the effect") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setEffect(.breathe)
+        let midway = Midway()
+        midway.run(f, when: { $0 == 1.0 }) { f.controller.displayDidWake() }
+        try await f.controller.set(.off)
+        await settle()
+        t.expect(midway.ran && !midway.animated, "nothing should start during the switch")
+        // After the wake the heading isn't known, so restoring turns the logo round first
+        // (ignored, as it's already in Blank).
+        t.expectEqual(f.daemon.log, ["fade=1000000000.0", "unblank", "fade=1.0", "blank", "mode=0",
+                                     "fade=1000000000.0", "blank", "fade=0.0", "unblank"])
+    }
+
+    await t.test("a wake while switching on lets the switch finish first") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        let midway = Midway()
+        midway.run(f, when: { $0 == 0.01 && f.daemon.mode == 2 }) { f.controller.displayDidWake() }
+        try await f.controller.set(.on)
+        await settle()
+        t.expect(midway.ran && !midway.animated, "nothing should start during the switch")
+        t.expect(abs(f.daemon.level - 0.265) <= 0.02, "held at \(f.daemon.level)")
+    }
+
+    await t.test("the display sleeping while switching on leaves the keyboard dark and no hold") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        let midway = Midway()
+        midway.run(f, when: { $0 == 0.01 && f.daemon.mode == 2 }) {
+            f.mac.displayAwake = false
+            f.controller.displayDidSleep()
+        }
+        try await f.controller.set(.on)
+        await settle()
+        t.expect(midway.ran)
+        t.expectEqual(f.daemon.mode, 2)
+        t.expectEqual(f.daemon.keyboardState, 1)
+        t.expectEqual(f.daemon.fadeDuration, 0)
+        t.expect(!f.controller.animator!.isAnimating)
+    }
+}
+
+/// Does something once, part way through an operation: during the first sleep that matches.
+@MainActor
+private final class Midway {
+    private(set) var ran = false
+    /// Whether the animator was running just after the action.
+    private(set) var animated = false
+
+    func run(_ f: Fixture, when condition: @escaping @MainActor (Double) -> Bool,
+             _ action: @escaping @MainActor () -> Void) {
+        let elapse = f.clock.onSleep
+        f.clock.onSleep = { [self] seconds in
+            elapse?(seconds)
+            guard !ran, condition(seconds) else { return }
+            ran = true
+            action()
+            animated = f.controller.animator?.isAnimating ?? false
+        }
+    }
+}

@@ -16,12 +16,19 @@ public final class LogoController {
     private let sleep: LogoAnimator.Sleep
     /// The setting this process last applied, for when the hardware can't show it.
     private var lastApplied: LogoIllumination?
+    /// The switch's fade in progress, so the display sleeping can cut it short.
+    private var switchFadeTask: Task<Void, Error>?
 
     /// Plays effects and holds the brightness. `nil` when the logo can't be controlled directly.
     public let animator: LogoAnimator?
 
     /// How long the logo fades when it's switched on or off directly. 0 switches instantly.
     public var switchFadeDuration: Double = 1.0
+
+    /// Whether the logo is being switched on or off (`set(_:)` is running, one at a time).
+    /// Meanwhile, choosing an effect or a brightness only records it, and a wake doesn't restart
+    /// anything: the switch applies the latest choices when it's done.
+    public private(set) var isSwitching = false
 
     public init(
         reader: LogoStatusReader,
@@ -79,6 +86,8 @@ public final class LogoController {
     @discardableResult
     public func set(_ target: LogoIllumination) async throws -> LogoStatus {
         guard status().isSupported else { throw LogoLightError.unsupportedMac }
+        isSwitching = true
+        defer { isSwitching = false }
 
         if let emitter {
             if try await setDirectly(target, emitter: emitter) {
@@ -117,6 +126,7 @@ public final class LogoController {
     public func setEffect(_ effect: LogoEffect) {
         guard let animator else { return }
         animator.select(effect)
+        guard !isSwitching else { return }
         if isLitAndAwake { animator.resume() } else { animator.pause() }
     }
 
@@ -126,7 +136,7 @@ public final class LogoController {
     public func setBrightness(_ brightness: Double) {
         guard let animator else { return }
         animator.brightness = brightness
-        if isLitAndAwake { animator.brightnessDidChange() }
+        if !isSwitching, isLitAndAwake { animator.brightnessDidChange() }
     }
 
     /// How brightly the logo is glowing at this moment, from 0 (dark) to 1 (fully lit), for a live
@@ -141,6 +151,7 @@ public final class LogoController {
     /// Call when the display or the Mac goes to sleep.
     public func displayDidSleep() {
         animator?.pause()
+        switchFadeTask?.cancel()
         // So corebrightnessd's own fades (when the display sleeps and wakes) work normally,
         // instead of using a brightness hold's endless duration.
         emitter?.setFadeDuration(0)
@@ -152,7 +163,7 @@ public final class LogoController {
     public func displayDidWake() {
         guard isDisplayAwake else { return }
         emitter?.displayDidChange(isAwake: true)
-        if status().setting == .on { animator?.resume() }
+        if !isSwitching, status().setting == .on { animator?.resume() }
     }
 
     /// Returns the logo to normal (fully lit), e.g. before quitting or after an effect was
@@ -191,29 +202,39 @@ public final class LogoController {
 
     /// Switches through `corebrightnessd`, fading if the display is on.
     /// Returns `false` if the daemon didn't take the change.
+    ///
+    /// The display can sleep or wake during a fade, so it's checked again after each one.
     private func setDirectly(_ target: LogoIllumination, emitter: LightEmitter) async throws -> Bool {
         animator?.pause()
-        let awake = isDisplayAwake
-        let fade = awake ? switchFadeDuration : 0
+        let fade = isDisplayAwake ? switchFadeDuration : 0
 
         if target == .off {
-            if fade > 0 { try? await emitter.fade(to: 0, over: fade, sleep: sleep) }
+            if fade > 0 { await switchFade(to: 0, over: fade, emitter: emitter) }
             let applied = emitter.setSetting(.off) && emitter.setting == .off
             // Back to normal. While the setting is off, relighting has no visible effect.
-            emitter.restore(displayAwake: awake)
+            emitter.restore(displayAwake: isDisplayAwake)
             return applied
         }
 
         // Start from dark, so turning on doesn't flash before the fade begins.
-        if fade > 0 { try? await emitter.fade(to: 0, over: 0.05, sleep: sleep) }
+        if fade > 0 { await switchFade(to: 0, over: 0.05, emitter: emitter) }
         let applied = emitter.setSetting(.on) && emitter.setting == .on
-        if applied, fade > 0 {
+        if applied, fade > 0, isDisplayAwake {
             let level = animator?.level ?? 1
-            try? await emitter.fade(to: level, over: fade, sleep: sleep)
-            if level < 1 { return true } // Now held at the chosen brightness.
+            await switchFade(to: level, over: fade, emitter: emitter)
+            if level < 1, isDisplayAwake { return true } // Now held at the chosen brightness.
         }
-        emitter.restore(displayAwake: awake)
+        emitter.restore(displayAwake: isDisplayAwake)
         return applied
+    }
+
+    /// One of the switch's fades. `displayDidSleep()` cancels it, so it stops without a hold,
+    /// which would relight the keyboard and bring back the endless fade duration.
+    private func switchFade(to level: Double, over duration: Double, emitter: LightEmitter) async {
+        let task = Task { [sleep] in try await emitter.fade(to: level, over: duration, sleep: sleep) }
+        switchFadeTask = task
+        _ = await task.result
+        switchFadeTask = nil
     }
 
     private func runAsRoot(_ command: PrivilegedCommand, prompt: String) async throws {
