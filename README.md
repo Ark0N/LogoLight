@@ -183,6 +183,15 @@ controller and effects against a simulated Mac and a fake `corebrightnessd` that
 every key it's sent and moves its fades along the measured curve, and a read-only check of
 this Mac's real logo state.
 
+## Support
+
+LogoLight is free. If you like it, you can [buy me a coffee](https://buymeacoffee.com/arkon).
+
+## License
+
+MIT (see [LICENSE](LICENSE)). The signed, notarized app is free at
+[logolight.app](https://logolight.app).
+
 ---
 
 LogoLight is not affiliated with or endorsed by Apple Inc.

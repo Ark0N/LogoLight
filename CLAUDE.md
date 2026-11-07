@@ -116,7 +116,9 @@ runs but says the logo isn't available. So:
   2026-11-07, replacing the placeholder `io.github.logolight.LogoLight`; the user's settings were
   copied over with `defaults export`/`import`). Don't change it after the first release: that
   resets the saved preferences and Launch at Login, and orphans placed Control Center controls.
-- **License**: none yet. That's fine while the repo is private.
+- **License**: MIT (chosen 2026-11-07). The repo stays **private until the user's final tests**;
+  then it's made public, so the site's GitHub links work. Don't make it public before they say
+  so. The website is in `site/` (Cloudflare Workers static assets, `logolight.app`).
 
 ## Status
 
