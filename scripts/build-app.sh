@@ -31,8 +31,15 @@ fill() {
 }
 
 echo "==> Building release binary"
-swift build -c release --product LogoLight
+# SwiftPM's default build system records the deployment target (14.0) as the SDK the app was built
+# with, so newer macOS treats it as an old app. Control Center's gallery then showed a blank icon for
+# it (Xcode-built apps, which record the real SDK, are fine). So tell the linker the real SDK.
+# The 14.0 must match `platforms` in Package.swift and LSMinimumSystemVersion in Resources/Info.plist.
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+swift build -c release --product LogoLight \
+    -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
 BIN="$(swift build -c release --product LogoLight --show-bin-path)/LogoLight"
+vtool -show-build "$BIN" | grep -q "sdk $SDK_VERSION" || { echo "error: $BIN doesn't record SDK $SDK_VERSION" >&2; exit 1; }
 
 echo "==> Assembling $APP"
 rm -rf "$APP"
