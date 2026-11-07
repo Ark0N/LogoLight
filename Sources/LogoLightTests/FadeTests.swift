@@ -384,6 +384,32 @@ func landingTests(_ t: TestHarness) async {
         t.expect(abs(f.daemon.level - target) <= 0.01, "held at \(f.daemon.level), not \(target)")
     }
 
+    await t.test("the logo eases on only once the target has stayed put for two polls") {
+        // From near the fade's top speed, a target a little ahead of the falling logo that moves
+        // on at every other poll, like a slow drag. The logo covers 70% of the way to it within a
+        // poll, so easing on any sooner would be cut short at the next change.
+        let daemon = FakeDaemon()
+        daemon.timeDriven = true
+        daemon.stepPerRead = 0
+        daemon.frameInterval = 0 // so it moves about as far at each poll
+        let clock = FakeClock()
+        clock.onSleep = { [daemon] in daemon.elapse($0) }
+        let emitter = LightEmitter(service: daemon)
+        var reads = 0
+        var last = daemon.level
+        var target = 0.6
+        let result = try await emitter.fade(following: {
+            reads += 1
+            let moved = abs(last - daemon.level)
+            last = daemon.level
+            if reads >= 15, reads <= 41, reads % 2 == 1 { target = daemon.level - 1.2 * moved }
+            return target
+        }, over: 0.25, sleep: { try await clock.sleep($0) })
+        t.expect(reads > 41, "stopped following after \(reads) polls")
+        t.expect(result == target, "got \(String(describing: result)), not \(target)")
+        t.expect(abs(daemon.level - target) <= 0.01, "held at \(daemon.level), not \(target)")
+    }
+
     await t.test("a change while easing on stops it, and the logo goes to the new level") {
         for change in 1...4 {
             let f = Fixture(direct: true, timeDriven: true)
