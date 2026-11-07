@@ -301,6 +301,13 @@ strong {
   }
 }
 
+/* The hero, the download section and the footer link to it too. */
+@media (max-width: 820px) {
+  .site-nav .nav-coffee {
+    display: none;
+  }
+}
+
 @media (max-width: 380px) {
   .site-nav .nav-mid {
     display: none;
