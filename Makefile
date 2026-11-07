@@ -37,7 +37,7 @@ install: app
 	cp -R $(APP) "$(INSTALL_DIR)/"
 	open "$(INSTALL_DIR)/LogoLight.app"
 
-## uninstall: remove the app (turn off "Toggle Without Password" first to remove its sudoers rule)
+## uninstall: remove the app (uncheck "Disable Password" first to remove its sudoers rule)
 uninstall:
 	$(QUIT_APP)
 	rm -rf "$(INSTALL_DIR)/LogoLight.app"

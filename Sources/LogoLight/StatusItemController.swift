@@ -46,6 +46,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
+    /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
+    private static let keepsPasswordDefaultsKey = "KeepsPassword"
 
     init(controller: LogoController) {
         self.controller = controller
@@ -59,6 +61,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             ? defaults.double(forKey: Self.brightnessDefaultsKey) : nil
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
         controller.start(brightness: brightness, effect: effect ?? .none)
+        // Without direct control, the first password also turns on Disable Password, unless the user
+        // has turned it off before.
+        controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
         observeDisplay()
 
         if let button = statusItem.button {
@@ -84,10 +89,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         panel.onBrightnessChanged = { [weak self] in self?.setBrightness($0) }
         panel.onEffectChosen = { [weak self] in self?.chooseEffect($0) }
 
-        passwordlessItem.title = "Toggle Without Password"
+        // Checked when the sudoers rule is installed. Without direct control, the first password
+        // installs it, so it's only needed once.
+        passwordlessItem.title = "Disable Password"
         passwordlessItem.target = self
         passwordlessItem.action = #selector(togglePasswordless)
-        passwordlessItem.toolTip = "Lets you turn the logo on and off without entering your password each time."
+        passwordlessItem.toolTip = "Turn the logo on and off without entering your password. Uncheck to ask for it again."
 
         launchAtLoginItem.title = "Launch at Login"
         launchAtLoginItem.target = self
@@ -317,12 +324,25 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         controller.scheduleWake(after: 1) { [weak self] in self?.refresh() }
     }
 
+    /// Unchecking removes the rule and remembers that, so the next password doesn't install it again.
+    /// Checking it installs the rule; the password dialog's prompt says what it's for.
     @objc private func togglePasswordless() {
         if controller.isPasswordlessEnabled {
-            perform { [controller] in try controller.disablePasswordless() }
-        } else if confirmEnablingPasswordless() {
-            perform { [controller] in try await controller.enablePasswordless() }
+            perform { [weak self, controller] in
+                try controller.disablePasswordless()
+                self?.setKeepsPassword(true)
+            }
+        } else {
+            perform { [weak self, controller] in
+                self?.setKeepsPassword(false)
+                try await controller.enablePasswordless()
+            }
         }
+    }
+
+    private func setKeepsPassword(_ keepsPassword: Bool) {
+        controller.autoEnablesPasswordless = !keepsPassword
+        UserDefaults.standard.set(keepsPassword, forKey: Self.keepsPasswordDefaultsKey)
     }
 
     @objc private func toggleLaunchAtLogin() {
@@ -365,21 +385,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Shows an error once the menu has closed.
     private func report(_ error: Error, title: String) {
         whenMenuClosed { [weak self] in self?.show(error, title: title) }
-    }
-
-    private func confirmEnablingPasswordless() -> Bool {
-        NSApp.activate()
-        let alert = NSAlert()
-        alert.messageText = "Toggle the logo without a password?"
-        alert.informativeText = """
-            LogoLight will add a rule to /etc/sudoers.d that lets \(NSUserName()) run only the two \
-            commands that turn the illuminated Apple logo off and on, without entering a password.
-
-            You'll be asked for your password once. Turn this option off at any time to remove the rule.
-            """
-        alert.addButton(withTitle: "Allow")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func show(_ error: Error, title: String) {

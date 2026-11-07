@@ -139,6 +139,12 @@ run `tools/livecheck` and watch the logo):
 - Choosing None, a wake and launch fade over 0.8 s instead of 0.25 s. Launch
   (`LogoController.start`) goes straight to a saved level instead of relighting to full first.
 - Sleeps have a 2 ms tolerance, and App Nap is held off while animating.
+- Without direct control, the first admin dialog also installs the sudoers rule, in one script
+  (the install, quietly, then the command), and says so in its prompt; the user asked for the
+  password to be needed only once, by default. The menu item is now **Disable Password**.
+  Unchecking it sets the app's `KeepsPassword` default, so the rule isn't installed again. To try
+  it on the MacBook, the controller has to be given no emitter, since corebrightnessd normally
+  takes every change.
 
 **Not yet verified:**
 - The live view animating in the real menu. It has only been seen drawn offscreen, and

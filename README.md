@@ -82,10 +82,10 @@ startup and which isn't updated as soon as the setting changes.
 
 ### Fallback: the documented command
 
-If direct control isn't available, LogoLight runs the documented command as root, asking
-for your password with the standard macOS administrator dialog each time. To avoid that, turn
-on **Toggle Without Password** (only shown in this case, or if it's already on). LogoLight
-explains what it's about to do and then, after you enter your password once, installs this
+If direct control isn't available, LogoLight runs the documented command as root, which
+needs your password in the standard macOS administrator dialog. You only enter it once: the
+first time, the dialog says it will also turn on **Disable Password** (a menu item that's only
+shown in this case, or if it's already on), and together with the change it installs this
 sudoers rule to `/etc/sudoers.d/logolight`:
 
 ```
@@ -94,8 +94,13 @@ lee ALL = (root) NOPASSWD: /usr/bin/defaults write com.apple.CoreBrightness LEBa
 
 It allows only those two exact commands, for your user only. The rule is checked with
 `visudo` before it's installed (owned by root, mode `0440`), so a bad rule can't break
-`sudo`. Turn the option off to remove it, or delete the file yourself:
-`sudo rm /etc/sudoers.d/logolight`.
+`sudo`. After that, the logo switches without a password. If the rule can't be installed, or
+`sudo` doesn't honor it, the dialog comes back as before.
+
+Uncheck **Disable Password** to remove the rule and be asked every time. LogoLight remembers
+that and doesn't install the rule again until you check the item again. (Deleting the file
+yourself, `sudo rm /etc/sudoers.d/logolight`, also removes it, but then the next password
+installs it again.)
 
 ## Requirements
 
@@ -128,7 +133,7 @@ App Sandbox, which rules out both direct control and the admin-command fallback.
 
 ## Uninstall
 
-1. If you turned on **Toggle Without Password**, turn it off first (this removes the sudoers rule).
+1. If **Disable Password** is checked, uncheck it first (this removes the sudoers rule).
 2. Turn off **Launch at Login** if you turned it on.
 3. Quit LogoLight and delete it from Applications (`make uninstall`).
 
