@@ -17,9 +17,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><b>⬇ Download LogoLight</b></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><b>Download LogoLight</b></a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://buymeacoffee.com/arkon"><b>☕ Buy me a coffee</b></a>
+  <a href="https://buymeacoffee.com/arkon"><b>Buy me a coffee</b></a>
 </p>
 
 <br>
@@ -39,26 +39,26 @@
   </tr>
 </table>
 
-## ✨ Features
+## Features
 
 <table>
   <tr>
-    <td width="50%" valign="top"><b>💡 Backlight switch</b><br>At the top of the menu, or Option-click the menu bar icon. The logo fades out and back in smoothly, with no password.</td>
-    <td width="50%" valign="top"><b>🔆 Brightness</b><br>A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.</td>
+    <td width="50%" valign="top"><b>Backlight switch</b><br>At the top of the menu, or Option-click the menu bar icon. The logo fades out and back in smoothly, with no password.</td>
+    <td width="50%" valign="top"><b>Brightness</b><br>A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.</td>
   </tr>
   <tr>
-    <td valign="top"><b>🌙 Effects</b><br>Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.</td>
-    <td valign="top"><b>🖥 Live view</b><br>Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.</td>
+    <td valign="top"><b>Effects</b><br>Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.</td>
+    <td valign="top"><b>Live view</b><br>Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.</td>
   </tr>
   <tr>
-    <td valign="top"><b>🎛 Control Center</b><br>A Backlight control for Control Center or the menu bar (macOS 26 or later).</td>
-    <td valign="top"><b>🔑 A password once, at most</b><br>Usually none at all. Where macOS asks, <a href="#fallback-the-documented-command">Disable Password</a> makes it the only time.</td>
+    <td valign="top"><b>Control Center</b><br>A Backlight control for Control Center or the menu bar (macOS 26 or later).</td>
+    <td valign="top"><b>A password once, at most</b><br>Usually none at all. Where macOS asks, <a href="#fallback-the-documented-command">Disable Password</a> makes it the only time.</td>
   </tr>
 </table>
 
 Plus **Launch at Login**, and nothing to set up: it remembers your brightness and effect.
 
-## 🌈 See it glow
+## See it glow
 
 <table>
   <tr>
@@ -73,7 +73,7 @@ Plus **Launch at Login**, and nothing to set up: it remembers your brightness an
 
 <sub>Drawn by LogoLight's own live view, with the effects' real timing (<code>swift scripts/make-media.swift</code> makes them again).</sub>
 
-## 📦 Install
+## Install
 
 1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip)**.
    It's signed with a Developer ID and notarized by Apple.
@@ -94,7 +94,7 @@ On other Macs, LogoLight opens but says the logo isn't available.
 
 <sub>Apple only lets apps add switches and buttons to Control Center, so the brightness slider stays in LogoLight's own menu.</sub>
 
-## 🔧 How it works
+## How it works
 
 <details>
 <summary><b>The details</b>: the private interface, the fades, Control Center, reading the state and the password fallback</summary>
@@ -198,7 +198,7 @@ installs it again.)
 
 </details>
 
-## 🛠 Build from source
+## Build from source
 
 Needs macOS 14 or later and Xcode or the Command Line Tools (`xcode-select --install`). Without
 Xcode 26 or later, the app is built without the Control Center control (it needs Xcode's App
@@ -251,7 +251,7 @@ this Mac's real logo state.
 
 </details>
 
-## 🗑 Uninstall
+## Uninstall
 
 1. If **Disable Password** is checked, uncheck it first (this removes the sudoers rule).
 2. Turn off **Launch at Login** if you turned it on.
@@ -261,7 +261,7 @@ The logo setting itself stays as you left it (an effect stops when the app quits
 the logo back on without the app:
 `sudo defaults delete com.apple.CoreBrightness LEBacklightMode`.
 
-## ☕ Support
+## Support
 
 LogoLight is free. If you like it, you can buy me a coffee:
 
