@@ -95,6 +95,10 @@ final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
 /// ignores a `DisplayLogicalState` it's already in, a fade started with a huge duration doesn't
 /// move (which is how a level is held), and reading `DisplayLogicalState` gives the last value
 /// sent to anything, even if that was only the keyboard.
+///
+/// Fades move in one of two ways. By default each read moves them a step (`stepPerRead`).
+/// With `timeDriven` (and `stepPerRead = 0`), time passing moves them instead, at the real
+/// hardware's speed: `Fixture` passes it every sleep through `FakeClock.onSleep`.
 @MainActor
 final class FakeDaemon: LightEmitterService {
     var mode = 2
@@ -105,12 +109,16 @@ final class FakeDaemon: LightEmitterService {
     /// How far the level moves toward 0 or 1 each time it's read during a fade.
     /// 1 jumps straight there.
     var stepPerRead = 1.0
+    /// When true, `elapse(_:)` moves a fade along the hardware's curve.
+    var timeDriven = false
     /// The highest level seen since the test set it.
     var peak = 0.0
     /// The `DisplayLogicalState` the keyboard backlight follows, which is dark on 1.
     var keyboardState = 2
     private var lastStateSent = 2
     private var isMoving = false
+    /// The time-driven fade in progress: where it started, how long it takes, how long it has run.
+    private var fade: (from: Double, length: Double, elapsed: Double)?
     /// When false, every change is rejected (as if the client API stopped working).
     var acceptsChanges = true
     /// When false, changes are accepted but have no effect.
@@ -120,13 +128,36 @@ final class FakeDaemon: LightEmitterService {
     var lit: Bool { level >= 0.999 }
     var isHolding: Bool { fadeDuration >= 1e6 }
 
+    /// The fade duration the daemon uses when it's set to 0 (automatic).
+    static let automaticFadeDuration = 0.3
+
+    /// The hardware's fade curve, a critically damped spring fitted to the measurements in
+    /// docs/corebrightnessd.md: the share of the way covered after `s` of the fade's duration.
+    static func progress(_ s: Double) -> Double {
+        let k = 6.51
+        return s >= 1 ? 1 : 1 - (1 + k * s) * exp(-k * s)
+    }
+
     /// Puts the logo at a level, as if a fade had stopped there.
     func setHeld(at level: Double, state: Int) {
         self.level = level
         self.state = state
         lastStateSent = state
         isMoving = false
+        fade = nil
         peak = level
+    }
+
+    /// Time passing (time-driven mode only). A fade started at the hold duration moves too,
+    /// but far too slowly to see.
+    func elapse(_ seconds: Double) {
+        guard timeDriven, var fade else { return }
+        fade.elapsed += seconds
+        let end: Double = state == 2 ? 1 : 0
+        let s = fade.elapsed / fade.length
+        level = fade.from + (end - fade.from) * Self.progress(s)
+        peak = max(peak, level)
+        self.fade = s >= 1 ? nil : fade
     }
 
     func value(forKey key: String) -> Any? {
@@ -158,6 +189,8 @@ final class FakeDaemon: LightEmitterService {
             guard value.intValue != state else { break }
             state = value.intValue
             isMoving = !isHolding
+            // A new fade starts from rest, wherever the last one had got to.
+            fade = (from: level, length: fadeDuration > 0 ? fadeDuration : Self.automaticFadeDuration, elapsed: 0)
             if stepPerRead >= 1 { advance(by: 1) }
         default: break
         }
@@ -171,25 +204,35 @@ final class FakeDaemon: LightEmitterService {
     }
 
     private func advance(by step: Double) {
-        guard isMoving else { return }
+        guard isMoving, step > 0 else { return }
         let end: Double = state == 2 ? 1 : 0
         level = end > level ? min(end, level + step) : max(end, level - step)
         peak = max(peak, level)
-        if level == end { isMoving = false }
+        if level == end { isMoving = false; fade = nil }
     }
 }
 
-/// Records sleeps and lets them return immediately. After `budget` sleeps it throws,
-/// which ends an effect loop so tests can inspect what it did.
-final class FakeClock: @unchecked Sendable {
+/// Records sleeps and lets them return straight away, after handing the time slept to
+/// `onSleep` (which moves a time-driven `FakeDaemon`). Like `Task.sleep`, it throws if the
+/// task is cancelled. After `budget` sleeps it throws too, which ends an effect loop so tests
+/// can inspect what it did.
+@MainActor
+final class FakeClock {
     var slept: [Double] = []
     var budget = Int.max
+    /// The total time slept so far, by every task.
+    private(set) var now = 0.0
+    var onSleep: (@MainActor (Double) -> Void)?
 
     func sleep(_ seconds: Double) async throws {
+        try Task.checkCancellation()
         slept.append(seconds)
         budget -= 1
         if budget < 0 { throw CancellationError() }
+        now += seconds
+        onSleep?(seconds)
         await Task.yield()
+        try Task.checkCancellation()
     }
 }
 
@@ -203,14 +246,21 @@ struct Fixture {
     let controller: LogoController
 
     /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
-    init(backlightMode: Int? = nil, ruleInstalled: Bool = false, sudoAllows: Bool? = nil, direct: Bool = false) {
+    /// `timeDriven: true` makes its fades move as the controller sleeps, at the hardware's speed.
+    init(backlightMode: Int? = nil, ruleInstalled: Bool = false, sudoAllows: Bool? = nil, direct: Bool = false,
+         timeDriven: Bool = false) {
         mac = SimulatedMac(backlightMode: backlightMode)
         admin = FakeAdminShell(mac: mac)
         sudo = FakeSudo(mac: mac, allowed: sudoAllows ?? ruleInstalled)
         daemon = FakeDaemon()
         daemon.mode = backlightMode == 0 ? 0 : 2
+        if timeDriven {
+            daemon.timeDriven = true
+            daemon.stepPerRead = 0
+        }
         mac.onDefaultChanged = { [daemon] in daemon.mode = $0 == 0 ? 0 : 2 }
         let clock = FakeClock()
+        clock.onSleep = { [daemon] in daemon.elapse($0) }
         self.clock = clock
         controller = LogoController(
             reader: LogoStatusReader(hardware: mac),

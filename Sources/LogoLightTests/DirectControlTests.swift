@@ -202,6 +202,16 @@ func brightnessTests(_ t: TestHarness) async {
         t.expect(f.daemon.isHolding)
     }
 
+    await t.test("turns the logo on at the chosen brightness by fading straight up from dark") {
+        let f = Fixture(backlightMode: 0, direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        try await f.controller.set(.on)
+        let afterSwitchingOn = Array(f.daemon.log.drop(while: { $0 != "mode=2" }).dropFirst())
+        t.expectEqual(afterSwitchingOn.prefix(2).last, "unblank")
+        t.expect(abs(f.daemon.level - 0.265) <= 0.01, "held at \(f.daemon.level)")
+        t.expect(f.daemon.isHolding)
+    }
+
     await t.test("effects peak at the chosen brightness") {
         let f = Fixture(direct: true)
         f.daemon.stepPerRead = 0.05
@@ -344,6 +354,32 @@ func brightnessTests(_ t: TestHarness) async {
         t.expect(abs(FadeCurve.timeFraction(toReach: 0.48) - 0.25) < 0.001, "48% at a quarter")
         let times = stride(from: 0.1, through: 1, by: 0.1).map { FadeCurve.timeFraction(toReach: $0) }
         t.expect(zip(times, times.dropFirst()).allSatisfy { $0 < $1 }, "should rise steadily")
+    }
+
+    t.test("the time-driven fake fades along the hardware's curve, from rest, and holds") {
+        let daemon = FakeDaemon()
+        daemon.timeDriven = true
+        daemon.stepPerRead = 0
+        daemon.setHeld(at: 0, state: 1)
+        _ = daemon.setValue(2, forKey: "LEPWMFactorFadeDuration")
+        _ = daemon.setValue(2, forKey: "DisplayLogicalState")
+        daemon.elapse(0.5)
+        t.expect(abs(daemon.level - 0.48) < 0.03, "a quarter of the way in: \(daemon.level)")
+        daemon.elapse(1.5)
+        t.expectEqual(daemon.level, 1)
+
+        daemon.setHeld(at: 0.6, state: 2)
+        _ = daemon.setValue(2, forKey: "DisplayLogicalState") // already Unblank: ignored
+        daemon.elapse(1)
+        t.expectEqual(daemon.level, 0.6)
+        _ = daemon.setValue(1, forKey: "DisplayLogicalState")
+        daemon.elapse(0.01)
+        t.expect(daemon.level > 0.599, "a new fade starts from rest: \(daemon.level)")
+        _ = daemon.setValue(1e9, forKey: "LEPWMFactorFadeDuration")
+        _ = daemon.setValue(2, forKey: "DisplayLogicalState")
+        let held = daemon.level
+        daemon.elapse(100)
+        t.expect(abs(daemon.level - held) < 1e-6, "held, but moved from \(held) to \(daemon.level)")
     }
 }
 
