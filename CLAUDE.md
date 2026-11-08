@@ -88,7 +88,7 @@ runs but says the logo isn't available. So:
 
 - Remote: `https://github.com/Ark0N/LogoLight` (**public** since 2026-11-07, MIT). Work on `main`
   unless asked otherwise, commit in small logical steps, and push when a piece of work is done.
-  Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134) and published as GitHub Releases
+  Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134; `v1.1.1` is e41948d, build 138) and published as GitHub Releases
   with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`).
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
@@ -114,7 +114,9 @@ runs but says the logo isn't available. So:
   The README's banner and menu GIF and the site's menu pictures were drawn again for it
   (`make-media.swift`, `make-banner.swift`, and the site's from `LOGOLIGHT_RENDER_PANEL` at scale 5,
   transparent: no effect for on and off, Breathe at 0.9 with the glow at 0 for the hero). The site's
-  `og.jpg` still shows the 1.0 menu (cropped at Pulse); it has no script.
+  `og.jpg` still shows the 1.0 menu (cropped at Pulse); it has no script. **1.1.1 shipped the same
+  day**: build 138 (commit e41948d, tag `v1.1.1`), Lit with Lid Closed back in the menu with
+  "External display only" under it, notarized with no issues; the hero's HTML menu has the item.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
