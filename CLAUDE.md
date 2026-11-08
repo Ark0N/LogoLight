@@ -88,7 +88,7 @@ runs but says the logo isn't available. So:
 
 - Remote: `https://github.com/Ark0N/LogoLight` (**public** since 2026-11-07, MIT). Work on `main`
   unless asked otherwise, commit in small logical steps, and push when a piece of work is done.
-  Releases are tagged (`v1.0.0` is commit 76c389a, build 105) and published as GitHub Releases
+  Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134) and published as GitHub Releases
   with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`).
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
@@ -108,7 +108,13 @@ runs but says the logo isn't available. So:
   Accepted, "Ready for distribution", no issues, stapled; `spctl` says Notarized Developer ID.
   The zip goes to `site/public/LogoLight.zip` (not in git) for the website's download.
   **1.0.0 shipped 2026-11-07**: build 105 (commit 76c389a, tag `v1.0.0`), notarized with no
-  issues, on https://logolight.app and as a GitHub Release.
+  issues, on https://logolight.app and as a GitHub Release. **1.1.0 shipped 2026-11-08**: build
+  134 (commit 8b7d3b4, tag `v1.1.0`), with the battery indicator and Morse code (PRs #1-#3; Lit
+  with Lid Closed is in it but out of the menu), notarized with no issues; the user tried it first.
+  The README's banner and menu GIF and the site's menu pictures were drawn again for it
+  (`make-media.swift`, `make-banner.swift`, and the site's from `LOGOLIGHT_RENDER_PANEL` at scale 5,
+  transparent: no effect for on and off, Breathe at 0.9 with the glow at 0 for the hero). The site's
+  `og.jpg` still shows the 1.0 menu (cropped at Pulse); it has no script.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
