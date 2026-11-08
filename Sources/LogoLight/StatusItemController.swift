@@ -49,9 +49,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var controlServer: ControlLinkServer?
     /// What the control was last told to show, so it's only reloaded when that changes.
     private var controlState: ControlLink.State?
+    /// Tells the controller when the battery may have changed, for the battery indicator.
+    private var batteryObserver: BatteryObserver?
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
+    private static let followsBatteryDefaultsKey = "FollowsBattery"
     /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
     private static let keepsPasswordDefaultsKey = "KeepsPassword"
 
@@ -66,12 +69,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let brightness = defaults.object(forKey: Self.brightnessDefaultsKey) != nil
             ? defaults.double(forKey: Self.brightnessDefaultsKey) : nil
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
-        controller.start(brightness: brightness, effect: effect ?? .none)
+        controller.start(brightness: brightness, effect: effect ?? .none,
+                         followsBattery: defaults.bool(forKey: Self.followsBatteryDefaultsKey))
         // Without direct control, the first password also turns on Disable Password, unless the user
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
         controller.willPromptForPassword = { [weak self] in await self?.closeMenuForPasswordDialog() }
         observeDisplay()
+        // About once a minute. The controller only reads the battery while it's followed, and only
+        // fades when the percentage has changed; the panel's slider then shows the new charge.
+        batteryObserver = BatteryObserver { [weak self] in
+            self?.controller.batteryDidChange()
+            self?.updateMenu()
+        }
 
         if let button = statusItem.button {
             button.target = self
@@ -103,6 +113,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         panelItem.view = panel
         panel.onLogoSwitched = { [weak self] isOn in self?.setLogo(isOn ? .on : .off) }
         panel.onBrightnessChanged = { [weak self] in self?.setBrightness($0) }
+        panel.onFollowsBatteryChanged = { [weak self] in self?.setFollowsBattery($0) }
         panel.onEffectChosen = { [weak self] in self?.chooseEffect($0) }
 
         // Checked when the sudoers rule is installed. Without direct control, the first password
@@ -232,7 +243,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private var panelState: PanelState {
         PanelState(status: status, requested: requestedSetting, canControlDirectly: controller.canControlDirectly,
-                   effect: controller.effect, brightness: controller.brightness, isBusy: isBusy)
+                   effect: controller.effect, brightness: controller.brightness,
+                   followsBattery: controller.followsBattery, isBusy: isBusy)
     }
 
     /// Brings the icon, the panel and the menu items up to date with the last status and the choices.
@@ -345,6 +357,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func setBrightness(_ brightness: Double) {
         controller.setBrightness(brightness)
         UserDefaults.standard.set(brightness, forKey: Self.brightnessDefaultsKey)
+    }
+
+    private func setFollowsBattery(_ follows: Bool) {
+        controller.setFollowsBattery(follows)
+        UserDefaults.standard.set(follows, forKey: Self.followsBatteryDefaultsKey)
+        // The slider now shows the charge, or the chosen brightness again.
+        updateMenu()
     }
 
     private func chooseEffect(_ effect: LogoEffect) {

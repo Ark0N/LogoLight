@@ -37,6 +37,9 @@
       <b>Effects</b><br>
       Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.
       <br><br>
+      <b>Battery indicator</b><br>
+      Turn on Battery and the logo shows your charge: full brightness when it's full, dimming as it runs down.
+      <br><br>
       <b>Control Center</b><br>
       A Backlight control for Control Center or the menu bar (macOS 26 or later).
       <br><br>
