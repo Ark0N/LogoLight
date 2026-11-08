@@ -268,10 +268,27 @@ registered again. chronod logs "purging instead because we shouldn't cache it ..
 for this extension, as it did for every ad-hoc and Developer ID probe; that may only mean it
 fetches the control's description when the gallery is opened.
 
+**Lit with Lid Closed** (2026-11-08, asked for on Reddit): a menu item, off by default and saved as
+`LightsWithLidClosed`. With the lid closed and an external display, the logo is told the lid is
+open and the keyboard that it's closed (docs/corebrightnessd.md, "The lid"). The app handles the
+built-in display going away as a sleep, then a wake a second later, once `CBClamshellState`
+shows the daemon has handled the lid; with the option off, that wake darkens a held level, which
+the daemon alone left lit (it did before this, too). "Lit with Lid Closed" needs 158 points, so
+the menu stays 170 wide. Checked on the MacBook with `tools/livecheck --lid`, the lid really
+closed (second run, all ok): with the option off the held logo went dark; with it on it
+relit at 0.5, two landings eased on (11% and 10% of top speed at the stop, no bounce), Pulse kept
+its cycle (2.16–2.17 s), Heartbeat, off and on, the option off and on, a quit (dark) and a
+relaunch (lit) all worked, and the keyboard stayed at 0 throughout and relit when the lid opened.
+Not yet seen: the menu item in the real menu, the app's own screen-change handling (livecheck
+calls the same controller methods), the logo by eye, and whether the external display changes
+when the logo is lit this way.
+
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
   been seen drawn offscreen, and `liveGlow` was checked through `tools/livecheck`.
 - A real display sleep and wake (not just calling the handlers): with a held brightness, the
-  logo should come back at that level, and the keyboard should go dark and relight.
+  logo should come back at that level, and the keyboard should go dark and relight. The lid
+  closing left a held level lit (docs/corebrightnessd.md, "The lid"), and a display sleep may
+  too: check that the logo goes dark.
 - The `DisplaySelect` route in `docs/corebrightnessd.md`, which might replace holding a fade with a
   real brightness control. Worth trying if the hold causes trouble.
