@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.1.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
   &nbsp;
   <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="56" alt="Buy me a coffee"></a>
 </p>
@@ -40,9 +40,6 @@
       <b>Battery indicator</b><br>
       Turn on Battery and the logo shows your charge: full brightness when it's full, dimming as it runs down.
       <br><br>
-      <b>Lit with Lid Closed</b><br>
-      Using an external display with the lid closed? The logo can stay lit, with its effects, while the keyboard stays dark.
-      <br><br>
       <b>Morse code</b><br>
       Type a message and press play to flash it once, or loop to repeat it until you stop it.
       <br><br>
@@ -75,7 +72,7 @@
 
 ## Install
 
-1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.0.0.zip)**.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.1.0.zip)**.
    It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
