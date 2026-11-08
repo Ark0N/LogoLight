@@ -40,6 +40,7 @@ is ignored, so a held level isn't released by a lone `DisplayLogicalState=2`.
 | `setmode N` | Sets `LEBacklightMode` and watches the LED for 1.5 s. |
 | `sidefx` | Blanks, unblanks, then sets mode 1 and 2, printing the screen state each time. It was used to check that `DisplayLogicalState` doesn't touch the screen. |
 | `fadecurve` | Measures a 2 s fade's curve, a fade from the midpoint, and holding a level (see "Holding a level" in the notes). |
+| `clamshell` | With an external display attached: asks aloud for the lid to be closed, then tries ways of lighting the logo with it closed (`ClamshellUpdate`, `DisplayLogicalState`), reading both LEDs from the I/O Registry, restores normal lighting and says which way worked. `--sample-only` writes nothing. See "The lid" in the notes. |
 | `setmapping KEY JSON` | Writes a mapping key, e.g. `LEPWMLuxToMaxNitsRestrictionMapping '[[0,60],[190,300],[3.402823e38,300]]'`, watches for 5 s, then restores the original. |
 
 ## Reading the binary
