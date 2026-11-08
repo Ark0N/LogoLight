@@ -6,10 +6,12 @@ struct FakeHardware: HardwareReading, @unchecked Sendable {
     var nvram: [String: Data] = [:]
     var services: [String: [String: Any]] = [:]
     var displayAwake: Bool? = true
+    var externalDisplayAwake: Bool? = false
 
     func nvramValue(forKey key: String) -> Data? { nvram[key] }
     func serviceProperties(named name: String) -> [String: Any]? { services[name] }
     func isBuiltInDisplayAwake() -> Bool? { displayAwake }
+    func isExternalDisplayAwake() -> Bool? { externalDisplayAwake }
 }
 
 @MainActor private let litPWM: [String: Any] = ["enabled": true, "high-period": 201, "low-period": 759]

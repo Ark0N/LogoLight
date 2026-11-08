@@ -11,6 +11,8 @@ public protocol HardwareReading: Sendable {
     func serviceProperties(named name: String) -> [String: Any]?
     /// Whether the built-in display is on (not asleep, lid open), or `nil` if unknown.
     func isBuiltInDisplayAwake() -> Bool?
+    /// Whether any other display is on (connected and not asleep), or `nil` if unknown.
+    func isExternalDisplayAwake() -> Bool?
 }
 
 /// Reads the logo's state. Needs no special privileges.
@@ -23,6 +25,9 @@ public struct LogoStatusReader: Sendable {
 
     /// Whether the built-in display is on, or `nil` if unknown.
     public func isDisplayAwake() -> Bool? { hardware.isBuiltInDisplayAwake() }
+
+    /// Whether an external display is on, or `nil` if unknown.
+    public func isExternalDisplayAwake() -> Bool? { hardware.isExternalDisplayAwake() }
 
     public func read() -> LogoStatus {
         let nvram = hardware.nvramValue(forKey: LogoHardware.nvramKey)
@@ -98,13 +103,22 @@ public struct SystemHardware: HardwareReading {
     }
 
     public func isBuiltInDisplayAwake() -> Bool? {
+        guard let displays = Self.onlineDisplays() else { return nil }
+        // With the lid closed, the built-in display isn't online at all.
+        guard let builtIn = displays.first(where: { CGDisplayIsBuiltin($0) != 0 }) else { return false }
+        return CGDisplayIsAsleep(builtIn) == 0
+    }
+
+    public func isExternalDisplayAwake() -> Bool? {
+        guard let displays = Self.onlineDisplays() else { return nil }
+        return displays.contains { CGDisplayIsBuiltin($0) == 0 && CGDisplayIsAsleep($0) == 0 }
+    }
+
+    private static func onlineDisplays() -> [CGDirectDisplayID]? {
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(0, nil, &count) == .success else { return nil }
         var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
         guard CGGetOnlineDisplayList(count, &displays, &count) == .success else { return nil }
-        // With the lid closed, the built-in display isn't online at all.
-        guard let builtIn = displays.prefix(Int(count)).first(where: { CGDisplayIsBuiltin($0) != 0 })
-        else { return false }
-        return CGDisplayIsAsleep(builtIn) == 0
+        return Array(displays.prefix(Int(count)))
     }
 }

@@ -87,6 +87,12 @@ public final class LightEmitter {
         static let logicalState = "DisplayLogicalState"
         /// Live state, including `Factor` (0–1, the fade position).
         static let pwmState = "LEPWMState"
+        /// Tells every module whether the lid is closed. While the logo's module has been told it's
+        /// closed, the logo stays dark whatever `DisplayLogicalState` says.
+        static let clamshell = "ClamshellUpdate"
+        /// Read only: whether corebrightnessd's own lid handling last saw the lid closed. A client's
+        /// `ClamshellUpdate` doesn't change it.
+        static let daemonLidState = "CBClamshellState"
     }
 
     enum Mode {
@@ -183,6 +189,48 @@ public final class LightEmitter {
     private func setKeyboardLit(_ lit: Bool) {
         service.setKeyboardValue(NSNumber(value: lit ? LogicalState.unblank : LogicalState.blank),
                                  forKey: Key.logicalState)
+    }
+
+    // MARK: - The lid
+
+    /// Whether corebrightnessd sees the lid closed, or `nil` if it can't say (e.g. after a macOS
+    /// update renamed the key). It's the daemon's own view, which only a real lid change moves, so
+    /// it reads `true` once the daemon has darkened everything for a closed lid, whatever
+    /// `overrideLid()` has told the logo since.
+    public var isLidClosed: Bool? {
+        (service.value(forKey: Key.daemonLidState) as? NSNumber)?.boolValue
+    }
+
+    /// Whether the logo has been told the lid is open while it's closed (see `overrideLid()`), or
+    /// `nil` at launch, when a previous run that didn't quit cleanly may have left it so.
+    private var lidOverride: Bool?
+
+    /// Whether the logo has been told the lid is open while it's closed (see `overrideLid()`).
+    public var isLidOverridden: Bool { lidOverride == true }
+
+    /// Lets the logo light while the lid is closed: tells corebrightnessd the lid is open, then the
+    /// keyboard alone that it's closed, so the keyboard stays dark. The daemon sends the real lid
+    /// state only when the lid opens or closes, so this lasts until then (see docs/corebrightnessd.md,
+    /// "The lid"). Call it once the daemon has handled the lid closing (`isLidClosed`), or its own
+    /// update would come after this one.
+    public func overrideLid() {
+        _ = service.setValue(NSNumber(value: false), forKey: Key.clamshell)
+        service.setKeyboardValue(NSNumber(value: true), forKey: Key.clamshell)
+        lidOverride = true
+    }
+
+    /// Ends `overrideLid()`: the logo goes dark again, as it does by itself for a closed lid. At
+    /// launch, it ends one a previous run may have left. If the lid has opened since,
+    /// corebrightnessd has already sent that, so nothing is written.
+    public func endLidOverride() {
+        guard lidOverride != false else { return }
+        lidOverride = false
+        if isLidClosed == true { _ = service.setValue(NSNumber(value: true), forKey: Key.clamshell) }
+    }
+
+    /// The lid opened: corebrightnessd has told every module itself, so any override is over.
+    public func lidDidOpen() {
+        lidOverride = false
     }
 
     /// Where the logo is in a fade, from 0 (dark) to 1 (fully lit).
