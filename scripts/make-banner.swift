@@ -78,7 +78,9 @@ cg.setShadow(offset: CGSize(width: 0, height: 30), blur: 80, color: rgb(0, 0, 0,
 lid.draw(in: lidRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
 cg.restoreGState()
 
-let menuRect = CGRect(x: 1830, y: 170, width: 510, height: 945)
+// The menu in its own proportions, as tall as fits, with its right edge where it always was.
+let menuHeight = 1040.0, menuWidth = menuHeight * menu.size.width / menu.size.height
+let menuRect = CGRect(x: 2340 - menuWidth, y: 110, width: menuWidth, height: menuHeight)
 let window = CGPath(roundedRect: menuRect.insetBy(dx: -14, dy: -14), cornerWidth: 40, cornerHeight: 40, transform: nil)
 cg.saveGState()
 cg.setShadow(offset: CGSize(width: 0, height: 30), blur: 70, color: rgb(0, 0, 0, 0.6))

@@ -21,7 +21,7 @@
     <td width="290" align="center" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
-        <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider and the effect switches.">
+        <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery switch, the effect switches and Morse code.">
       </picture>
     </td>
     <td valign="middle">

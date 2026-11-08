@@ -123,6 +123,8 @@
       <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></symbol>
       <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
       <symbol id="i-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2.5-6 4 13 3.5-10 2 3h5"/></symbol>
+      <symbol id="i-battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="17" height="10" rx="2.5"/><path d="M22 10.5v3"/><rect x="5" y="10" width="8" height="4" rx="1" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-morse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M4 12h0M9.5 12h5M20 12h0"/></symbol>
       <symbol id="i-option" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5h5.5l7 11H21M14 6.5h7"/></symbol>
       <symbol id="i-login" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/><path d="M3 12h11M10.5 8.5 14 12l-3.5 3.5"/></symbol>
       <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="16.5" r="3.5"/><path d="M10 14 20 4M16.5 7.5l2.5 2.5M14 10l2 2"/></symbol>
@@ -187,7 +189,7 @@
             <!-- The menu is a real render of LogoLight's panel (LOGOLIGHT_RENDER_PANEL, see PanelRenderer), with the
                  live view unlit; the menu bar, the menu's frame and its two plain items are drawn here, as the app shows
                  them. The live view's light (LOGOLIGHT_RENDER_LIGHT) is laid over the lid and faded with Breathe's timing. -->
-            <div class="screen" role="img" aria-label="LogoLight's menu, open below its icon in the menu bar. At the top, the Backlight switch is on. Below it, the live view of the lid, with the Apple logo glowing and slowly breathing, then the brightness slider near full, and of the effects Breathe, Pulse and Heartbeat, Breathe is on. Then Launch at Login, checked, and Quit LogoLight.">
+            <div class="screen" role="img" aria-label="LogoLight's menu, open below its icon in the menu bar. At the top, the Backlight switch is on. Below it, the live view of the lid, with the Apple logo glowing and slowly breathing, then the brightness slider near full and the Battery switch, and of the effects Breathe, Pulse and Heartbeat, Breathe is on. Below them, Morse code: a message field with play and loop buttons. Then Launch at Login, checked, and Quit LogoLight.">
               <div class="menubar">
                 <span class="status status-open">
                   <img class="status-icon" src="images/menubar-icon.png" width="12" height="17" alt="">
@@ -195,7 +197,7 @@
                     <span class="menu-panel">
                       <picture>
                         <source srcset="images/menu-breathe-dark.png" media="(prefers-color-scheme: dark)">
-                        <img src="images/menu-breathe-light.png" width="850" height="1575" alt="" fetchpriority="high">
+                        <img src="images/menu-breathe-light.png" width="850" height="2065" alt="" fetchpriority="high">
                       </picture>
                       <span class="glow anim-breathe">
                         <img class="halo" src="images/lid-light-696.png" width="696" height="492" alt="">
@@ -333,7 +335,7 @@
             <span class="menu menu-alone">
               <picture>
                 <source srcset="images/menu-on-dark.png" media="(prefers-color-scheme: dark)">
-                <img src="images/menu-on-light.png" width="850" height="1575" alt="LogoLight's menu with the logo on: the Backlight switch on, the live view of the lid with the Apple logo glowing, the brightness slider at three quarters, and no effect switched on." loading="lazy" decoding="async">
+                <img src="images/menu-on-light.png" width="850" height="2065" alt="LogoLight's menu with the logo on: the Backlight switch on, the live view of the lid with the Apple logo glowing, the brightness slider at three quarters with the Battery switch off below it, no effect switched on, and the Morse code field with its play and loop buttons." loading="lazy" decoding="async">
               </picture>
             </span>
             <figcaption>On, at three quarters</figcaption>
@@ -342,7 +344,7 @@
             <span class="menu menu-alone">
               <picture>
                 <source srcset="images/menu-off-dark.png" media="(prefers-color-scheme: dark)">
-                <img src="images/menu-off-light.png" width="850" height="1575" alt="LogoLight's menu with the logo off: the Backlight switch is off, the live view of the lid is dark, and the slider and effect switches below it are greyed out, keeping their settings." loading="lazy" decoding="async">
+                <img src="images/menu-off-light.png" width="850" height="2065" alt="LogoLight's menu with the logo off: the Backlight switch is off, the live view of the lid is dark, and the slider, the Battery switch, the effect switches and Morse code below it are greyed out, keeping their settings." loading="lazy" decoding="async">
               </picture>
             </span>
             <figcaption>Off, the rest greyed out</figcaption>
@@ -364,6 +366,16 @@
             <span class="tile tile-pink"><svg aria-hidden="true" focusable="false"><use href="#i-wave"/></svg></span>
             <h3>Effects</h3>
             <p>Breathe, Pulse or Heartbeat, one at a time. Switch one off and the logo holds steady again.</p>
+          </li>
+          <li class="feature">
+            <span class="tile tile-green"><svg aria-hidden="true" focusable="false"><use href="#i-battery"/></svg></span>
+            <h3>Battery</h3>
+            <p>Turn on Battery, and the logo shows your charge: full brightness when the battery is full, dimming as it runs down.</p>
+          </li>
+          <li class="feature">
+            <span class="tile tile-indigo"><svg aria-hidden="true" focusable="false"><use href="#i-morse"/></svg></span>
+            <h3>Morse code</h3>
+            <p>Type a message and press play, and the logo flashes it in Morse code. Turn on loop to repeat it until you stop it.</p>
           </li>
         </ul>
       </div>

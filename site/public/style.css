@@ -547,9 +547,10 @@ strong {
   position: relative;
 }
 
+/* Tall enough for the menu bar and the whole menu below it: the panel is 413 points tall. */
 .screen {
   position: relative;
-  height: calc(var(--pt) * 457);
+  height: calc(var(--pt) * 555);
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--wallpaper);
@@ -645,12 +646,12 @@ strong {
   height: auto;
 }
 
-/* The lid inside the panel: 116 × 82 points at (27, 50), in a panel 170 × 315 points. The renderer prints
+/* The lid inside the panel: 116 × 82 points at (27, 50), in a panel 170 × 413 points. The renderer prints
    these (LOGOLIGHT_RENDER_GLOWS); update them with the panel pictures. */
 .menu-panel .glow {
-  inset: 15.873% auto auto 15.8824%;
+  inset: 12.1065% auto auto 15.8824%;
   width: 68.2353%;
-  height: 26.0317%;
+  height: 19.8547%;
 }
 
 .menu-sep {
@@ -1141,9 +1142,16 @@ strong {
   list-style: none;
 }
 
+/* Three to a row, and a shorter last row centred. */
 @media (min-width: 760px) {
   .trio {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .trio > .feature {
+    flex: 0 1 calc((100% - 2 * clamp(24px, 4vw, 48px)) / 3);
   }
 }
 
