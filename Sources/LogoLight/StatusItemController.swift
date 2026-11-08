@@ -135,6 +135,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         panel.setMorseText(UserDefaults.standard.string(forKey: Self.morseTextDefaultsKey) ?? "SOS")
         // So the play button turns back from stop as soon as a message sent once is done.
         controller.onMorseEnded = { [weak self] in self?.refresh() }
+        controller.onRiseFromDark = { [weak self] in self?.showNewFrame() }
 
         // Checked when the sudoers rule is installed. Without direct control, the first password
         // installs it, so it's only needed once.
@@ -420,6 +421,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func stopMorse() {
         controller.stopMorse()
         refresh()
+    }
+
+    /// Has the display show a new frame, for corebrightnessd's display-ready gate: a rise from dark
+    /// waits for one, up to 0.5 s with nothing changing on screen, which ran Morse code's letters
+    /// together. The menu bar icon's opacity goes between 1 and 0.99, which can't be seen.
+    private func showNewFrame() {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["LOGOLIGHT_NO_FRAME_NUDGE"] != nil { return }
+        #endif
+        guard let button = statusItem.button else { return }
+        button.alphaValue = button.alphaValue < 1 ? 1 : 0.99
     }
 
     /// Returns the logo to normal before the app quits.

@@ -317,7 +317,11 @@ idle screen, and the flash was timed from the write. Morse now times each flash 
 starts to rise (`timedFade(… waitingForRise:)`) and keeps every hold, so a held-back rise only
 lengthens the gap before it; the fake can hold rises back (`FakeDaemon.riseDelay`). Two runs since:
 flashes within 0.017 s of their length, gaps inside a letter 1.05–1.62 units and between letters
-3.05–3.29, the keyboard's duty down by at most 0.007. Not yet watched by eye. Typing in the field inside the open menu was checked by the PR's
+3.05–3.29, the keyboard's duty down by at most 0.007. A later run, with nothing changing on screen,
+had rises held back the full 0.5 s, so the app now has the display show a frame at each rise from
+dark (`onRiseFromDark`: the menu bar icon's opacity goes between 1 and 0.99, which can't be
+seen); with that, a looping SOS's gaps stayed within 0.17 units of their length. Effects get it
+too. Not yet watched by eye. Typing in the field inside the open menu was checked by the PR's
 author (2026-11-07, with `LOGOLIGHT_SIMULATE=1`) and works.
 `LOGOLIGHT_SIMULATE=1` (debug) runs the app against `SimulatedEmitterService`, a wall-clock
 stand-in for corebrightnessd, so the live view can be watched on any Mac.

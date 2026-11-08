@@ -222,6 +222,19 @@ func morseTests(_ t: TestHarness) async {
         t.expect(abs(f.daemon.level - level) < 0.03, "at \(f.daemon.level), not \(level)")
     }
 
+    await t.test("asks the app for a new frame at each rise from dark, and only then") {
+        let f = Fixture(direct: true, timeDriven: true)
+        var rises = 0
+        f.controller.onRiseFromDark = { rises += 1 }
+        f.controller.setBrightness(0.5)
+        t.expect(await waitUntil { !f.controller.animator!.isAnimating })
+        t.expectEqual(rises, 0) // fading down from lit
+        t.expect(f.controller.playMorse("SOS", loops: false))
+        t.expect(await waitUntil { f.controller.morse == nil && !f.controller.animator!.isAnimating })
+        // Nine flashes, then the fade back up to the brightness, from dark.
+        t.expectEqual(rises, 10)
+    }
+
     await t.test("choosing an effect stops a message") {
         let f = Fixture(direct: true, timeDriven: true)
         f.clock.budget = 50

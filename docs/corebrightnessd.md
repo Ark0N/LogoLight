@@ -261,9 +261,13 @@ how LogoLight's Lit with Lid Closed works (in the code, but out of the menu for 
   first rise started 0.65 s after it was written (between 0.5 and 0.8 s in the probe). Later
   rises from dark were held back little: Pulse's cycles took 2.15–2.19 s with the lid closed,
   against 2.16–2.25 s with it open (2.15 s planned). **With the lid open and an idle screen, rises
-  from dark were held back 0–0.17 s** (Morse code's flashes, `tools/livecheck --morse`), which a
-  0.2 s dot can't absorb, so quick flashes are timed from when the logo starts to rise. A fall to
-  dark isn't gated.
+  from dark were held back 0–0.17 s** (Morse code's flashes, `tools/livecheck --morse`), and in a
+  later run, with nothing at all changing on screen, often by the full 0.5 s. A 0.2 s dot can't
+  absorb that, so quick flashes are timed from when the logo starts to rise, and **the app has the
+  display show a new frame** at each rise from dark: its menu bar icon's opacity goes between 1
+  and 0.99 (`LightEmitter.onRiseFromDark`). A looping SOS in the app, measured from outside: gaps
+  within 0.17 units of their length (mean 0.12) with that, against up to 0.63 (mean 0.22) in the
+  same minute without it. A fall to dark isn't gated.
 - Below the daemon, `bklb-backlight@0` is a PWM device on its own controller
   (`AppleARMPWMDevice` on `pwm1@5044000`), outside the display pipeline, with no lid property.
 - **Not checked:** whether telling the display containers and the colour module (True Tone) that

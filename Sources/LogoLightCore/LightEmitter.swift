@@ -280,6 +280,11 @@ public final class LightEmitter {
         try await run(following: { level }, over: duration, sleep: sleep, waitingForRise: waitingForRise).time
     }
 
+    /// Called as the logo starts to rise from dark. corebrightnessd holds such a rise back until the
+    /// display shows a new frame (its display-ready gate), which with nothing changing on screen
+    /// took its full 0.5 s timeout. The app redraws something tiny here, so a frame comes at once.
+    public var onRiseFromDark: (@MainActor () -> Void)?
+
     /// The longest corebrightnessd holds back a rise from dark: its display-ready gate gives up
     /// waiting for a frame after 0.5 s (see docs/corebrightnessd.md, "The lid").
     static let gateTimeout = 0.6
@@ -337,6 +342,7 @@ public final class LightEmitter {
             : duration / FadeCurve.timeFraction(toReach: abs(target - current) / abs(end - current))
         setFadeDuration(fadeTime)
         setLit(lit)
+        if lit, current <= 0 { onRiseFromDark?() }
 
         // After every sleep, a cancelled fade stops without writing anything more. `Task.sleep`
         // returns normally when it's cancelled after its time is up but before the task resumes,

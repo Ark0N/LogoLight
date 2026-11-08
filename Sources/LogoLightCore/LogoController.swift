@@ -90,6 +90,13 @@ public final class LogoController {
         )
     }
 
+    /// Called as the logo starts to rise from dark, so the app can have the display show a new frame
+    /// (see `LightEmitter.onRiseFromDark`).
+    public var onRiseFromDark: (@MainActor () -> Void)? {
+        get { emitter?.onRiseFromDark }
+        set { emitter?.onRiseFromDark = newValue }
+    }
+
     /// Whether the logo can be controlled without a password (and brightness and effects are available).
     public var canControlDirectly: Bool { emitter != nil }
 
