@@ -140,6 +140,41 @@ let level = LogoAnimator.level(forBrightness:)
     report("  morse stopped -> back to brightness", expected: level(0.5))
 }
 
+/// Loops SOS for `seconds` and prints when each pass's first flash came, so a loop that stops shows.
+@MainActor func morseLoopCheck(seconds: Double) async {
+    var flashStarts: [Double] = []
+    var litSince: Double?
+    var stoppedAt: Double?
+    let t0 = Date()
+    controller.playMorse("SOS", loops: true)
+    while Date().timeIntervalSince(t0) < seconds {
+        let t = Date().timeIntervalSince(t0), f = factor()
+        if f > 0.5, litSince == nil { litSince = t; flashStarts.append(t) }
+        if f <= 0.5 { litSince = nil }
+        if stoppedAt == nil, controller.animator?.isPlaying != true || controller.morse == nil { stoppedAt = t }
+        await wait(0.002)
+    }
+    // A pass is 9 flashes; print the start of each pass.
+    let passes = stride(from: 0, to: flashStarts.count, by: 9).map { String(format: "%.1f", flashStarts[$0]) }
+    let expected = Int(((seconds - 1.7) / MorseCode.duration(of: "SOS")) * 9)
+    print(String(format: "%-46@ %d flashes in %.0f s (about %d expected), passes started at %@ s; stopped: %@ %@",
+                 "morse SOS looped" as NSString, flashStarts.count, seconds, expected,
+                 passes.joined(separator: ", ") as NSString,
+                 stoppedAt.map { String(format: "at %.1f s", $0) } ?? "no",
+                 flashStarts.count >= expected - 9 && stoppedAt == nil ? "ok" : "OFF"))
+    print("  still playing: \(controller.animator?.isPlaying == true), message: \(String(describing: controller.morse))")
+    controller.stopMorse(); await wait(1.2)
+}
+
+if CommandLine.arguments.contains("--morse-loop") {
+    controller.restoreNormalLighting(); await wait(0.6)
+    controller.start(brightness: 0.5, effect: .none); await wait(1.5)
+    await morseLoopCheck(seconds: 30)
+    report("morse loop stopped -> back to brightness", expected: level(0.5))
+    controller.restoreNormalLighting(); await wait(0.8)
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--morse") {
     controller.restoreNormalLighting(); await wait(0.6)
     controller.start(brightness: 0.5, effect: .none); await wait(1.5)

@@ -170,6 +170,25 @@ func morseTests(_ t: TestHarness) async {
         f.controller.restoreNormalLighting()
     }
 
+    for delay in [0.0, 0.15] {
+        await t.test("a loop of SOS keeps going for many passes (rises from dark held back \(delay) s)") {
+            let f = Fixture(direct: true, timeDriven: true)
+            f.daemon.riseDelay = delay
+            f.daemon.trace = []
+            t.expect(f.controller.playMorse("SOS", loops: true))
+            // A pass takes longer by a frame or two, and the delay, at each of its 9 rises.
+            let pass = MorseCode.duration(of: "SOS") + 9 * (delay + 0.04)
+            let start = f.clock.now
+            // Five passes and the lead-in, on the fake's clock.
+            t.expect(await waitUntil { f.clock.now - start > 5 * pass + 2 || !f.controller.animator!.isPlaying })
+            t.expect(f.controller.animator!.isPlaying, "stopped playing after \(f.clock.now - start) s")
+            t.expectEqual(f.controller.morse?.loops, true)
+            let count = flashes(f.daemon.trace ?? []).count
+            t.expect(count >= 5 * 9, "only \(count) flashes in five passes")
+            f.controller.restoreNormalLighting()
+        }
+    }
+
     await t.test("choosing an effect stops a message") {
         let f = Fixture(direct: true, timeDriven: true)
         f.clock.budget = 50
