@@ -547,10 +547,11 @@ strong {
   position: relative;
 }
 
-/* Tall enough for the menu bar and the whole menu below it: the panel is 413 points tall. */
+/* Tall enough for the menu bar and the whole menu below it: the panel is 413 points tall, and Lit with
+   Lid Closed has a second line. */
 .screen {
   position: relative;
-  height: calc(var(--pt) * 555);
+  height: calc(var(--pt) * 589);
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--wallpaper);
@@ -675,6 +676,20 @@ strong {
   padding-left: calc(var(--pt) * 24);
   font-size: calc(var(--pt) * 13);
   font-weight: 400;
+}
+
+/* An item with a second line in smaller grey text, as NSMenuItem's subtitle draws it: 12 points more. */
+.menu-item-two {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  height: calc(var(--pt) * 34);
+  line-height: 1.15;
+}
+
+.menu-subtitle {
+  color: var(--muted);
+  font-size: calc(var(--pt) * 11);
 }
 
 .menu-check {
