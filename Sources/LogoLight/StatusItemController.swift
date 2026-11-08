@@ -61,6 +61,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
     private static let keepsPasswordDefaultsKey = "KeepsPassword"
     private static let lightsWithLidClosedDefaultsKey = "LightsWithLidClosed"
+    /// Lit with Lid Closed is out of the menu for now (the user's call, 2026-11-08): it only works
+    /// with an external display, and without one the logo goes dark with the Mac, which looked
+    /// broken. The code stays; while it's hidden the saved choice isn't applied, so it's off.
+    private static let showsLidClosedOption = false
 
     init(controller: LogoController) {
         self.controller = controller
@@ -75,7 +79,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
         controller.start(brightness: brightness, effect: effect ?? .none,
                          followsBattery: defaults.bool(forKey: Self.followsBatteryDefaultsKey),
-                         lightsWithLidClosed: defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey))
+                         lightsWithLidClosed: Self.showsLidClosedOption
+                            && defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey))
         // Without direct control, the first password also turns on Disable Password, unless the user
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
@@ -150,7 +155,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.items = [
             panelItem,
             .separator(),
-            passwordlessItem, lidClosedItem, launchAtLoginItem,
+            passwordlessItem,
+        ] + (Self.showsLidClosedOption ? [lidClosedItem] : []) + [
+            launchAtLoginItem,
             .separator(),
             quitItem,
         ]
