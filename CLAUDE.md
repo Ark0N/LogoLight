@@ -306,7 +306,11 @@ afterwards. Morse always flashes at full brightness: easing onto a level in betw
 (`land`), which would smear dots. Edges are 0.04 s fades. Tests (`MorseTests.swift`) measure the
 flashes in the fake's 1 ms trace. Choosing an effect stops a message; turning the logo off or a
 display sleep drops a message sent once and pauses a loop. The panel has a MORSE CODE card: a field,
-play (`play.fill`/`stop.fill`) and loop (`repeat`, accent-filled while looping). On the MacBook
+play (`play.fill`, `stop.fill` while a message is sent) and a loop switch (`repeat`, accent-filled
+when on, saved as `MorseLoops`; flipping it while a message is sent changes whether it carries on
+after this pass, without restarting it). Loop was first a second play button that looped at once;
+the user pressed loop and then play, as in a music player, and play (once) replaced the loop
+after one pass, so it's a switch now (2026-11-08). On the MacBook
 (`tools/livecheck --morse`, 2026-11-08) the first run cut dots short, one to 34 ms: a rise from
 dark waits for corebrightnessd's display-ready gate (a frame from the display), 0–0.17 s with an
 idle screen, and the flash was timed from the write. Morse now times each flash from when the logo

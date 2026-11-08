@@ -151,12 +151,18 @@ public final class LogoAnimator {
         morse = nil
     }
 
+    /// Switches the loop of the Morse message being sent, without restarting it: on, it carries on
+    /// after this pass; off, it ends after it.
+    public func setMorseLoops(_ loops: Bool) {
+        morse?.loops = loops
+    }
+
     private func playMorse(_ message: MorseMessage) {
         // From dark, with a word gap first, so the first dot can't be mistaken for the logo going out.
         let isDark = (emitter.fadeLevel ?? 1) < 0.05
         let leadIn = isDark ? [] : [FadeStep(lit: false, fade: 0.3, hold: 7 * MorseCode.unit)]
         // At full brightness: both ends are plain hardware fades, with no easing to stretch the timing.
-        play(MorseCode.steps(for: message.text), leadIn: leadIn, repeats: message.loops, peak: 1)
+        play(MorseCode.steps(for: message.text), leadIn: leadIn, peak: 1)
     }
 
     /// Applies a new brightness. A playing effect picks it up at its next step.
@@ -189,10 +195,11 @@ public final class LogoAnimator {
         onMorseEnded?()
     }
 
-    /// Plays `leadIn` once, then `cycle`, over and over or (`repeats: false`) once. Lit steps go to
-    /// `peak`, or the chosen brightness without one. A cycle played once that runs to its end resumes
-    /// what was there before (the effect or the brightness), after clearing a Morse message.
-    private func play(_ cycle: [FadeStep], leadIn: [FadeStep] = [], repeats: Bool = true, peak: Double? = nil) {
+    /// Plays `leadIn` once, then `cycle` over and over: an effect until it's stopped, a Morse message
+    /// (which has a `peak`) while its loop is on, which can be switched while it plays. Lit steps go to
+    /// `peak`, or the chosen brightness without one. A message that ends (its loop off at the end of
+    /// a pass) is cleared, and what was there before resumes (the effect or the brightness).
+    private func play(_ cycle: [FadeStep], leadIn: [FadeStep] = [], peak: Double? = nil) {
         isPlaying = true
         let cycleHold = cycle.reduce(0) { $0 + $1.hold }
         task = Task { [weak self] in
@@ -227,7 +234,7 @@ public final class LogoAnimator {
                         break playing
                     }
                 }
-                guard repeats else {
+                guard peak == nil || self?.morse?.loops == true else {
                     // Done. (Cancelled at the last moment: whoever cancelled has taken over.)
                     guard let self, !Task.isCancelled else { return }
                     if self.morse?.loops == false {

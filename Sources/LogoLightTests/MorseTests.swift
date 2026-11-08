@@ -72,13 +72,15 @@ func morseTests(_ t: TestHarness) async {
         let status = LogoStatus(isSupported: true, setting: .on, source: .daemon, isLit: true, outputLevel: 0.2)
         let once = PanelState(status: status, canControlDirectly: true, effect: .none, brightness: 1,
                               morse: MorseMessage(text: "SOS", loops: false))
-        t.expect(once.isSendingOnce && !once.isLooping)
+        t.expect(once.isSendingMorse && !once.morseLoops)
         let loop = PanelState(status: status, canControlDirectly: true, effect: .none, brightness: 1,
-                              morse: MorseMessage(text: "SOS", loops: true))
-        t.expect(loop.isLooping && !loop.isSendingOnce)
+                              morse: MorseMessage(text: "SOS", loops: true), morseLoops: true)
+        t.expect(loop.isSendingMorse && loop.morseLoops)
+        let idle = PanelState(status: status, canControlDirectly: true, effect: .none, brightness: 1, morseLoops: true)
+        t.expect(!idle.isSendingMorse && idle.morseLoops, "the loop switch shows while nothing is sent")
         let fallback = PanelState(status: status, canControlDirectly: false, effect: .none, brightness: 1,
                                   morse: MorseMessage(text: "SOS", loops: true))
-        t.expect(!fallback.isLooping, "no Morse without direct control")
+        t.expect(!fallback.isSendingMorse, "no Morse without direct control")
     }
 
     await t.test("won't start with the logo off, or with nothing to send") {
@@ -187,6 +189,37 @@ func morseTests(_ t: TestHarness) async {
             t.expect(count >= 5 * 9, "only \(count) flashes in five passes")
             f.controller.restoreNormalLighting()
         }
+    }
+
+    await t.test("switching the loop on while a message is sent once keeps it going") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.trace = []
+        t.expect(f.controller.playMorse("E", loops: false))
+        t.expect(await waitUntil { flashes(f.daemon.trace ?? []).count >= 1 })
+        f.controller.setMorseLoops(true)
+        // "E" is 1 lit + 7 dark units: well past the end of the first pass.
+        t.expect(await waitUntil { flashes(f.daemon.trace ?? []).count >= 4 || f.controller.morse == nil })
+        t.expectEqual(f.controller.morse?.loops, true)
+        t.expect(f.controller.animator!.isPlaying, "still sending")
+        f.controller.restoreNormalLighting()
+    }
+
+    await t.test("switching the loop off ends a message after its pass, back to the brightness") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.setBrightness(0.5)
+        t.expect(await waitUntil { !f.controller.animator!.isAnimating })
+        f.daemon.trace = []
+        var ended = 0
+        f.controller.onMorseEnded = { ended += 1 }
+        t.expect(f.controller.playMorse("E", loops: true))
+        t.expect(await waitUntil { flashes(f.daemon.trace ?? []).count >= 2 })
+        f.controller.setMorseLoops(false)
+        t.expect(await waitUntil { f.controller.morse == nil }, "should end after the pass")
+        t.expectEqual(ended, 1)
+        t.expectEqual(flashes(f.daemon.trace ?? []).count, 2)
+        t.expect(await waitUntil { !f.controller.animator!.isAnimating })
+        let level = LogoAnimator.level(forBrightness: 0.5)
+        t.expect(abs(f.daemon.level - level) < 0.03, "at \(f.daemon.level), not \(level)")
     }
 
     await t.test("choosing an effect stops a message") {

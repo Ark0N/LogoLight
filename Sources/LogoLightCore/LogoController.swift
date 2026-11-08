@@ -182,6 +182,12 @@ public final class LogoController {
         return animator.startMorse(MorseMessage(text: text, loops: loops))
     }
 
+    /// Switches the loop of the Morse message being sent, without restarting it: on, it carries on
+    /// until it's stopped; off, it ends after this pass.
+    public func setMorseLoops(_ loops: Bool) {
+        animator?.setMorseLoops(loops)
+    }
+
     /// Stops a Morse message, going back to the chosen effect or brightness.
     public func stopMorse() {
         guard let animator, animator.morse != nil else { return }

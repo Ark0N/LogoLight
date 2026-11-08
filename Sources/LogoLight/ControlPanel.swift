@@ -11,10 +11,12 @@ final class ControlPanel: NSView {
     var onBrightnessChanged: ((Double) -> Void)?
     var onFollowsBatteryChanged: ((Bool) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
-    /// Play (`loops: false`) or loop pressed, with the message typed.
-    var onMorsePlay: ((_ text: String, _ loops: Bool) -> Void)?
-    /// The button of the message being sent pressed again.
+    /// Play pressed (or Return in the field), with the message typed.
+    var onMorsePlay: ((String) -> Void)?
+    /// Play pressed while it shows stop: a message is being sent.
     var onMorseStop: (() -> Void)?
+    /// The loop switch flipped: on, a message repeats until it's stopped.
+    var onMorseLoopsChanged: ((Bool) -> Void)?
     /// The message edited (to remember it for next time).
     var onMorseTextChanged: ((String) -> Void)?
 
@@ -124,8 +126,9 @@ final class ControlPanel: NSView {
             row.toggle.acceptsInput = state.canAdjust
         }
         morseField.isEnabled = state.canAdjust
-        playButton.isActive = state.isSendingOnce
-        loopButton.isActive = state.isLooping
+        playButton.isActive = state.isSendingMorse
+        playButton.toolTip = state.isSendingMorse ? "Stop" : "Play"
+        loopButton.isActive = state.morseLoops
         updateMorseButtons()
         greyOut([brightnessRow: !state.canChangeBrightness, batteryRow: !state.canAdjust,
                  effectsCard.rows: !state.canAdjust, morseCard.rows: !state.canAdjust], animated: animated)
@@ -223,8 +226,8 @@ final class ControlPanel: NSView {
         effectsCard.add(rows)
         addFullWidth(effectsCard)
 
-        // Morse code: type a message, then play it once or loop it. Pressing the button of the message
-        // being sent stops it.
+        // Morse code: type a message and press play, which turns to stop while it's sent. The loop
+        // switch, as in a music player, makes it repeat until it's stopped.
         morseHeader.font = effectsHeader.font
         morseHeader.textColor = .secondaryLabelColor
         addIndented(morseHeader, in: morseHeaderContainer)
@@ -244,17 +247,19 @@ final class ControlPanel: NSView {
         morseField.cell?.wraps = false
         morseField.delegate = self
         morseField.target = self
-        morseField.action = #selector(morseFieldReturned) // Return plays it once
+        morseField.action = #selector(morseFieldReturned) // Return plays it
         morseField.setAccessibilityLabel("Morse code message")
 
-        playButton.toolTip = "Play once"
-        playButton.setAccessibilityLabel("Play Morse code once")
-        loopButton.toolTip = "Loop"
-        loopButton.setAccessibilityLabel("Loop Morse code")
-        for button in [playButton, loopButton] {
-            button.target = self
-            button.action = #selector(morseButtonPressed(_:))
-        }
+        playButton.toolTip = "Play"
+        playButton.setAccessibilityLabel("Play Morse code")
+        playButton.target = self
+        playButton.action = #selector(playPressed)
+        loopButton.toolTip = "Repeat until stopped"
+        loopButton.setAccessibilityLabel("Repeat Morse code")
+        loopButton.activeDescription = "On"
+        loopButton.inactiveDescription = "Off"
+        loopButton.target = self
+        loopButton.action = #selector(loopPressed)
         for view in [morseField, playButton, loopButton] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             morseRow.addSubview(view)
@@ -278,13 +283,12 @@ final class ControlPanel: NSView {
         updateMorseButtons()
     }
 
-    /// A button can start a message when there's something to send, and always stop its own.
+    /// Play can start a message when there's something to send, and always stop one; the loop
+    /// switch can always be flipped.
     private func updateMorseButtons() {
         let canAdjust = state?.canAdjust ?? false
-        let canSend = MorseCode.canSend(morseField.stringValue)
-        for button in [playButton, loopButton] {
-            button.isEnabled = canAdjust && (canSend || button.isActive)
-        }
+        playButton.isEnabled = canAdjust && (MorseCode.canSend(morseField.stringValue) || playButton.isActive)
+        loopButton.isEnabled = canAdjust
         let notation = MorseCode.notation(morseField.stringValue)
         morseField.toolTip = notation.isEmpty ? "Letters, digits and punctuation" : notation
     }
@@ -358,17 +362,22 @@ final class ControlPanel: NSView {
         onFollowsBatteryChanged?(batterySwitch.isOn)
     }
 
-    @objc private func morseButtonPressed(_ sender: SymbolButton) {
-        if sender.isActive {
+    @objc private func playPressed() {
+        if playButton.isActive {
             onMorseStop?()
         } else {
-            onMorsePlay?(morseField.stringValue, sender === loopButton)
+            onMorsePlay?(morseField.stringValue)
         }
     }
 
+    @objc private func loopPressed() {
+        onMorseLoopsChanged?(!loopButton.isActive)
+    }
+
+    /// Return plays the message, unless one is being sent (stopping it takes the button).
     @objc private func morseFieldReturned() {
         guard playButton.isEnabled, !playButton.isActive else { return }
-        onMorsePlay?(morseField.stringValue, false)
+        onMorsePlay?(morseField.stringValue)
     }
 
     @objc private func effectSwitchChanged(_ sender: LogoSwitch) {
@@ -422,7 +431,12 @@ final class SymbolButton: NSControl {
     private let activeSymbol: String
     private var isPressed = false { didSet { needsDisplay = true } }
 
-    /// Whether this button's action is under way (pressing it again stops it).
+    /// What VoiceOver says while it's active, and while it isn't.
+    var activeDescription = "Playing"
+    var inactiveDescription: String?
+
+    /// Whether this button's action is under way (pressing it again stops it), or, for a switch,
+    /// whether it's on.
     var isActive = false {
         didSet {
             guard isActive != oldValue else { return }
@@ -491,7 +505,7 @@ final class SymbolButton: NSControl {
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func isAccessibilityEnabled() -> Bool { isEnabled }
-    override func accessibilityValue() -> Any? { isActive ? "Playing" : nil }
+    override func accessibilityValue() -> Any? { isActive ? activeDescription : inactiveDescription }
     override func accessibilityPerformPress() -> Bool {
         guard isEnabled else { return false }
         sendAction(action, to: target)
@@ -845,6 +859,7 @@ enum PanelRenderer {
         let on = state(.on)
         var looping = on
         looping.morse = MorseMessage(text: "SOS", loops: true)
+        looping.morseLoops = true
         let states = [("on", on), ("morse", looping), ("off", state(.off)), ("battery", state(.on, followsBattery: true)),
                       ("fallback", state(.on, canControlDirectly: false)), ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {

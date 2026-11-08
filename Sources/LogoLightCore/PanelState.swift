@@ -21,6 +21,8 @@ public struct PanelState: Equatable, Sendable {
     public var followsBattery: Bool
     /// The Morse message being sent, if any.
     public var morse: MorseMessage?
+    /// Whether Morse code repeats until it's stopped (the loop switch).
+    public var morseLoops: Bool
     /// The only text in the panel: why everything is disabled, on a Mac without the logo.
     public var message: String?
     /// The menu bar icon (an SF Symbols name), and what it means.
@@ -31,7 +33,7 @@ public struct PanelState: Equatable, Sendable {
     /// straight away, so the rest of the panel follows the switch at once instead of when the fade ends.
     public init(status: LogoStatus, requested: LogoIllumination? = nil, canControlDirectly: Bool,
                 effect: LogoEffect, brightness: Double, followsBattery: Bool = false, isBusy: Bool = false,
-                morse: MorseMessage? = nil) {
+                morse: MorseMessage? = nil, morseLoops: Bool = false) {
         let setting = requested ?? status.setting
         isSupported = status.isSupported
         isOn = status.isSupported && setting != .off
@@ -41,6 +43,7 @@ public struct PanelState: Equatable, Sendable {
         self.brightness = brightness
         self.followsBattery = followsBattery
         self.morse = canControlDirectly ? morse : nil
+        self.morseLoops = morseLoops
         message = status.isSupported ? nil : "Needs a MacBook Pro with PROLED XDR Display"
         (symbolName, symbolDescription) = switch (status.isSupported, setting) {
         case (false, _): ("lightbulb.slash", "No illuminated logo on this Mac")
@@ -61,7 +64,6 @@ public struct PanelState: Equatable, Sendable {
     /// brightness. It's greyed out then, showing the charge.
     public var canChangeBrightness: Bool { canAdjust && !followsBattery }
 
-    /// Whether the play button shows stop (a message is being sent once), and the loop button.
-    public var isSendingOnce: Bool { morse?.loops == false }
-    public var isLooping: Bool { morse?.loops == true }
+    /// Whether a Morse message is being sent, so the play button shows stop.
+    public var isSendingMorse: Bool { morse != nil }
 }

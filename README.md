@@ -41,7 +41,7 @@
       Turn on Battery and the logo shows your charge: full brightness when it's full, dimming as it runs down.
       <br><br>
       <b>Morse code</b><br>
-      Type a message and press play to flash it once, or loop to repeat it until you stop it.
+      Type a message and press play to flash it. Turn on loop to repeat it until you stop it.
       <br><br>
       <b>Control Center</b><br>
       A Backlight control for Control Center or the menu bar (macOS 26 or later).
