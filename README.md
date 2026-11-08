@@ -37,6 +37,9 @@
       <b>Effects</b><br>
       Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.
       <br><br>
+      <b>Lit with Lid Closed</b><br>
+      Using an external display with the lid closed? The logo can stay lit, with its effects, while the keyboard stays dark.
+      <br><br>
       <b>Control Center</b><br>
       A Backlight control for Control Center or the menu bar (macOS 26 or later).
       <br><br>

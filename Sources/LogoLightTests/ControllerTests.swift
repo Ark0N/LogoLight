@@ -7,7 +7,9 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
     /// The root `com.apple.CoreBrightness` `LEBacklightMode` value, `nil` when deleted.
     var backlightMode: Int?
     var hasLogo = true
+    /// The built-in display: off while it sleeps and while the lid is closed.
     var displayAwake = true
+    var externalDisplayAwake = false
     /// When false, corebrightnessd ignores changes to the default.
     var daemonResponds = true
     /// Called when the root default changes, as corebrightnessd observes it.
@@ -79,6 +81,7 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
     }
 
     func isBuiltInDisplayAwake() -> Bool? { displayAwake }
+    func isExternalDisplayAwake() -> Bool? { externalDisplayAwake }
 }
 
 @MainActor
@@ -124,7 +127,11 @@ final class FakeSudo: PasswordlessSudo, @unchecked Sendable {
 /// using the real key names, so tests can check the exact sequence. Like the real one, it
 /// ignores a `DisplayLogicalState` it's already in, a fade started with a huge duration doesn't
 /// move (which is how a level is held), and reading `DisplayLogicalState` gives the last value
-/// sent to anything, even if that was only the keyboard.
+/// sent to anything, even if that was only the keyboard. While the logo has been told the lid is
+/// closed (`ClamshellUpdate`), it fades out and stays dark whatever `DisplayLogicalState` says, and
+/// `CBClamshellState` reads the lid as the daemon itself last saw it (`moveLid(closed:)`). A change
+/// that leaves the logo heading where it was (to dark, for a closed lid) starts no fade, so a hold
+/// heading for dark survives the lid closing, as on the real Mac.
 ///
 /// Fades move in one of two ways. By default each read moves them a step (`stepPerRead`).
 /// With `timeDriven` (and `stepPerRead = 0`), time passing moves them instead, at the real
@@ -161,6 +168,14 @@ final class FakeDaemon: LightEmitterService {
     var peak = 0.0
     /// The `DisplayLogicalState` the keyboard backlight follows, which is dark on 1.
     var keyboardState = 2
+    /// The lid as corebrightnessd's own lid handling last saw it (`CBClamshellState`), or `nil`
+    /// for a macOS without the key.
+    var lidClosed: Bool? = false
+    /// The lid as the logo's module and the keyboard were last told (`ClamshellUpdate`).
+    private(set) var logoToldLidClosed = false
+    private(set) var keyboardToldLidClosed = false
+    /// Whether the keyboard backlight is lit: it's dark on Blank, or once told the lid is closed.
+    var isKeyboardLit: Bool { keyboardState == 2 && !keyboardToldLidClosed }
     private var lastStateSent = 2
     private var isMoving = false
     /// The time-driven fade in progress: where it started, how long it takes, how long it has run.
@@ -175,6 +190,8 @@ final class FakeDaemon: LightEmitterService {
 
     var lit: Bool { level >= 0.999 }
     var isHolding: Bool { fadeDuration >= 1e6 }
+    /// Where the logo is heading: lit on Unblank, unless it has been told the lid is closed.
+    private var end: Double { state == 2 && !logoToldLidClosed ? 1 : 0 }
 
     /// The fade duration the daemon uses when it's set to 0 (automatic).
     static let automaticFadeDuration = 0.3
@@ -196,6 +213,29 @@ final class FakeDaemon: LightEmitterService {
         peak = level
     }
 
+    /// The lid really opening or closing (with an external display, so the Mac stays awake):
+    /// corebrightnessd tells every module.
+    func moveLid(closed: Bool) {
+        lidClosed = closed
+        keyboardToldLidClosed = closed
+        tellLogo(lidClosed: closed)
+    }
+
+    private func tellLogo(lidClosed closed: Bool) {
+        let heading = end
+        logoToldLidClosed = closed
+        if end != heading { startFade() }
+    }
+
+    /// A new fade starts from rest, wherever the last one had got to.
+    private func startFade() {
+        isMoving = !isHolding
+        fade = (from: level, length: fadeDuration > 0 ? fadeDuration : Self.automaticFadeDuration, elapsed: 0)
+        lastFrame = 0
+        nextFrame = frameIntervals?() ?? 0
+        if stepPerRead >= 1 { advance(by: 1) }
+    }
+
     /// Time passing (time-driven mode only). A fade started at the hold duration moves too,
     /// but far too slowly to see.
     func elapse(_ seconds: Double) {
@@ -208,7 +248,6 @@ final class FakeDaemon: LightEmitterService {
         defer { trace?.append((time, level)) }
         guard timeDriven, var fade else { return }
         fade.elapsed += seconds
-        let end: Double = state == 2 ? 1 : 0
         // Where its last frame put it, until it reaches the end at its duration.
         var frames = frameInterval > 0 ? (fade.elapsed / frameInterval + 1e-9).rounded(.down) * frameInterval
             : fade.elapsed
@@ -227,6 +266,7 @@ final class FakeDaemon: LightEmitterService {
         switch key {
         case "LEBacklightMode": return NSNumber(value: mode)
         case "DisplayLogicalState": return NSNumber(value: lastStateSent)
+        case "CBClamshellState": return lidClosed.map { NSNumber(value: $0) }
         case "LEPWMState":
             advance(by: stepPerRead)
             return ["Factor": NSNumber(value: level)]
@@ -251,27 +291,32 @@ final class FakeDaemon: LightEmitterService {
             lastStateSent = value.intValue
             keyboardState = value.intValue
             guard value.intValue != state else { break }
+            let heading = end
             state = value.intValue
-            isMoving = !isHolding
-            // A new fade starts from rest, wherever the last one had got to.
-            fade = (from: level, length: fadeDuration > 0 ? fadeDuration : Self.automaticFadeDuration, elapsed: 0)
-            lastFrame = 0
-            nextFrame = frameIntervals?() ?? 0
-            if stepPerRead >= 1 { advance(by: 1) }
+            if end != heading { startFade() }
+        case "ClamshellUpdate":
+            keyboardToldLidClosed = value.boolValue
+            tellLogo(lidClosed: value.boolValue)
         default: break
         }
         return true
     }
 
     func setKeyboardValue(_ value: NSNumber, forKey key: String) {
-        guard key == "DisplayLogicalState" else { return }
-        keyboardState = value.intValue
-        lastStateSent = value.intValue
+        switch key {
+        case "DisplayLogicalState":
+            keyboardState = value.intValue
+            lastStateSent = value.intValue
+        case "ClamshellUpdate":
+            log.append("keyboard ClamshellUpdate=\(value)")
+            timeline.append((time, log[log.count - 1]))
+            keyboardToldLidClosed = value.boolValue
+        default: break
+        }
     }
 
     private func advance(by step: Double) {
         guard isMoving, step > 0 else { return }
-        let end: Double = state == 2 ? 1 : 0
         level = end > level ? min(end, level + step) : max(end, level - step)
         peak = max(peak, level)
         if level == end { isMoving = false; fade = nil }

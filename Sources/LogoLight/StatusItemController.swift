@@ -14,6 +14,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let panel = ControlPanel(finish: MacFinish.current() ?? .spaceBlack)
     private let panelItem = NSMenuItem()
     private let passwordlessItem = NSMenuItem()
+    private let lidClosedItem = NSMenuItem()
     private let launchAtLoginItem = NSMenuItem()
 
     private var status = LogoStatus.unsupported
@@ -54,6 +55,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private static let brightnessDefaultsKey = "Brightness"
     /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
     private static let keepsPasswordDefaultsKey = "KeepsPassword"
+    private static let lightsWithLidClosedDefaultsKey = "LightsWithLidClosed"
 
     init(controller: LogoController) {
         self.controller = controller
@@ -66,7 +68,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let brightness = defaults.object(forKey: Self.brightnessDefaultsKey) != nil
             ? defaults.double(forKey: Self.brightnessDefaultsKey) : nil
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
-        controller.start(brightness: brightness, effect: effect ?? .none)
+        controller.start(brightness: brightness, effect: effect ?? .none,
+                         lightsWithLidClosed: defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey))
         // Without direct control, the first password also turns on Disable Password, unless the user
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
@@ -112,6 +115,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.action = #selector(togglePasswordless)
         passwordlessItem.toolTip = "Turn the logo on and off without entering your password. Uncheck to ask for it again."
 
+        // (The widest item: 158 points, inside the panel's 170.)
+        lidClosedItem.title = "Lit with Lid Closed"
+        lidClosedItem.target = self
+        lidClosedItem.action = #selector(toggleLightsWithLidClosed)
+        lidClosedItem.toolTip = "Keep the logo lit when you close the lid to use an external display. The keyboard stays dark."
+
         launchAtLoginItem.title = "Launch at Login"
         launchAtLoginItem.target = self
         launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
@@ -122,7 +131,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.items = [
             panelItem,
             .separator(),
-            passwordlessItem, launchAtLoginItem,
+            passwordlessItem, lidClosedItem, launchAtLoginItem,
             .separator(),
             quitItem,
         ]
@@ -246,6 +255,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.isHidden = controller.canControlDirectly && !isPasswordlessEnabled
         passwordlessItem.state = isPasswordlessEnabled ? .on : .off
         passwordlessItem.isEnabled = status.isSupported && !isBusy
+        // Only with direct control: the logo is told about the lid through corebrightnessd.
+        lidClosedItem.isHidden = !status.isSupported || !controller.canLightWithLidClosed
+        lidClosedItem.state = controller.lightsWithLidClosed ? .on : .off
         launchAtLoginItem.state = isLaunchAtLoginEnabled ? .on : .off
         updateControl(state)
     }
@@ -359,7 +371,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     /// Effects pause while the display or the Mac sleeps, or the built-in display goes away (the lid
-    /// closed with an external display), and resume when it's back.
+    /// closed with an external display), and resume when it's back. The lid closing is handled as a
+    /// sleep, then as a wake a moment later, once corebrightnessd has dealt with the lid: the logo is
+    /// then lit again (Lit with Lid Closed) or left dark, also when it was held at a level, which the
+    /// daemon alone leaves lit.
     private func observeDisplay() {
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
@@ -389,6 +404,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let wasAwake = wasBuiltInDisplayAwake, wasAwake != isAwake else { return }
         if !isAwake {
             displayDidSleep()
+            scheduleWake()
         } else if controller.animator?.isPlaying != true {
             // (An effect still playing means nothing was paused: handling a wake would restart it.)
             scheduleWake()
@@ -427,6 +443,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             // now: a cancelled or failed dialog has thrown, and the earlier choice stands.
             UserDefaults.standard.set(!enable, forKey: Self.keepsPasswordDefaultsKey)
         }
+    }
+
+    @objc private func toggleLightsWithLidClosed() {
+        let lights = !controller.lightsWithLidClosed
+        controller.setLightsWithLidClosed(lights)
+        UserDefaults.standard.set(lights, forKey: Self.lightsWithLidClosedDefaultsKey)
+        updateMenu()
     }
 
     @objc private func toggleLaunchAtLogin() {

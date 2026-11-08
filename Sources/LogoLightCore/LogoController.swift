@@ -64,7 +64,8 @@ public final class LogoController {
         self.verificationTimeout = verificationTimeout
         self.sleep = sleep
         animator = emitter.map { emitter in
-            LogoAnimator(emitter: emitter, isDisplayAwake: { reader.isDisplayAwake() ?? false }, sleep: sleep)
+            LogoAnimator(emitter: emitter, isDisplayAwake: { Self.canLight(reader: reader, emitter: emitter) },
+                         sleep: sleep)
         }
     }
 
@@ -206,17 +207,76 @@ public final class LogoController {
         }
     }
 
-    /// Call when the display wakes up, to handle it straight away.
+    /// Call when the display wakes up, to handle it straight away. With the lid closed, the logo is
+    /// first told the lid is open (`lightsWithLidClosed`) or left dark, every time: corebrightnessd
+    /// may have sent the lid state again while it slept, and leaves a held level lit by itself.
     public func displayDidWake() {
+        updateLidOverride()
         guard isDisplayAwake else { return }
         emitter?.displayDidChange(isAwake: true)
         if !isSwitching, status().setting == .on { animator?.resume() }
     }
 
     /// Returns the logo to normal (fully lit), e.g. before quitting or after an effect was
-    /// interrupted by a crash. The chosen effect and brightness are kept.
+    /// interrupted by a crash. The chosen effect and brightness are kept. With the lid closed,
+    /// normal is dark, so a logo lit by `lightsWithLidClosed` goes dark.
     public func restoreNormalLighting() {
+        // Handing it back first releases a held level, so the lid state then darkens it.
         animator?.reset()
+        emitter?.endLidOverride()
+    }
+
+    // MARK: - The lid
+
+    /// Whether the logo stays lit while the lid is closed, with an external display attached.
+    /// corebrightnessd darkens it then, so it's told the lid is open, and the keyboard that it's
+    /// closed (see `LightEmitter.overrideLid()`). Effects and the brightness carry on as with the
+    /// lid open. The light sensor is covered, though, so the logo glows as in a dark room.
+    public private(set) var lightsWithLidClosed = false
+
+    /// Whether `lightsWithLidClosed` can work: the logo is controlled directly, and corebrightnessd
+    /// says where the lid is. Read once, as the menu asks on every refresh.
+    public private(set) lazy var canLightWithLidClosed: Bool = emitter?.isLidClosed != nil
+
+    /// Turns `lightsWithLidClosed` on or off. With the lid closed, the logo lights, as after a wake,
+    /// or goes dark, as when the lid closes.
+    public func setLightsWithLidClosed(_ lights: Bool) {
+        guard lights != lightsWithLidClosed else { return }
+        lightsWithLidClosed = lights
+        guard emitter?.isLidClosed == true else { return }
+        if lights {
+            displayDidWake()
+        } else {
+            displayDidSleep()
+            darkenForClosedLid()
+        }
+    }
+
+    /// With the lid closed, tells the logo the lid is open if `lightsWithLidClosed`, and otherwise
+    /// leaves it dark. Once the lid has really opened, there's nothing to end.
+    private func updateLidOverride() {
+        guard let emitter else { return }
+        switch emitter.isLidClosed {
+        case true?: if lightsWithLidClosed { emitter.overrideLid() } else { darkenForClosedLid() }
+        case false?: emitter.lidDidOpen()
+        case nil: break
+        }
+    }
+
+    /// Leaves the logo dark for the closed lid, as corebrightnessd has it normally, and ends any
+    /// override (also one a run that didn't quit cleanly left). The daemon doesn't darken a logo
+    /// held at a level when it's told the lid is closed: a hold heading for dark already isn't a
+    /// change, and one heading for lit gets a fade at the hold's endless duration. So a lit logo is
+    /// told the lid is open, handed back to normal at the automatic fade duration, and then told
+    /// it's closed, which fades it out.
+    private func darkenForClosedLid() {
+        guard let emitter else { return }
+        if (emitter.fadeLevel ?? 0) > 0.001 {
+            animator?.pause()
+            if !emitter.isLidOverridden { emitter.overrideLid() }
+            emitter.restore(displayAwake: true)
+        }
+        emitter.endLidOverride()
     }
 
     /// Applies the saved choices at launch, after anything a previous run left behind.
@@ -225,8 +285,10 @@ public final class LogoController {
     /// endless fade duration. If the logo is on and a level or an effect is chosen, it goes
     /// straight there: the fades' own writes replace that duration, without first relighting to
     /// full. Otherwise it's returned to normal, which ends that duration too.
-    public func start(brightness: Double?, effect: LogoEffect) {
+    public func start(brightness: Double?, effect: LogoEffect, lightsWithLidClosed: Bool = false) {
         guard let animator else { return }
+        self.lightsWithLidClosed = lightsWithLidClosed
+        updateLidOverride()
         if let brightness { animator.brightness = brightness }
         animator.select(effect)
         if isLitAndAwake, animator.level < 1 || effect != .none {
@@ -270,7 +332,14 @@ public final class LogoController {
 
     // MARK: - Private
 
-    private var isDisplayAwake: Bool { reader.isDisplayAwake() ?? false }
+    /// Whether the logo can light: the built-in display is on, or the lid is closed with the logo
+    /// told otherwise (`lightsWithLidClosed`) and an external display on.
+    private var isDisplayAwake: Bool { Self.canLight(reader: reader, emitter: emitter) }
+
+    private static func canLight(reader: LogoStatusReader, emitter: LightEmitter?) -> Bool {
+        if reader.isDisplayAwake() == true { return true }
+        return emitter?.isLidOverridden == true && reader.isExternalDisplayAwake() == true
+    }
 
     private var isLitAndAwake: Bool { isDisplayAwake && status().setting == .on }
 

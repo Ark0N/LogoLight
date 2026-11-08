@@ -46,7 +46,8 @@ The light emitter (LE) classes are `CBLEManager`, `CBLEPWMContainer`,
 | `LEPWMFactorFadeDuration` | `nil` | yes | Seconds, used by the **next** logical-state change. `0` means automatic (about 0.3 s). Changing it during a fade doesn't affect the fade in progress. |
 | `DisplayLogicalState` | yes | yes | The display state the logo follows. Writing `1` (Blank) fades the logo to dark and `2` (Unblank) fades it to fully lit. **The keyboard backlight follows it too; the screen doesn't.** Writing the state it's already in is ignored, even mid-fade or while a level is held. Reading gives the last value sent to *anything*, including a keyboard-only write, so it doesn't show the logo's state once those are in use. |
 | `LEPWMState` | dict | – | Live state, see below. |
-| `ClamshellUpdate` | `0` | untested | |
+| `ClamshellUpdate` | `0` | yes | Whether the lid is closed, as told to every module. While the logo's module has been told it's closed, the logo is dark whatever `DisplayLogicalState` says. See "The lid". |
+| `CBClamshellState` | `0`/`1` | – | The lid as the daemon's own lid handling last saw it (`BLControl._clamshellClosed`). A client's `ClamshellUpdate` doesn't change it. |
 | `LEPWMBrightnessNitsMapping` | array | accepted, no effect seen | Screen nits → logo nits. See "Brightness mappings". |
 | `LEPWMLuxToMaxNitsRestrictionMapping` | array | accepted, no effect seen | Lux → maximum logo nits. |
 | `LEPWMLuxToMinNitsRestrictionMapping` | array | accepted, no effect seen | Lux → minimum logo nits. |
@@ -219,6 +220,52 @@ duration when the display sleeps and reapplies the level after it wakes; those t
 were only exercised by calling them directly. If LogoLight crashes while holding a level, the
 huge duration stays in the daemon until LogoLight is reopened, which replaces it: with the
 automatic duration, or with a new hold at the saved level.
+
+## The lid
+
+Measured on 2026-11-08 with an external display attached and the lid closed, with
+`tools/probes/clamshell` and then `tools/livecheck --lid`, and read from the disassembly. This is
+how LogoLight's Lit with Lid Closed works.
+
+- When the lid closes, `BLControl` (on an `IOPMrootDomain` interest notification, which carries
+  `AppleClamshellState`) sends `ClamshellUpdate = 1` to every display container, the keyboards,
+  the colour module and the LE manager. It sends it again only on a real lid change, or when one
+  of those is set up (`setupLEManager`, `addDisplayContainerForBrightnessControl:`,
+  `keyboardBacklightHIDDeviceArrived:`).
+- `-[CBLEPWMControlModule _resolveTargetFactor]` gives the logo a target of 0 while the module's
+  `_clamshellClosed` is set, whatever `DisplayLogicalState` says. The same goes for
+  `_displayBrightnessZero`, a shutdown, and the WillSleep and DidSleep power states. With the lid
+  closed, Blank then Unblank did nothing.
+- A client's `ClamshellUpdate` reaches the same modules (`-[BLControl
+  _setPropertyWithKey:property:client:]`). With the lid closed, writing `0` relit the logo, which
+  stayed lit. Writing `1` to the keyboards only (`setProperty:withKey:keyboardID:`) then took the
+  keyboard dark again within 0.5 s and left the logo lit. Writing `1` to everything darkened it
+  in 0.3 s. Lit like this, the logo gave 17% duty at full brightness: the light sensor is covered,
+  so it glows as it would in a dark room (180 applied nits, against 220–280 with the lid open in
+  the same room).
+- `DisplayNits` stayed at 392 with the lid closed, so `_displayBrightnessZero`, which is set when
+  the built-in panel's nits fall to 0 and which clients can't write, didn't get in the way.
+- `CBClamshellState` (`-[BLControl copyPropertyInternalForKey:]`) reads `BLControl._clamshellClosed`,
+  which only the daemon's own lid handling sets. It shows when the daemon has handled the lid
+  closing: an override written before that would be undone by the daemon's own update. It also
+  shows when the lid has really opened.
+- **A held level survives a lid change.** Held at 0.265, the logo stayed lit (8% duty) after the
+  lid closed, and a client's `ClamshellUpdate = 1` was ignored the same way. A hold heading for
+  dark isn't a change of target, and one heading for lit gets a new fade at the hold's endless
+  duration. So before Lit with Lid Closed, a logo below full brightness stayed lit on a closed lid.
+  To darken it, LogoLight tells it the lid is open, hands it back to normal (the automatic
+  duration, then Unblank), and tells it the lid is closed again. A display sleep (DidSleep also
+  only sets the target to 0) may leave a held level lit in the same way; that hasn't been checked.
+- A rise from a factor of exactly 0 waits for the display-ready gate (`CBLEPWMDisplayReadyGate`:
+  a lit display frame, or a 0.5 s provider timeout, or 1 s). With the lid closed, the override's
+  first rise started 0.65 s after it was written (between 0.5 and 0.8 s in the probe). Later rises from dark weren't held back:
+  Pulse's cycles took 2.15–2.19 s with the lid closed, against 2.16–2.25 s with it open (2.15 s
+  planned).
+- Below the daemon, `bklb-backlight@0` is a PWM device on its own controller
+  (`AppleARMPWMDevice` on `pwm1@5044000`), outside the display pipeline, with no lid property.
+- **Not checked:** whether telling the display containers and the colour module (True Tone) that
+  the lid is open, while it's closed, changes anything on an external display, or the built-in
+  display's brightness when the lid opens again.
 
 ## Reading the LED without corebrightnessd
 
