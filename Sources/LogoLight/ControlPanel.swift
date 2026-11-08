@@ -11,6 +11,12 @@ final class ControlPanel: NSView {
     var onBrightnessChanged: ((Double) -> Void)?
     var onFollowsBatteryChanged: ((Bool) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
+    /// Play (`loops: false`) or loop pressed, with the message typed.
+    var onMorsePlay: ((_ text: String, _ loops: Bool) -> Void)?
+    /// The button of the message being sent pressed again.
+    var onMorseStop: (() -> Void)?
+    /// The message edited (to remember it for next time).
+    var onMorseTextChanged: ((String) -> Void)?
 
     /// As narrow as the user asked for. The longest label, "Heartbeat" (61 pt at 13 pt, 64 with Bold
     /// Text), still fits between its tile and its switch, which leave it 66. The menu's own items need
@@ -61,6 +67,13 @@ final class ControlPanel: NSView {
     private let effectsHeaderContainer = NSStackView()
     private let effectsCard = Card()
     private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
+    private let morseHeader = NSTextField(labelWithString: "MORSE CODE")
+    private let morseHeaderContainer = NSStackView()
+    private let morseCard = Card()
+    private let morseRow = NSView()
+    private let morseField = NSTextField()
+    private let playButton = SymbolButton(symbol: "play.fill", activeSymbol: "stop.fill")
+    private let loopButton = SymbolButton(symbol: "repeat", activeSymbol: "repeat")
 
     /// What the panel shows now. `nil` until the first update, which always applies.
     private var state: PanelState?
@@ -99,6 +112,8 @@ final class ControlPanel: NSView {
         brightnessCard.isHidden = !state.showsAdjustments
         effectsHeaderContainer.isHidden = !state.showsAdjustments
         effectsCard.isHidden = !state.showsAdjustments
+        morseHeaderContainer.isHidden = !state.showsAdjustments
+        morseCard.isHidden = !state.showsAdjustments
 
         if !brightnessSlider.isTracking { brightnessSlider.value = state.brightness }
         brightnessSlider.isEnabled = state.canChangeBrightness
@@ -108,8 +123,12 @@ final class ControlPanel: NSView {
             row.toggle.setOn(row.effect == state.effect, animated: animated)
             row.toggle.acceptsInput = state.canAdjust
         }
+        morseField.isEnabled = state.canAdjust
+        playButton.isActive = state.isSendingOnce
+        loopButton.isActive = state.isLooping
+        updateMorseButtons()
         greyOut([brightnessRow: !state.canChangeBrightness, batteryRow: !state.canAdjust,
-                 effectsCard.rows: !state.canAdjust], animated: animated)
+                 effectsCard.rows: !state.canAdjust, morseCard.rows: !state.canAdjust], animated: animated)
 
         messageLabel.stringValue = state.message ?? ""
         messageContainer.isHidden = state.message == nil
@@ -120,7 +139,7 @@ final class ControlPanel: NSView {
         }
     }
 
-    /// Greys out the brightness, the Battery switch and the effects, or brings them back, as one fade
+    /// Greys out the brightness, the Battery switch, the effects and Morse code, or brings them back, as one fade
     /// of their rows (the controls in them don't change their own look).
     private func greyOut(_ rows: [NSView: Bool], animated: Bool) {
         let changes = rows.map { (view: $0.key, alpha: $0.value ? Self.greyedOutAlpha : 1) }
@@ -203,6 +222,71 @@ final class ControlPanel: NSView {
         }
         effectsCard.add(rows)
         addFullWidth(effectsCard)
+
+        // Morse code: type a message, then play it once or loop it. Pressing the button of the message
+        // being sent stops it.
+        morseHeader.font = effectsHeader.font
+        morseHeader.textColor = .secondaryLabelColor
+        addIndented(morseHeader, in: morseHeaderContainer)
+        layOutMorseRow()
+        morseCard.add([morseRow])
+        addFullWidth(morseCard)
+    }
+
+    /// The message field, then play and loop, in one row as narrow as the effects'.
+    private func layOutMorseRow() {
+        morseField.placeholderString = "Message"
+        morseField.font = .systemFont(ofSize: 12)
+        morseField.bezelStyle = .roundedBezel
+        morseField.lineBreakMode = .byTruncatingTail
+        morseField.usesSingleLineMode = true
+        morseField.cell?.isScrollable = true
+        morseField.cell?.wraps = false
+        morseField.delegate = self
+        morseField.target = self
+        morseField.action = #selector(morseFieldReturned) // Return plays it once
+        morseField.setAccessibilityLabel("Morse code message")
+
+        playButton.toolTip = "Play once"
+        playButton.setAccessibilityLabel("Play Morse code once")
+        loopButton.toolTip = "Loop"
+        loopButton.setAccessibilityLabel("Loop Morse code")
+        for button in [playButton, loopButton] {
+            button.target = self
+            button.action = #selector(morseButtonPressed(_:))
+        }
+        for view in [morseField, playButton, loopButton] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            morseRow.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            morseRow.heightAnchor.constraint(equalToConstant: Self.rowHeight),
+            morseField.leadingAnchor.constraint(equalTo: morseRow.leadingAnchor, constant: Self.tileInset),
+            morseField.centerYAnchor.constraint(equalTo: morseRow.centerYAnchor),
+            morseField.trailingAnchor.constraint(equalTo: playButton.leadingAnchor, constant: -Self.labelSpacing),
+            playButton.centerYAnchor.constraint(equalTo: morseRow.centerYAnchor),
+            playButton.trailingAnchor.constraint(equalTo: loopButton.leadingAnchor, constant: -Self.labelSpacing),
+            loopButton.centerYAnchor.constraint(equalTo: morseRow.centerYAnchor),
+            loopButton.trailingAnchor.constraint(equalTo: morseRow.trailingAnchor, constant: -Self.switchInset),
+        ])
+        updateMorseButtons()
+    }
+
+    /// Puts back the message typed last time.
+    func setMorseText(_ text: String) {
+        morseField.stringValue = String(text.prefix(MorseCode.maxLength))
+        updateMorseButtons()
+    }
+
+    /// A button can start a message when there's something to send, and always stop its own.
+    private func updateMorseButtons() {
+        let canAdjust = state?.canAdjust ?? false
+        let canSend = MorseCode.canSend(morseField.stringValue)
+        for button in [playButton, loopButton] {
+            button.isEnabled = canAdjust && (canSend || button.isActive)
+        }
+        let notation = MorseCode.notation(morseField.stringValue)
+        morseField.toolTip = notation.isEmpty ? "Letters, digits and punctuation" : notation
     }
 
     private func row(tile: IconTile, label: NSTextField, toggle: LogoSwitch) -> NSView {
@@ -274,6 +358,19 @@ final class ControlPanel: NSView {
         onFollowsBatteryChanged?(batterySwitch.isOn)
     }
 
+    @objc private func morseButtonPressed(_ sender: SymbolButton) {
+        if sender.isActive {
+            onMorseStop?()
+        } else {
+            onMorsePlay?(morseField.stringValue, sender === loopButton)
+        }
+    }
+
+    @objc private func morseFieldReturned() {
+        guard playButton.isEnabled, !playButton.isActive else { return }
+        onMorsePlay?(morseField.stringValue, false)
+    }
+
     @objc private func effectSwitchChanged(_ sender: LogoSwitch) {
         guard let row = effectRows.first(where: { $0.toggle === sender }) else { return }
         let effect: LogoEffect = sender.isOn ? row.effect : .none
@@ -304,6 +401,101 @@ final class ControlPanel: NSView {
     fileprivate static func symbol(_ name: String, size: CGFloat) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: size, weight: .medium))
+    }
+}
+
+extension ControlPanel: NSTextFieldDelegate {
+    func controlTextDidChange(_ notification: Notification) {
+        if morseField.stringValue.count > MorseCode.maxLength {
+            morseField.stringValue = String(morseField.stringValue.prefix(MorseCode.maxLength))
+        }
+        updateMorseButtons()
+        onMorseTextChanged?(morseField.stringValue)
+    }
+}
+
+/// A round button with an SF Symbol, drawn by the app like `LogoSwitch` (so it has its colours from the
+/// menu's first frame). While active it's filled with the accent colour and shows `activeSymbol`.
+final class SymbolButton: NSControl {
+    static let diameter: CGFloat = 24
+    private let symbol: String
+    private let activeSymbol: String
+    private var isPressed = false { didSet { needsDisplay = true } }
+
+    /// Whether this button's action is under way (pressing it again stops it).
+    var isActive = false {
+        didSet {
+            guard isActive != oldValue else { return }
+            needsDisplay = true
+            NSAccessibility.post(element: self, notification: .valueChanged)
+        }
+    }
+
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+
+    init(symbol: String, activeSymbol: String) {
+        self.symbol = symbol
+        self.activeSymbol = activeSymbol
+        super.init(frame: NSRect(x: 0, y: 0, width: Self.diameter, height: Self.diameter))
+        for orientation in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
+            setContentHuggingPriority(.required, for: orientation)
+            setContentCompressionResistancePriority(.required, for: orientation)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: Self.diameter, height: Self.diameter) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
+        let tint: NSColor
+        if isActive {
+            NSColor.controlAccentColor.withAlphaComponent(isPressed ? 0.75 : 1).setFill()
+            tint = .white
+        } else {
+            NSColor.labelColor.withAlphaComponent(isPressed ? 0.2 : 0.1).setFill()
+            tint = .labelColor
+        }
+        circle.fill()
+        guard let image = NSImage(systemSymbolName: isActive ? activeSymbol : symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [tint])))
+        else { return }
+        let size = image.size
+        let rect = NSRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
+                          width: size.width, height: size.height)
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.35)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        isPressed = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isEnabled else { return }
+        isPressed = bounds.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isEnabled, isPressed else { return }
+        isPressed = false
+        sendAction(action, to: target)
+    }
+
+    // MARK: Accessibility
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func isAccessibilityEnabled() -> Bool { isEnabled }
+    override func accessibilityValue() -> Any? { isActive ? "Playing" : nil }
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled else { return false }
+        sendAction(action, to: target)
+        return true
     }
 }
 
@@ -651,7 +843,9 @@ enum PanelRenderer {
                               brightness: options.brightness, followsBattery: followsBattery)
         }
         let on = state(.on)
-        let states = [("on", on), ("off", state(.off)), ("battery", state(.on, followsBattery: true)),
+        var looping = on
+        looping.morse = MorseMessage(text: "SOS", loops: true)
+        let states = [("on", on), ("morse", looping), ("off", state(.off)), ("battery", state(.on, followsBattery: true)),
                       ("fallback", state(.on, canControlDirectly: false)), ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {
             for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
@@ -692,6 +886,7 @@ enum PanelRenderer {
     private static func write(_ state: PanelState, finish: MacFinish = .spaceBlack, appearance: NSAppearance.Name,
                               options: Options, to path: String) {
         let panel = ControlPanel(finish: finish)
+        panel.setMorseText("SOS")
         panel.update(state)
         panel.showGlow(state.isOn ? options.glow : 0)
         let background = appearance == .darkAqua ? NSColor(white: 0.2, alpha: 1) : NSColor(white: 0.9, alpha: 1)

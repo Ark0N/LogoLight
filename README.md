@@ -43,6 +43,9 @@
       <b>Lit with Lid Closed</b><br>
       Using an external display with the lid closed? The logo can stay lit, with its effects, while the keyboard stays dark.
       <br><br>
+      <b>Morse code</b><br>
+      Type a message and press play to flash it once, or loop to repeat it until you stop it.
+      <br><br>
       <b>Control Center</b><br>
       A Backlight control for Control Center or the menu bar (macOS 26 or later).
       <br><br>
@@ -208,6 +211,13 @@ make install   # copy it to /Applications and open it
 ```
 
 `make run` builds and opens the app from `build/` without installing it.
+
+No MacBook Pro with PROLED XDR Display? A debug build can simulate the logo, touching no hardware,
+so the whole menu works and its live view shows what the logo would do (effects, brightness, Morse):
+
+```sh
+swift build && LOGOLIGHT_SIMULATE=1 .build/debug/LogoLight
+```
 
 The app is ad-hoc signed, with the hardened runtime. To sign it with your Developer ID,
 notarize it and zip it for distribution:

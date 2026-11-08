@@ -15,7 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
 
-        statusItemController = StatusItemController(controller: LogoController.live())
+        var makeController: @MainActor () -> LogoController = { LogoController.live() }
+        #if DEBUG
+        // A pretend logo, shown in the menu's live view, for Macs without one (debug builds only).
+        if ProcessInfo.processInfo.environment["LOGOLIGHT_SIMULATE"] != nil { makeController = { LogoController.simulated() } }
+        #endif
+        statusItemController = StatusItemController(controller: makeController())
 
         #if DEBUG
         // Opens the menu on launch, for checking the UI without clicking (debug builds only).

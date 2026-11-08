@@ -19,6 +19,8 @@ public struct PanelState: Equatable, Sendable {
     public var brightness: Double
     /// Whether the brightness follows the battery's charge (the Battery switch).
     public var followsBattery: Bool
+    /// The Morse message being sent, if any.
+    public var morse: MorseMessage?
     /// The only text in the panel: why everything is disabled, on a Mac without the logo.
     public var message: String?
     /// The menu bar icon (an SF Symbols name), and what it means.
@@ -28,7 +30,8 @@ public struct PanelState: Equatable, Sendable {
     /// `requested` is the setting asked for while a switch is under way, which the panel and the icon show
     /// straight away, so the rest of the panel follows the switch at once instead of when the fade ends.
     public init(status: LogoStatus, requested: LogoIllumination? = nil, canControlDirectly: Bool,
-                effect: LogoEffect, brightness: Double, followsBattery: Bool = false, isBusy: Bool = false) {
+                effect: LogoEffect, brightness: Double, followsBattery: Bool = false, isBusy: Bool = false,
+                morse: MorseMessage? = nil) {
         let setting = requested ?? status.setting
         isSupported = status.isSupported
         isOn = status.isSupported && setting != .off
@@ -37,6 +40,7 @@ public struct PanelState: Equatable, Sendable {
         self.effect = effect
         self.brightness = brightness
         self.followsBattery = followsBattery
+        self.morse = canControlDirectly ? morse : nil
         message = status.isSupported ? nil : "Needs a MacBook Pro with PROLED XDR Display"
         (symbolName, symbolDescription) = switch (status.isSupported, setting) {
         case (false, _): ("lightbulb.slash", "No illuminated logo on this Mac")
@@ -56,4 +60,8 @@ public struct PanelState: Equatable, Sendable {
     /// Whether the brightness slider can be moved: as for the rest, and not while the battery sets the
     /// brightness. It's greyed out then, showing the charge.
     public var canChangeBrightness: Bool { canAdjust && !followsBattery }
+
+    /// Whether the play button shows stop (a message is being sent once), and the loop button.
+    public var isSendingOnce: Bool { morse?.loops == false }
+    public var isLooping: Bool { morse?.loops == true }
 }

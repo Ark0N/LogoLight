@@ -56,6 +56,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
     private static let followsBatteryDefaultsKey = "FollowsBattery"
+    /// The Morse message typed last, put back in the field at launch.
+    private static let morseTextDefaultsKey = "MorseText"
     /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
     private static let keepsPasswordDefaultsKey = "KeepsPassword"
     private static let lightsWithLidClosedDefaultsKey = "LightsWithLidClosed"
@@ -118,6 +120,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         panel.onBrightnessChanged = { [weak self] in self?.setBrightness($0) }
         panel.onFollowsBatteryChanged = { [weak self] in self?.setFollowsBattery($0) }
         panel.onEffectChosen = { [weak self] in self?.chooseEffect($0) }
+        panel.onMorsePlay = { [weak self] text, loops in self?.playMorse(text, loops: loops) }
+        panel.onMorseStop = { [weak self] in self?.stopMorse() }
+        panel.onMorseTextChanged = { UserDefaults.standard.set($0, forKey: Self.morseTextDefaultsKey) }
+        panel.setMorseText(UserDefaults.standard.string(forKey: Self.morseTextDefaultsKey) ?? "SOS")
+        // So the play button turns back from stop as soon as a message sent once is done.
+        controller.onMorseEnded = { [weak self] in self?.refresh() }
 
         // Checked when the sudoers rule is installed. Without direct control, the first password
         // installs it, so it's only needed once.
@@ -253,7 +261,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var panelState: PanelState {
         PanelState(status: status, requested: requestedSetting, canControlDirectly: controller.canControlDirectly,
                    effect: controller.effect, brightness: controller.brightness,
-                   followsBattery: controller.followsBattery, isBusy: isBusy)
+                   followsBattery: controller.followsBattery, isBusy: isBusy, morse: controller.morse)
     }
 
     /// Brings the icon, the panel and the menu items up to date with the last status and the choices.
@@ -381,6 +389,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func chooseEffect(_ effect: LogoEffect) {
         controller.setEffect(effect)
         UserDefaults.standard.set(effect.rawValue, forKey: Self.effectDefaultsKey)
+        refresh()
+    }
+
+    private func playMorse(_ text: String, loops: Bool) {
+        controller.playMorse(text, loops: loops)
+        refresh()
+    }
+
+    private func stopMorse() {
+        controller.stopMorse()
         refresh()
     }
 
