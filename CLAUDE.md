@@ -268,6 +268,18 @@ registered again. chronod logs "purging instead because we shouldn't cache it ..
 for this extension, as it did for every ad-hoc and Developer ID probe; that may only mean it
 fetches the control's description when the gallery is opened.
 
+**The battery indicator** (asked for on Reddit: "if its bright you have a full battery and it slowly
+dims as your battery runs out"): a Battery switch under the brightness slider, in its card. While
+it's on, the brightness is the battery's charge (100% is normal brightness, handed back to the
+system), the slider greys out and shows it, and effects peak at it. The slider's own value is kept
+(`LogoController.chosenBrightness`, saved as before) for when it's turned off; the switch is saved
+as `FollowsBattery`. The charge comes from IOKit's power sources (`Battery.charge()`), re-read on
+`kIOPSNotifyAnyPowerSource` (public; it fires about once a minute here, the percent-only one is
+private), on a wake, and at launch, and only while the switch is on. A charge change is eased onto
+like a slider click. Checked with `tools/livecheck` (2026-11-08, a stand-in charge stepped 70% →
+69% → 40%, Pulse at 40%, off, 100%): every landing within 0.002, smooth, no bounce. Not yet seen
+in the real menu, or followed through a real discharge.
+
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
   been seen drawn offscreen, and `liveGlow` was checked through `tools/livecheck`.

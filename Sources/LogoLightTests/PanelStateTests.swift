@@ -36,6 +36,21 @@ func panelStateTests(_ t: TestHarness) {
         t.expectEqual(state.symbolName, "lightbulb")
     }
 
+    t.test("following the battery greys out only the slider, which shows the charge") {
+        let state = PanelState(status: status(.on), canControlDirectly: true, effect: .pulse, brightness: 0.6,
+                               followsBattery: true)
+        t.expect(state.followsBattery)
+        t.expect(state.canAdjust, "the Battery switch and the effects still work")
+        t.expect(!state.canChangeBrightness)
+        t.expectEqual(state.brightness, 0.6)
+        let off = PanelState(status: status(.off), canControlDirectly: true, effect: .pulse, brightness: 0.6,
+                             followsBattery: true)
+        t.expect(!off.canAdjust)
+        t.expect(!off.canChangeBrightness)
+        let chosen = PanelState(status: status(.on), canControlDirectly: true, effect: .none, brightness: 0.6)
+        t.expect(chosen.canChangeBrightness)
+    }
+
     t.test("without direct control, the brightness and effects are hidden") {
         let state = PanelState(status: status(.on), canControlDirectly: false, effect: .heartbeat, brightness: 0.5)
         t.expect(state.isOn)

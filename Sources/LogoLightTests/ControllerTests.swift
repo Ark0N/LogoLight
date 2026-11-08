@@ -306,6 +306,14 @@ final class FakeClock {
     }
 }
 
+/// A stand-in for the internal battery, so tests never read the real one.
+@MainActor
+final class FakeBattery {
+    /// From 0 to 1, or `nil` when it can't be read.
+    var charge: Double? = 1
+    var reads = 0
+}
+
 @MainActor
 struct Fixture {
     let mac: SimulatedMac
@@ -313,6 +321,7 @@ struct Fixture {
     let sudo: FakeSudo
     let daemon: FakeDaemon
     let clock: FakeClock
+    let battery = FakeBattery()
     let controller: LogoController
 
     /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
@@ -340,7 +349,11 @@ struct Fixture {
             sudo: sudo,
             isRuleInstalled: { [mac] in mac.ruleInstalled },
             verificationTimeout: .milliseconds(300),
-            sleep: { try await clock.sleep($0) }
+            sleep: { try await clock.sleep($0) },
+            batteryCharge: { [battery] in
+                battery.reads += 1
+                return battery.charge
+            }
         )
     }
 }

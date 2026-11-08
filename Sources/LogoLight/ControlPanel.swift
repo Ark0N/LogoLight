@@ -2,12 +2,14 @@ import AppKit
 import LogoLightCore
 
 /// The iOS Settings-style panel at the top of the menu: a switch for the logo first, where it's
-/// easiest to reach, then a live view of it and a brightness slider, then a switch for each effect.
-/// Everything below the live view is greyed out while the logo is off.
+/// easiest to reach, then a live view of it, a brightness slider with the Battery switch under it,
+/// then a switch for each effect. Everything below the live view is greyed out while the logo is off,
+/// and the slider is while the battery sets the brightness.
 @MainActor
 final class ControlPanel: NSView {
     var onLogoSwitched: ((Bool) -> Void)?
     var onBrightnessChanged: ((Double) -> Void)?
+    var onFollowsBatteryChanged: ((Bool) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
 
     /// As narrow as the user asked for. The longest label, "Heartbeat" (61 pt at 13 pt, 64 with Bold
@@ -47,6 +49,11 @@ final class ControlPanel: NSView {
     private let dimIcon = NSImageView()
     private let brightIcon = NSImageView()
     private let brightnessSlider = LogoSlider()
+    /// Under the slider, in its card: the battery indicator, which has the brightness follow the charge.
+    private let batteryTile = IconTile(symbol: "battery.75percent", color: .systemGreen)
+    private let batteryLabel = NSTextField(labelWithString: "Battery")
+    private let batterySwitch = LogoSwitch()
+    private var batteryRow = NSView()
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let effectsHeader = NSTextField(labelWithString: "EFFECTS")
     /// Each line of text outside the cards is in one of these, which indents it (and is what's hidden).
@@ -94,12 +101,15 @@ final class ControlPanel: NSView {
         effectsCard.isHidden = !state.showsAdjustments
 
         if !brightnessSlider.isTracking { brightnessSlider.value = state.brightness }
-        brightnessSlider.isEnabled = state.canAdjust
+        brightnessSlider.isEnabled = state.canChangeBrightness
+        batterySwitch.setOn(state.followsBattery, animated: animated)
+        batterySwitch.acceptsInput = state.canAdjust
         for row in effectRows {
             row.toggle.setOn(row.effect == state.effect, animated: animated)
             row.toggle.acceptsInput = state.canAdjust
         }
-        greyOutAdjustments(!state.canAdjust, animated: animated)
+        greyOut([brightnessRow: !state.canChangeBrightness, batteryRow: !state.canAdjust,
+                 effectsCard.rows: !state.canAdjust], animated: animated)
 
         messageLabel.stringValue = state.message ?? ""
         messageContainer.isHidden = state.message == nil
@@ -110,20 +120,20 @@ final class ControlPanel: NSView {
         }
     }
 
-    /// Greys out the brightness and the effects, or brings them back, as one fade of their rows
-    /// (the controls in them don't change their own look).
-    private func greyOutAdjustments(_ greyedOut: Bool, animated: Bool) {
-        let alpha = greyedOut ? Self.greyedOutAlpha : 1
-        let views = [brightnessRow, effectsCard.rows]
-        guard views.contains(where: { $0.alphaValue != alpha }) else { return }
+    /// Greys out the brightness, the Battery switch and the effects, or brings them back, as one fade
+    /// of their rows (the controls in them don't change their own look).
+    private func greyOut(_ rows: [NSView: Bool], animated: Bool) {
+        let changes = rows.map { (view: $0.key, alpha: $0.value ? Self.greyedOutAlpha : 1) }
+            .filter { $0.view.alphaValue != $0.alpha }
+        guard !changes.isEmpty else { return }
         guard animated else {
-            for view in views { view.alphaValue = alpha }
+            for change in changes { change.view.alphaValue = change.alpha }
             return
         }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Self.greyingDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            for view in views { view.animator().alphaValue = alpha }
+            for change in changes { change.view.animator().alphaValue = change.alpha }
         }
     }
 
@@ -159,7 +169,12 @@ final class ControlPanel: NSView {
         brightnessSlider.setAccessibilityLabel("Brightness")
         brightnessSlider.onChange = { [weak self] in self?.onBrightnessChanged?($0) }
         layOutBrightnessRow()
-        brightnessCard.add([brightnessRow])
+        batterySwitch.target = self
+        batterySwitch.action = #selector(batterySwitchChanged)
+        batterySwitch.setAccessibilityLabel("Brightness follows battery")
+        batteryRow = row(tile: batteryTile, label: batteryLabel, toggle: batterySwitch)
+        batteryRow.toolTip = "The logo shows the battery's charge: normal brightness when it's full, dimmer as it runs down."
+        brightnessCard.add([brightnessRow, Separator(), batteryRow])
         addFullWidth(brightnessCard)
 
         // Only on a Mac without the logo, where nothing else is shown.
@@ -253,6 +268,10 @@ final class ControlPanel: NSView {
 
     @objc private func logoSwitchChanged() {
         onLogoSwitched?(logoSwitch.isOn)
+    }
+
+    @objc private func batterySwitchChanged() {
+        onFollowsBatteryChanged?(batterySwitch.isOn)
     }
 
     @objc private func effectSwitchChanged(_ sender: LogoSwitch) {
@@ -568,7 +587,8 @@ final class LogoSlider: NSView {
 /// - `LOGOLIGHT_RENDER_TRANSPARENT`: leaves the background clear instead of a menu-like grey, so the
 ///   picture can be placed on any backdrop (the cards are translucent, as in the real menu).
 /// - `LOGOLIGHT_RENDER_GLOW`, `LOGOLIGHT_RENDER_BRIGHTNESS`, `LOGOLIGHT_RENDER_EFFECT`: the live view's
-///   glow (0.75), the slider (0.6) and the effect that's on (`heartbeat`) in the panels.
+///   glow (0.75), the slider (0.6, also the charge in `battery-*.png`) and the effect that's on
+///   (`heartbeat`) in the panels.
 /// - `LOGOLIGHT_RENDER_GLOWS`: glow levels, e.g. `0,0.5,1`, to also draw the live view alone at each
 ///   level, in both finishes (`live-black-50.png`, `live-silver-50.png`). It also prints where the lid is
 ///   in each panel, to place those pictures over it.
@@ -623,15 +643,16 @@ enum PanelRenderer {
 
     static func render(to folder: String) {
         let options = Options(ProcessInfo.processInfo.environment)
-        func state(_ setting: LogoIllumination, isSupported: Bool = true, canControlDirectly: Bool = true) -> PanelState {
+        func state(_ setting: LogoIllumination, isSupported: Bool = true, canControlDirectly: Bool = true,
+                   followsBattery: Bool = false) -> PanelState {
             let status = LogoStatus(isSupported: isSupported, setting: isSupported ? setting : nil, source: .daemon,
                                     isLit: setting == .on, outputLevel: 0.2)
             return PanelState(status: status, canControlDirectly: canControlDirectly, effect: options.effect,
-                              brightness: options.brightness)
+                              brightness: options.brightness, followsBattery: followsBattery)
         }
         let on = state(.on)
-        let states = [("on", on), ("off", state(.off)), ("fallback", state(.on, canControlDirectly: false)),
-                      ("unsupported", state(.off, isSupported: false))]
+        let states = [("on", on), ("off", state(.off)), ("battery", state(.on, followsBattery: true)),
+                      ("fallback", state(.on, canControlDirectly: false)), ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {
             for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
                 write(state, appearance: appearance, options: options, to: "\(folder)/\(name)-\(suffix).png")

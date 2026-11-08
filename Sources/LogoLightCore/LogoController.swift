@@ -14,6 +14,7 @@ public final class LogoController {
     private let isRuleInstalled: @MainActor () -> Bool
     private let verificationTimeout: Duration
     private let sleep: LogoAnimator.Sleep
+    private let readBatteryCharge: @MainActor () -> Double?
     /// The setting this process last applied, for when the hardware can't show it.
     private var lastApplied: LogoIllumination?
     /// The setting as of the last `status()` or switch, so the live view needn't read it every frame.
@@ -22,6 +23,11 @@ public final class LogoController {
     private var switchFadeTask: Task<Void, Error>?
     /// A wake waiting to be handled (see `scheduleWake(after:then:)`).
     private var pendingWake: Task<Void, Never>?
+    /// The brightness chosen with the slider. While the brightness follows the battery, it's kept
+    /// for when that's turned off.
+    private var chosenBrightness = 1.0
+    /// The battery's charge when it was last read, from 0 to 1. `nil` until a read has worked.
+    private var batteryCharge: Double?
 
     /// Plays effects and holds the brightness. `nil` when the logo can't be controlled directly.
     public let animator: LogoAnimator?
@@ -54,7 +60,8 @@ public final class LogoController {
         isRuleInstalled: @escaping @MainActor () -> Bool,
         verificationTimeout: Duration = .seconds(3),
         // A small tolerance: by default, sleeps can run tens of ms late, which shows in effects.
-        sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0), tolerance: .milliseconds(2)) }
+        sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0), tolerance: .milliseconds(2)) },
+        batteryCharge: @escaping @MainActor () -> Double? = Battery.charge
     ) {
         self.reader = reader
         self.emitter = emitter
@@ -63,19 +70,22 @@ public final class LogoController {
         self.isRuleInstalled = isRuleInstalled
         self.verificationTimeout = verificationTimeout
         self.sleep = sleep
+        readBatteryCharge = batteryCharge
         animator = emitter.map { emitter in
             LogoAnimator(emitter: emitter, isDisplayAwake: { reader.isDisplayAwake() ?? false }, sleep: sleep)
         }
     }
 
-    /// The controller for this Mac's real hardware.
-    public static func live() -> LogoController {
+    /// The controller for this Mac's real hardware. `batteryCharge` can stand in for the battery
+    /// (`tools/livecheck` steps it).
+    public static func live(batteryCharge: @escaping @MainActor () -> Double? = Battery.charge) -> LogoController {
         LogoController(
             reader: LogoStatusReader(),
             emitter: CoreBrightnessService().map { LightEmitter(service: $0, clock: LightEmitter.uptime) },
             admin: AppleScriptAdminShell(),
             sudo: SudoRunner(),
-            isRuleInstalled: { PasswordlessRule.isInstalled }
+            isRuleInstalled: { PasswordlessRule.isInstalled },
+            batteryCharge: batteryCharge
         )
     }
 
@@ -156,10 +166,50 @@ public final class LogoController {
         if isLitAndAwake { animator.resume() } else { animator.pause() }
     }
 
-    /// How bright the logo is (or how bright effects peak), from 0 (dimmest) to 1 (normal).
+    /// How bright the logo is (or how bright effects peak), from 0 (dimmest) to 1 (normal): the
+    /// brightness chosen with `setBrightness(_:)`, or the battery's charge while it's followed.
     public var brightness: Double { animator?.brightness ?? 1 }
 
+    /// Chooses the brightness. While the battery is followed, it's kept for when that's turned off.
     public func setBrightness(_ brightness: Double) {
+        chosenBrightness = min(max(brightness, 0), 1)
+        if !followsBattery { apply(chosenBrightness) }
+    }
+
+    /// Whether the brightness follows the battery's charge, as a battery indicator: normal when it's
+    /// full, and dimmer as it runs down. Effects peak at it too.
+    public private(set) var followsBattery = false
+
+    /// Turns the battery indicator on or off. Off, the logo goes back to the chosen brightness.
+    public func setFollowsBattery(_ follows: Bool) {
+        guard follows != followsBattery else { return }
+        followsBattery = follows
+        if follows { readBattery() }
+        apply(currentBrightness)
+    }
+
+    /// Call when the battery's charge may have changed. While it's followed, it's read again, and
+    /// a new charge is applied. A charge that can't be read leaves the brightness as it is.
+    public func batteryDidChange() {
+        guard followsBattery else { return }
+        let last = batteryCharge
+        readBattery()
+        if batteryCharge != last { apply(currentBrightness) }
+    }
+
+    /// The brightness to show: the battery's charge while it's followed (the chosen brightness if it
+    /// hasn't been read), otherwise the chosen one.
+    private var currentBrightness: Double {
+        followsBattery ? batteryCharge ?? chosenBrightness : chosenBrightness
+    }
+
+    private func readBattery() {
+        if let charge = readBatteryCharge() { batteryCharge = charge }
+    }
+
+    /// Fades to a new brightness if the logo is lit, or keeps it for when it is. A playing effect picks
+    /// it up at its next step.
+    private func apply(_ brightness: Double) {
         guard let animator else { return }
         animator.brightness = brightness
         if !isSwitching, isLitAndAwake { animator.brightnessDidChange() }
@@ -210,6 +260,12 @@ public final class LogoController {
     public func displayDidWake() {
         guard isDisplayAwake else { return }
         emitter?.displayDidChange(isAwake: true)
+        // The charge may have changed while the Mac slept, with no notification since. The resume
+        // fades to it.
+        if followsBattery {
+            readBattery()
+            animator?.brightness = currentBrightness
+        }
         if !isSwitching, status().setting == .on { animator?.resume() }
     }
 
@@ -224,10 +280,14 @@ public final class LogoController {
     /// A previous run that didn't quit cleanly may have left the logo held at a level, with the
     /// endless fade duration. If the logo is on and a level or an effect is chosen, it goes
     /// straight there: the fades' own writes replace that duration, without first relighting to
-    /// full. Otherwise it's returned to normal, which ends that duration too.
-    public func start(brightness: Double?, effect: LogoEffect) {
+    /// full. Otherwise it's returned to normal, which ends that duration too. With `followsBattery`,
+    /// the level is the battery's charge, and `brightness` is kept for when that's turned off.
+    public func start(brightness: Double?, effect: LogoEffect, followsBattery: Bool = false) {
         guard let animator else { return }
-        if let brightness { animator.brightness = brightness }
+        if let brightness { chosenBrightness = min(max(brightness, 0), 1) }
+        self.followsBattery = followsBattery
+        if followsBattery { readBattery() }
+        animator.brightness = currentBrightness
         animator.select(effect)
         if isLitAndAwake, animator.level < 1 || effect != .none {
             animator.resume()

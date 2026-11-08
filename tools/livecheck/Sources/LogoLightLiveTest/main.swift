@@ -53,14 +53,15 @@ func keyboardDuty() -> Double {
 /// top speed (over 35 ms, two of the daemon's frames). Cut short at the level, it stopped at
 /// 44-89%; eased on, at 10-17% (docs/corebrightnessd.md, "Easing onto a level"). Also prints how
 /// far it went back the way it came (a bounce that ends near the level would pass the other
-/// checks), and the keyboard's lowest duty during the move, against its duty before it.
-@MainActor func landing(to brightness: Double, _ label: String) async {
+/// checks), and the keyboard's lowest duty during the move, against its duty before it. `change`
+/// makes the move another way than the slider (e.g. the battery indicator).
+@MainActor func landing(to brightness: Double, _ label: String, change: (@MainActor () -> Void)? = nil) async {
     let resting = keyboardDuty()
     var keyboardLo = resting
     var samples: [(t: Double, f: Double)] = []
     var lastChange = 0.0
     let t0 = Date()
-    controller.setBrightness(brightness)
+    if let change { change() } else { controller.setBrightness(brightness) }
     while true {
         let t = Date().timeIntervalSince(t0), f = factor()
         if let last = samples.last, f != last.f { lastChange = t }
@@ -164,6 +165,29 @@ let relaunchStart = Date()
 while Date().timeIntervalSince(relaunchStart) < 1.5 { relaunchPeak = max(relaunchPeak, factor()); await wait(0.005) }
 report("relaunch: straight to 0.3", expected: level(0.3))
 print(String(format: "  peak during relaunch %.3f (held at %.3f) %@", relaunchPeak, held, relaunchPeak <= held + 0.02 ? "ok" : "BUMP"))
+
+// The battery indicator, with a stand-in charge so it can be stepped. A fresh controller, as at a
+// launch with Battery on and the slider at 0.3.
+var charge = 0.7
+print("real battery: \(Battery.charge().map { String(format: "%.0f%%", $0 * 100) } ?? "none")")
+controller = LogoController.live(batteryCharge: { charge })
+controller.start(brightness: 0.3, effect: .none, followsBattery: true); await wait(1.2)
+report("battery 70% at launch", expected: level(0.7))
+charge = 0.69
+await landing(to: 0.69, "battery 70% -> 69%", change: { controller.batteryDidChange() })
+charge = 0.4
+await landing(to: 0.4, "battery 69% -> 40%", change: { controller.batteryDidChange() })
+let sent = controller.brightness
+controller.batteryDidChange(); await wait(0.3)
+print(String(format: "%-46@ brightness %.3f -> %.3f %@", "same charge again changes nothing" as NSString, sent,
+             controller.brightness, controller.animator?.isAnimating == false ? "ok" : "OFF"))
+controller.setEffect(.pulse); await sample("pulse at 40% (peak ~\(String(format: "%.3f", level(0.4))))", seconds: 4)
+controller.setEffect(.none); await wait(1.2)
+report("  effect None -> back to 40%", expected: level(0.4))
+await landing(to: 0.3, "Battery off -> the slider's 0.3", change: { controller.setFollowsBattery(false) })
+charge = 1
+await landing(to: 1, "Battery on at 100% -> normal", change: { controller.setFollowsBattery(true) })
+controller.setFollowsBattery(false); await wait(0.9)
 
 controller.setBrightness(1); await wait(0.7)
 report("brightness back to 1", expected: 1)
