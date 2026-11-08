@@ -8,6 +8,7 @@
 // must stop the `&&` chain, or a stale binary runs against the hardware. It also dims the
 // keyboard backlight twice, for a simulated display sleep.
 //
+//   .build/debug/LogoLightLiveTest --morse   # only the Morse code check (about 15 s)
 //   .build/debug/LogoLightLiveTest --lid
 //
 // checks Lit with Lid Closed instead, with an external display attached. It asks aloud for the
@@ -94,6 +95,60 @@ func ledDuty(_ name: String) -> Double {
                  keyboardLo, resting))
 }
 let level = LogoAnimator.level(forBrightness:)
+
+// MARK: - Morse code (also alone, with --morse)
+
+/// SOS sent once, at full brightness, then a loop that's stopped, from the logo held at brightness
+/// 0.5. Each flash should last its number of units (a dot 1, a dash 3) within a daemon frame or two.
+/// A gap can be longer than its units: corebrightnessd holds a rise from dark back until the display
+/// shows a frame (up to 0.17 s with an idle screen), and that delays the next flash. But a gap inside
+/// a letter (1 unit) must stay well short of one between letters (3), and none may be shorter.
+@MainActor func morseCheck() async {
+    let unit = MorseCode.unit
+    let keyboardBefore = keyboardDuty()
+    var keyboardLo = keyboardBefore, peak = 0.0
+    var spans: [(start: Double, length: Double)] = []
+    var litSince: Double?
+    let t0 = Date()
+    let started = controller.playMorse("SOS", loops: false)
+    while controller.morse != nil, Date().timeIntervalSince(t0) < 12 {
+        let t = Date().timeIntervalSince(t0), f = factor()
+        peak = max(peak, f)
+        keyboardLo = min(keyboardLo, keyboardDuty())
+        if f > 0.5, litSince == nil { litSince = t }
+        if f <= 0.5, let s = litSince { spans.append((s, t - s)); litSince = nil }
+        await wait(0.002)
+    }
+    let units = spans.map { $0.length / unit }
+    let gaps = zip(spans, spans.dropFirst()).map { ($1.start - $0.start - $0.length) / unit }
+    let flashError = zip(units, [1.0, 1, 1, 3, 3, 3, 1, 1, 1]).map { abs($0 - $1) * unit }.max() ?? 99
+    let expectedGaps = [1.0, 1, 3, 1, 1, 3, 1, 1]
+    let gapsOK = gaps.count == 8 && zip(gaps, expectedGaps).allSatisfy { gap, units in
+        gap >= units - 0.05 / unit && (units == 1 ? gap < 2 : gap < 4.5)
+    }
+    print(String(format: "%-46@ started %@, %d flashes (9 expected), peak %.3f", "morse SOS once" as NSString,
+                 started ? "ok" : "NO", spans.count, peak))
+    print("  flashes in units: " + units.map { String(format: "%.2f", $0) }.joined(separator: " ")
+          + String(format: "  worst %.3f s %@", flashError, spans.count == 9 && flashError <= 0.05 ? "ok" : "OFF"))
+    print("  gaps in units:    " + gaps.map { String(format: "%.2f", $0) }.joined(separator: " ")
+          + "  (1 1 3 1 1 3 1 1, or longer) " + (gapsOK ? "ok" : "OFF"))
+    print(String(format: "  keyboard min %.3f (before %.3f)", keyboardLo, keyboardBefore))
+    await wait(1.2)
+    report("  morse done -> back to brightness", expected: level(0.5))
+    controller.playMorse("E", loops: true); await sample("morse E looped", seconds: 4)
+    controller.stopMorse(); await wait(1.2)
+    report("  morse stopped -> back to brightness", expected: level(0.5))
+}
+
+if CommandLine.arguments.contains("--morse") {
+    controller.restoreNormalLighting(); await wait(0.6)
+    controller.start(brightness: 0.5, effect: .none); await wait(1.5)
+    report("brightness 0.5", expected: level(0.5))
+    await morseCheck()
+    controller.restoreNormalLighting(); await wait(0.8)
+    report("restoreNormalLighting", expected: 1)
+    exit(0)
+}
 
 // MARK: - Lit with Lid Closed (--lid)
 
@@ -320,6 +375,8 @@ print(String(format: "%-46@ first 0.3 s from %.3f to %.3f, biggest drop %.3f %@"
 await sample("  pulse after turning on", seconds: 3)
 controller.setEffect(.none); await wait(1.2)
 report("  effect None -> back to brightness", expected: level(0.5))
+
+await morseCheck()
 
 controller.displayDidSleep(); await wait(0.2)
 report("simulated sleep leaves level", expected: level(0.5))

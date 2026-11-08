@@ -121,6 +121,25 @@ func morseTests(_ t: TestHarness) async {
         t.expect(abs((f.daemon.level) - LogoAnimator.level(forBrightness: 0.5)) < 0.03, "level \(f.daemon.level)")
     }
 
+    await t.test("keeps every flash its length when corebrightnessd holds back each rise from dark") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.riseDelay = 0.15 // the display-ready gate, with an idle screen
+        f.daemon.setHeld(at: 0, state: 1)
+        f.daemon.trace = []
+        t.expect(f.controller.playMorse("SOS", loops: false))
+        t.expect(await waitUntil { f.controller.morse == nil }, "should finish")
+        let lit = flashes(f.daemon.trace ?? [])
+        t.expectEqual(lit.count, 9)
+        for (flash, units) in zip(lit, [1.0, 1, 1, 3, 3, 3, 1, 1, 1]) {
+            t.expect(abs(flash.length - units * MorseCode.unit) < 0.03, "a flash of \(flash.length) s, not \(units) units")
+        }
+        // Each gap gets longer by the delay, never shorter.
+        let gaps = zip(lit, lit.dropFirst()).map { $1.start - $0.start - $0.length }
+        for (gap, units) in zip(gaps, [1.0, 1, 3, 1, 1, 3, 1, 1]) {
+            t.expect(gap >= units * MorseCode.unit - 0.03, "a gap of \(gap) s, under \(units) units")
+        }
+    }
+
     await t.test("starts from dark, after a word gap, when the logo is lit") {
         let f = Fixture(direct: true, timeDriven: true)
         f.daemon.trace = []

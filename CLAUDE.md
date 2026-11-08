@@ -295,17 +295,22 @@ Not yet seen: the menu item in the real menu, the app's own screen-change handli
 calls the same controller methods), the logo by eye, and whether the external display changes
 when the logo is lit this way.
 
-**Morse code** (fork, 2026-11-07; built on a Mac without the logo, **not yet checked on the
-MacBook** with `tools/livecheck` or by eye): `MorseCode` (LogoLightCore) turns a message into
+**Morse code** (PR #1 from johnseth97, 2026-11-07, built on a Mac without the logo; merged
+2026-11-08): `MorseCode` (LogoLightCore) turns a message into
 `FadeStep`s with standard timing (dot 1 unit, dash 3, gaps 1/3/7, unit 0.2 s = 6 wpm), and
 `LogoAnimator.startMorse` plays them once or in a loop, in place of the effect, which comes back
 afterwards. Morse always flashes at full brightness: easing onto a level in between takes ≥ 0.15 s
 (`land`), which would smear dots. Edges are 0.04 s fades. Tests (`MorseTests.swift`) measure the
 flashes in the fake's 1 ms trace. Choosing an effect stops a message; turning the logo off or a
 display sleep drops a message sent once and pauses a loop. The panel has a MORSE CODE card: a field,
-play (`play.fill`/`stop.fill`) and loop (`repeat`, accent-filled while looping). To check on the
-MacBook: that dots and dashes read clearly at 0.04 s edges (the keyboard isn't touched: both ends
-are plain Blank/Unblank fades). Typing in the field inside the open menu was checked by the PR's
+play (`play.fill`/`stop.fill`) and loop (`repeat`, accent-filled while looping). On the MacBook
+(`tools/livecheck --morse`, 2026-11-08) the first run cut dots short, one to 34 ms: a rise from
+dark waits for corebrightnessd's display-ready gate (a frame from the display), 0–0.17 s with an
+idle screen, and the flash was timed from the write. Morse now times each flash from when the logo
+starts to rise (`timedFade(… waitingForRise:)`) and keeps every hold, so a held-back rise only
+lengthens the gap before it; the fake can hold rises back (`FakeDaemon.riseDelay`). Two runs since:
+flashes within 0.017 s of their length, gaps inside a letter 1.05–1.62 units and between letters
+3.05–3.29, the keyboard's duty down by at most 0.007. Not yet watched by eye. Typing in the field inside the open menu was checked by the PR's
 author (2026-11-07, with `LOGOLIGHT_SIMULATE=1`) and works.
 `LOGOLIGHT_SIMULATE=1` (debug) runs the app against `SimulatedEmitterService`, a wall-clock
 stand-in for corebrightnessd, so the live view can be watched on any Mac.

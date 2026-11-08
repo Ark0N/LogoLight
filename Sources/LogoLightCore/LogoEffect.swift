@@ -208,8 +208,17 @@ public final class LogoAnimator {
                     // closed with an external display attached. Stop until the next wake.
                     guard self.isDisplayAwake() else { break playing }
                     do {
+                        // Morse code (which has a `peak`) keeps every flash and gap its length, timed
+                        // from when the logo moves: a rise corebrightnessd holds back delays the rest
+                        // of the message, rather than cutting a dot short or squeezing the next gap.
+                        let exact = peak != nil
                         let took = try await self.emitter.timedFade(to: step.lit ? peak ?? self.level : 0,
-                                                                    over: step.fade, sleep: self.sleep)
+                                                                    over: step.fade, sleep: self.sleep,
+                                                                    waitingForRise: exact)
+                        if exact {
+                            try await self.sleep(step.hold)
+                            continue
+                        }
                         owed = min(owed + max(0, took - step.fade), cycleHold)
                         let hold = max(0, step.hold - owed)
                         owed -= step.hold - hold

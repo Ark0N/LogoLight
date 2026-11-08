@@ -270,9 +270,19 @@ public final class LightEmitter {
 
     /// Like `fade(to:over:sleep:)`, and returns how long it took, on the clock. It's longer than
     /// `duration` when the fade eases onto a level in between.
-    public func timedFade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep) async throws -> Double {
-        try await run(following: { level }, over: duration, sleep: sleep).time
+    ///
+    /// With `waitingForRise`, a fade from dark all the way to lit is timed from when the logo starts
+    /// to rise. corebrightnessd holds such a rise back until the display shows a frame (its
+    /// display-ready gate), which took up to 0.17 s with an idle screen; a quick flash timed from
+    /// the write was cut short by that much. The wait counts in the time returned.
+    public func timedFade(to level: Double, over duration: Double, sleep: LogoAnimator.Sleep,
+                          waitingForRise: Bool = false) async throws -> Double {
+        try await run(following: { level }, over: duration, sleep: sleep, waitingForRise: waitingForRise).time
     }
+
+    /// The longest corebrightnessd holds back a rise from dark: its display-ready gate gives up
+    /// waiting for a frame after 0.5 s (see docs/corebrightnessd.md, "The lid").
+    static let gateTimeout = 0.6
 
     /// Like `fade(to:over:sleep:)`, but reads the target again on every poll, e.g. while a slider
     /// is dragged. While it keeps moving the same way, the fade carries on and follows the latest
@@ -302,7 +312,7 @@ public final class LightEmitter {
     }
 
     private func run(following level: () -> Double, over duration: Double,
-                     sleep: LogoAnimator.Sleep) async throws -> Outcome {
+                     sleep: LogoAnimator.Sleep, waitingForRise: Bool = false) async throws -> Outcome {
         let started = clock()
         let first = min(max(level(), 0), 1)
         var target = first
@@ -333,7 +343,17 @@ public final class LightEmitter {
         // e.g. when the display sleeps then: a hold written after that would relight the keyboard
         // and leave the endless duration.
         if isAllTheWay {
-            try await sleep(duration)
+            var fadeTime = duration
+            if waitingForRise, lit, current <= 0 {
+                let deadline = clock() + Self.gateTimeout
+                while (fadeLevel ?? 1) <= 0, clock() < deadline {
+                    try await sleep(Self.pollInterval)
+                    try Task.checkCancellation()
+                }
+                // It had been moving for about a frame when that was seen.
+                fadeTime = max(0, duration - Self.startLatency)
+            }
+            try await sleep(fadeTime)
             try Task.checkCancellation()
             return Outcome(target: target, time: clock() - started)
         }

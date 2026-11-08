@@ -168,6 +168,10 @@ final class FakeDaemon: LightEmitterService {
     var peak = 0.0
     /// The `DisplayLogicalState` the keyboard backlight follows, which is dark on 1.
     var keyboardState = 2
+    /// How long a rise from dark (a level of exactly 0) is held back before it starts (time-driven
+    /// mode): the real daemon's display-ready gate waits for the display to show a frame, which
+    /// took up to 0.17 s with an idle screen. 0 by default.
+    var riseDelay = 0.0
     /// The lid as corebrightnessd's own lid handling last saw it (`CBClamshellState`), or `nil`
     /// for a macOS without the key.
     var lidClosed: Bool? = false
@@ -230,7 +234,8 @@ final class FakeDaemon: LightEmitterService {
     /// A new fade starts from rest, wherever the last one had got to.
     private func startFade() {
         isMoving = !isHolding
-        fade = (from: level, length: fadeDuration > 0 ? fadeDuration : Self.automaticFadeDuration, elapsed: 0)
+        let delay = level <= 0 && end == 1 ? riseDelay : 0
+        fade = (from: level, length: fadeDuration > 0 ? fadeDuration : Self.automaticFadeDuration, elapsed: -delay)
         lastFrame = 0
         nextFrame = frameIntervals?() ?? 0
         if stepPerRead >= 1 { advance(by: 1) }
@@ -248,6 +253,8 @@ final class FakeDaemon: LightEmitterService {
         defer { trace?.append((time, level)) }
         guard timeDriven, var fade else { return }
         fade.elapsed += seconds
+        // Held back (`riseDelay`): it starts once that's over.
+        guard fade.elapsed > 0 else { self.fade = fade; return }
         // Where its last frame put it, until it reaches the end at its duration.
         var frames = frameInterval > 0 ? (fade.elapsed / frameInterval + 1e-9).rounded(.down) * frameInterval
             : fade.elapsed

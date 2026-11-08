@@ -258,9 +258,12 @@ how LogoLight's Lit with Lid Closed works.
   only sets the target to 0) may leave a held level lit in the same way; that hasn't been checked.
 - A rise from a factor of exactly 0 waits for the display-ready gate (`CBLEPWMDisplayReadyGate`:
   a lit display frame, or a 0.5 s provider timeout, or 1 s). With the lid closed, the override's
-  first rise started 0.65 s after it was written (between 0.5 and 0.8 s in the probe). Later rises from dark weren't held back:
-  Pulse's cycles took 2.15–2.19 s with the lid closed, against 2.16–2.25 s with it open (2.15 s
-  planned).
+  first rise started 0.65 s after it was written (between 0.5 and 0.8 s in the probe). Later
+  rises from dark were held back little: Pulse's cycles took 2.15–2.19 s with the lid closed,
+  against 2.16–2.25 s with it open (2.15 s planned). **With the lid open and an idle screen, rises
+  from dark were held back 0–0.17 s** (Morse code's flashes, `tools/livecheck --morse`), which a
+  0.2 s dot can't absorb, so quick flashes are timed from when the logo starts to rise. A fall to
+  dark isn't gated.
 - Below the daemon, `bklb-backlight@0` is a PWM device on its own controller
   (`AppleARMPWMDevice` on `pwm1@5044000`), outside the display pipeline, with no lid property.
 - **Not checked:** whether telling the display containers and the colour module (True Tone) that
