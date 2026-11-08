@@ -225,7 +225,7 @@ automatic duration, or with a new hold at the saved level.
 
 Measured on 2026-11-08 with an external display attached and the lid closed, with
 `tools/probes/clamshell` and then `tools/livecheck --lid`, and read from the disassembly. This is
-how LogoLight's Lit with Lid Closed works (in the code, but out of the menu for now).
+how LogoLight's Lit with Lid Closed works.
 
 - When the lid closes, `BLControl` (on an `IOPMrootDomain` interest notification, which carries
   `AppleClamshellState`) sends `ClamshellUpdate = 1` to every display container, the keyboards,

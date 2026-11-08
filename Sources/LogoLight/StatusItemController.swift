@@ -64,10 +64,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
     private static let keepsPasswordDefaultsKey = "KeepsPassword"
     private static let lightsWithLidClosedDefaultsKey = "LightsWithLidClosed"
-    /// Lit with Lid Closed is out of the menu for now (the user's call, 2026-11-08): it only works
-    /// with an external display, and without one the logo goes dark with the Mac, which looked
-    /// broken. The code stays; while it's hidden the saved choice isn't applied, so it's off.
-    private static let showsLidClosedOption = false
 
     init(controller: LogoController) {
         self.controller = controller
@@ -82,8 +78,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
         controller.start(brightness: brightness, effect: effect ?? .none,
                          followsBattery: defaults.bool(forKey: Self.followsBatteryDefaultsKey),
-                         lightsWithLidClosed: Self.showsLidClosedOption
-                            && defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey))
+                         lightsWithLidClosed: defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey))
         // Without direct control, the first password also turns on Disable Password, unless the user
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
@@ -144,8 +139,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.action = #selector(togglePasswordless)
         passwordlessItem.toolTip = "Turn the logo on and off without entering your password. Uncheck to ask for it again."
 
-        // (The widest item: 158 points, inside the panel's 170.)
+        // The widest item: 158 points, and its second line 163 at most, inside the panel's 170. The
+        // second line says it needs an external display: without one, closing the lid sleeps the Mac,
+        // and the logo goes dark with it, which looked as if the option didn't work.
         lidClosedItem.title = "Lit with Lid Closed"
+        if #available(macOS 14.4, *) { lidClosedItem.subtitle = "External display only" }
         lidClosedItem.target = self
         lidClosedItem.action = #selector(toggleLightsWithLidClosed)
         lidClosedItem.toolTip = "Keep the logo lit when you close the lid to use an external display. The keyboard stays dark."
@@ -160,9 +158,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.items = [
             panelItem,
             .separator(),
-            passwordlessItem,
-        ] + (Self.showsLidClosedOption ? [lidClosedItem] : []) + [
-            launchAtLoginItem,
+            passwordlessItem, lidClosedItem, launchAtLoginItem,
             .separator(),
             quitItem,
         ]

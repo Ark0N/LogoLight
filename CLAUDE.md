@@ -286,11 +286,12 @@ like a slider click. Checked with `tools/livecheck` (2026-11-08, a stand-in char
 69% → 40%, Pulse at 40%, off, 100%): every landing within 0.002, smooth, no bounce. Not yet seen
 in the real menu, or followed through a real discharge.
 
-**Lit with Lid Closed** (2026-11-08, asked for on Reddit; **out of the menu for now**, the user's
-call after closing the lid without an external display, where the Mac sleeps and the logo goes dark
-with it: `StatusItemController.showsLidClosedOption` is false, so the item isn't added and the
-saved choice isn't applied; everything else stays, including darkening a held level when the lid
-closes): a menu item, off by default and saved as `LightsWithLidClosed`. With the lid closed and an external display, the logo is told the lid is
+**Lit with Lid Closed** (2026-11-08, asked for on Reddit): a menu item, off by default and saved as
+`LightsWithLidClosed`, with a second line, "External display only" (`NSMenuItem.subtitle`, macOS
+14.4+; 163 points at most, and `NSMenu` measured the menu still 170 wide). The user closed the lid
+without an external display, where the Mac sleeps and the logo goes dark with it, and took that
+for the option not working; it was out of the menu (1.1.0 shipped without it) until the user asked
+for it back, explained in short words that don't widen the menu. With the lid closed and an external display, the logo is told the lid is
 open and the keyboard that it's closed (docs/corebrightnessd.md, "The lid"). The app handles the
 built-in display going away as a sleep, then a wake a second later, once `CBClamshellState`
 shows the daemon has handled the lid; with the option off, that wake darkens a held level, which
