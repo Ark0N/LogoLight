@@ -44,8 +44,9 @@ public enum SoundError: Error, Equatable, LocalizedError {
 ///
 /// Pure arithmetic, used from the audio thread under a lock and tested without audio.
 public struct LoudnessMeter: Sendable {
-    /// How quickly the envelope falls after a beat, in seconds (its time constant).
-    public var release = 0.12
+    /// How quickly the envelope falls after a beat, in seconds (its time constant): a beat is gone,
+    /// 24 dB down, in about 0.17 s. (0.12 s felt slow: the logo's fall waits for the envelope's.)
+    public var release = 0.06
     /// How quickly the ceiling falls after a loud passage, in seconds (its time constant).
     public var ceilingDecay = 4.0
     /// The loudness range shown, in dB: this far below the ceiling is 0.
@@ -111,10 +112,12 @@ public struct SoundFollower: Sendable {
     /// How far the sound must be from the logo before it moves. A hold stops the logo at speed, so it
     /// can come to rest a frame's travel off; the deadband stops that being chased.
     public var deadband = 0.05
-    /// About how long a rise takes to reach its target, in seconds. Quick, so a beat pops.
-    public var riseTime = 0.08
-    /// About how long a fall takes, in seconds. Slower than the rise, as the eye sees a fall as slower.
-    public var fallTime = 0.2
+    /// About how long a rise takes to reach its target, in seconds: two or three of the daemon's frames
+    /// after the start latency, so a beat pops. (0.08 s felt slow by eye.)
+    public var riseTime = 0.05
+    /// About how long a fall takes, in seconds. A little slower than the rise, as the eye sees a fall as
+    /// slower. (0.2 s felt slow by eye.)
+    public var fallTime = 0.1
 
     public private(set) var motion: Motion = .still
 

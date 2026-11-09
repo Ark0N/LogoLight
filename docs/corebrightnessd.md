@@ -235,9 +235,12 @@ can (`SoundFollower`, `LightEmitter.move`): every fade toward dark dims the keyb
 "Easing onto a level"), so the follower doesn't retarget the fade on every look. Every 30 ms it
 reads `Factor` and the sound's loudness. When the sound is louder than the logo is bright (by a
 deadband of 0.05), it starts one fade toward lit, with the duration that reaches the level in
-about 0.08 s, and lets it run (it heads for 1) until the logo has caught up; then it holds the
-logo with one write, or, if the sound has dropped meanwhile, starts one fade toward dark (0.2 s to
-the level). A fall to silence is left to end at 0 by itself, so the next rise is a change of
+about 0.05 s, and lets it run (it heads for 1) until the logo has caught up; then it holds the
+logo with one write, or, if the sound has dropped meanwhile, starts one fade toward dark (0.1 s to
+the level). Those were 0.08 and 0.2 s at first, with the meter's envelope releasing over 0.12 s,
+which the user found slow by eye; the envelope now releases over 0.06 s. Measured again with
+those: the same 10 peaks for 10 beats (0.95–1.00), each lit for 0.08–0.18 s instead of 0.23, the
+keyboard unchanged, and the steady half loudness settled at 0.215. A fall to silence is left to end at 0 by itself, so the next rise is a change of
 state and costs no turn-round, and the app shows a frame for the display-ready gate. A steady
 sound is held once and then left alone.
 
