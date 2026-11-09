@@ -40,6 +40,9 @@
       <b>Battery indicator</b><br>
       Turn on Battery and the logo shows your charge: full brightness when it's full, dimming as it runs down.
       <br><br>
+      <b>Charging light</b><br>
+      Turn on Charging and the logo breathes like the old MacBook sleep light while your Mac charges, then goes back to your effect.
+      <br><br>
       <b>Morse code</b><br>
       Type a message and press play to flash it. Turn on loop to repeat it until you stop it.
       <br><br>

@@ -305,6 +305,29 @@ like a slider click. Checked with `tools/livecheck` (2026-11-08, a stand-in char
 69% → 40%, Pulse at 40%, off, 100%): every landing within 0.002, smooth, no bounce. Not yet seen
 in the real menu, or followed through a real discharge.
 
+**The charging light** (2026-11-09, asked for as "pulse when it's asleep or being charged, like the
+sleep light of the old days"; branch `breathe-while-charging`): a Charging switch under Battery, in
+the brightness card, saved as `BreathesWhileCharging`, off by default. While it's on and the battery
+is charging (`Battery.isCharging()`, IOKit's `Is Charging`: false on power when the battery is full
+or held at a limit such as Optimized Battery Charging's 80%), Breathe plays in place of the chosen
+effect (`LogoAnimator.standInEffect`), peaking at the brightness (or the charge, with Battery on).
+The chosen effect keeps its value and its switch, and comes back when charging stops. Choosing an
+effect while it breathes doesn't restart the breathing; a Morse message carries on and the breathing
+follows it. It stands in for Sound too: the tap stops while it breathes and starts again after, so
+Sound chosen for the first time while it breathes asks for its permission (or shows its alert) only
+when charging stops. Charging is read only while the switch is on: on `kIOPSNotifyAnyPowerSource` (which also
+fires on plugging in and unplugging), on a wake, and at launch. **The asleep half isn't possible**:
+nothing runs while the Mac sleeps, and corebrightnessd darkens the logo with the display
+(WillSleep/DidSleep give a target of 0, and `bklb-backlight@0` reads `enabled = No`). A display
+asleep with the Mac awake might be lit by telling the logo's module `DisplayPowerStateEvent` =
+DidWake, as `ClamshellUpdate` is overridden for the lid, but on a laptop the Mac usually sleeps soon
+after its display does, and the display-ready gate would hold back every rise from dark; not tried.
+The row makes the panel 487 points tall (450 before), so the README's menu GIF and the site's menu
+pictures need drawing again when it ships.
+Built and tested on the Mac mini only (248 tests; the panel drawn offscreen, no truncated labels):
+**not yet checked on the MacBook**. Run `tools/livecheck --charging`, which switches a stand-in for
+charging and prints Breathe's cycle lengths (6.3 s planned), and watch it once with a real charger.
+
 **Lit with Lid Closed** (2026-11-08, asked for on Reddit): a menu item, off by default and saved as
 `LightsWithLidClosed`, with a second line, "External display only" (`NSMenuItem.subtitle`, macOS
 14.4+; 163 points at most, and `NSMenu` measured the menu still 170 wide). The user closed the lid
