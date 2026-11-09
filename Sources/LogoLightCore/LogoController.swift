@@ -61,7 +61,8 @@ public final class LogoController {
         verificationTimeout: Duration = .seconds(3),
         // A small tolerance: by default, sleeps can run tens of ms late, which shows in effects.
         sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0), tolerance: .milliseconds(2)) },
-        batteryCharge: @escaping @MainActor () -> Double? = Battery.charge
+        batteryCharge: @escaping @MainActor () -> Double? = Battery.charge,
+        soundSource: SoundLevelSource? = nil
     ) {
         self.reader = reader
         self.emitter = emitter
@@ -73,20 +74,23 @@ public final class LogoController {
         readBatteryCharge = batteryCharge
         animator = emitter.map { emitter in
             LogoAnimator(emitter: emitter, isDisplayAwake: { Self.canLight(reader: reader, emitter: emitter) },
-                         sleep: sleep)
+                         sleep: sleep, soundSource: soundSource)
         }
     }
 
     /// The controller for this Mac's real hardware. `batteryCharge` can stand in for the battery
-    /// (`tools/livecheck` steps it).
-    public static func live(batteryCharge: @escaping @MainActor () -> Double? = Battery.charge) -> LogoController {
+    /// (`tools/livecheck` steps it), and `soundSource` for the sound the Mac plays (by default, the
+    /// system's audio, where macOS lets it be heard).
+    public static func live(batteryCharge: @escaping @MainActor () -> Double? = Battery.charge,
+                            soundSource: SoundLevelSource? = SystemSound.source()) -> LogoController {
         LogoController(
             reader: LogoStatusReader(),
             emitter: CoreBrightnessService().map { LightEmitter(service: $0, clock: LightEmitter.uptime) },
             admin: AppleScriptAdminShell(),
             sudo: SudoRunner(),
             isRuleInstalled: { PasswordlessRule.isInstalled },
-            batteryCharge: batteryCharge
+            batteryCharge: batteryCharge,
+            soundSource: soundSource
         )
     }
 
@@ -173,6 +177,17 @@ public final class LogoController {
         animator.stopMorse() // the effect takes over from a Morse message
         guard !isSwitching else { return }
         if isLitAndAwake { animator.resume() } else { animator.pause() }
+    }
+
+    /// Whether the Sound effect can be offered: the logo is controlled directly and the sound can be
+    /// heard (macOS 14.2 or later).
+    public var canFollowSound: Bool { animator?.canFollowSound ?? false }
+
+    /// Called when the Sound effect couldn't start, e.g. without permission to hear the sound (see
+    /// `SoundError`). The effect is `.none` again by then; the app should save that and say why.
+    public var onSoundFailed: (@MainActor (Error) -> Void)? {
+        get { animator?.onSoundFailed }
+        set { animator?.onSoundFailed = newValue }
     }
 
     // MARK: - Morse code

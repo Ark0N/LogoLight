@@ -14,6 +14,8 @@ public struct PanelState: Equatable, Sendable {
     public var isBusy: Bool
     /// Whether the brightness and the effects are shown. They need direct control.
     public var showsAdjustments: Bool
+    /// Whether the Sound effect is among them: the sound can be heard on this Mac (macOS 14.2 or later).
+    public var showsSound: Bool
     public var effect: LogoEffect
     /// The brightness the slider shows: the chosen one, or the battery's charge while it's followed.
     public var brightness: Double
@@ -32,13 +34,14 @@ public struct PanelState: Equatable, Sendable {
     /// `requested` is the setting asked for while a switch is under way, which the panel and the icon show
     /// straight away, so the rest of the panel follows the switch at once instead of when the fade ends.
     public init(status: LogoStatus, requested: LogoIllumination? = nil, canControlDirectly: Bool,
-                effect: LogoEffect, brightness: Double, followsBattery: Bool = false, isBusy: Bool = false,
-                morse: MorseMessage? = nil, morseLoops: Bool = false) {
+                canFollowSound: Bool = true, effect: LogoEffect, brightness: Double, followsBattery: Bool = false,
+                isBusy: Bool = false, morse: MorseMessage? = nil, morseLoops: Bool = false) {
         let setting = requested ?? status.setting
         isSupported = status.isSupported
         isOn = status.isSupported && setting != .off
         self.isBusy = isBusy
         showsAdjustments = status.isSupported && canControlDirectly
+        showsSound = showsAdjustments && canFollowSound
         self.effect = effect
         self.brightness = brightness
         self.followsBattery = followsBattery

@@ -33,8 +33,15 @@ The light emitter (LE) classes are `CBLEManager`, `CBLEPWMContainer`,
   `DisplayLogicalState`. See "The keyboard backlight".
 - `-[CBLEManager setProperty:forKey:andClient:]` handles `DisplaySelect`, comparing it with
   `DisplayTypeSiri` and `DisplayTypeIcon`, and routes `DisplayBrightness`, `DisplayNitsKey` and
-  `MaxBrightness` (`clientMappedSetKey:`) to the selected LED. That looks like a client can target
-  the logo and set its brightness properly, instead of holding a fade. **Not tried yet.**
+  `MaxBrightness` (`clientMappedSetKey:`) to the modules of the selected type, by calling their
+  `setProperty:forKey:` with the same key. That looked like a way to set the logo's brightness
+  properly, instead of holding a fade, but `-[CBLEPWMControlModule setProperty:forKey:]` handles
+  only the keys above (read again on 2026-11-09, `tools/probes/refs.py`), so the logo's module
+  would ignore them. **A dead end, not tried live.**
+- `BrightnessSystemClient` also has `setProperty:withKey:andDisplay:` and
+  `copyPropertyForKey:andDisplay:`, which address one display. Whether the logo's module answers to
+  a display ID (which would let `DisplayLogicalState` reach it without the keyboard) **hasn't been
+  tried**.
 - `-[CBLEPWMControlModule copyPropertyInternalForKey:]` handles `DisplayNitsKey`,
   `LEBacklightMode`, `LEPWMState` and `StatusInfo`.
 
@@ -220,6 +227,36 @@ duration when the display sleeps and reapplies the level after it wakes; those t
 were only exercised by calling them directly. If LogoLight crashes while holding a level, the
 huge duration stays in the daemon until LogoLight is reopened, which replaces it: with the
 automatic duration, or with a new hold at the saved level.
+
+## Following the sound
+
+The Sound effect moves the logo after the music, with the fades above and as few writes as it
+can (`SoundFollower`, `LightEmitter.move`): every fade toward dark dims the keyboard a little (see
+"Easing onto a level"), so the follower doesn't retarget the fade on every look. Every 30 ms it
+reads `Factor` and the sound's loudness. When the sound is louder than the logo is bright (by a
+deadband of 0.05), it starts one fade toward lit, with the duration that reaches the level in
+about 0.05 s, and lets it run (it heads for 1) until the logo has caught up; then it holds the
+logo with one write, or, if the sound has dropped meanwhile, starts one fade toward dark (0.1 s to
+the level). Those were 0.08 and 0.2 s at first, with the meter's envelope releasing over 0.12 s,
+which the user found slow by eye; the envelope now releases over 0.06 s. Measured again with
+those: the same 10 peaks for 10 beats (0.95–1.00), each lit for 0.08–0.18 s instead of 0.23, the
+keyboard unchanged, and the steady half loudness settled at 0.215. A fall to silence is left to end at 0 by itself, so the next rise is a change of
+state and costs no turn-round, and the app shows a frame for the display-ready gate. A steady
+sound is held once and then left alone.
+
+Measured with `tools/livecheck --sound` on 2026-11-09 (a stand-in for the sound, so the timing
+is the follower's own): beats at 2 Hz, each 0.12 s loud, gave 10 peaks for 10 beats, all reaching
+1.00, each lit (above 0.7) for 0.23 s, 0.49–0.51 s apart; a steady half loudness settled at 0.277
+(0.25 asked for, inside the deadband plus a frame's travel) and didn't move in 2 s; loud at
+brightness 0.5 gave 0.277 (0.265). The keyboard's duty was 0.122 at its lowest and 0.125 on
+average over the 5 s of beats, against 0.126 at rest (a darker room than the measurements above),
+so two fades toward dark a second don't dim it visibly.
+
+The sound itself comes from a Core Audio process tap on every process's output
+(`SystemAudioLevel`, macOS 14.2+), read through a private aggregate device with the default output
+device, as Apple's sample code does. From Terminal it delivered audio at once, also from a binary
+signed with the hardened runtime and no entitlements; the app's `NSAudioCaptureUsageDescription`
+is for the System Audio Recording Only permission macOS asks for.
 
 ## The lid
 

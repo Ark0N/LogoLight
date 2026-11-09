@@ -19,6 +19,15 @@ func panelStateTests(_ t: TestHarness) {
         t.expectEqual(state.symbolName, "lightbulb.fill")
     }
 
+    t.test("the Sound effect shows only where the sound can be heard, with the other adjustments") {
+        t.expect(PanelState(status: status(.on), canControlDirectly: true, effect: .none, brightness: 1).showsSound)
+        t.expect(!PanelState(status: status(.on), canControlDirectly: true, canFollowSound: false, effect: .none,
+                             brightness: 1).showsSound)
+        t.expect(!PanelState(status: status(.on), canControlDirectly: false, effect: .none, brightness: 1).showsSound)
+        t.expect(!PanelState(status: status(.on, isSupported: false), canControlDirectly: true, effect: .none,
+                             brightness: 1).showsSound)
+    }
+
     t.test("with the logo off, they're greyed out but keep the chosen effect and brightness") {
         let state = PanelState(status: status(.off), canControlDirectly: true, effect: .breathe, brightness: 0.3)
         t.expect(!state.isOn)

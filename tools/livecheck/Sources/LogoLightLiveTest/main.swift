@@ -9,6 +9,10 @@
 // keyboard backlight twice, for a simulated display sleep.
 //
 //   .build/debug/LogoLightLiveTest --morse   # only the Morse code check (about 15 s)
+//   .build/debug/LogoLightLiveTest --sound   # only the Sound effect, with a stand-in for the sound (about 20 s)
+//   .build/debug/LogoLightLiveTest --hear    # only listens: prints the loudness of what the Mac plays for 8 s,
+//                                            # playing a system sound meanwhile (asks for System Audio
+//                                            # Recording Only the first time; the logo isn't touched)
 //   .build/debug/LogoLightLiveTest --lid
 //
 // checks Lit with Lid Closed instead, with an external display attached. It asks aloud for the
@@ -355,6 +359,138 @@ if CommandLine.arguments.contains("--lid") {
     exit(0)
 }
 
+// MARK: - Sound (also alone, with --sound; --hear only listens)
+
+/// A stand-in for the sound: a loudness set here, or a script of the time since it was set.
+@MainActor
+final class StandInSound: SoundLevelSource {
+    var level = 0.0
+    var script: ((Double) -> Double)?
+    private var scriptStart = Date()
+    private(set) var isListening = false
+    func start() throws { isListening = true }
+    func stop() { isListening = false }
+    func play(_ script: @escaping (Double) -> Double) {
+        scriptStart = Date()
+        self.script = script
+    }
+    var loudness: Double { script?(Date().timeIntervalSince(scriptStart)) ?? level }
+}
+
+/// The Sound effect against the real logo, with a stand-in for the sound. Beats at 2 Hz should each
+/// take the logo up near the peak and back to dark, within a frame or two of the follower's timings;
+/// a steady level should settle within the deadband and then leave the logo alone; and the keyboard
+/// backlight, which every fade toward dark dims a little, should stay close to its resting duty.
+@MainActor func soundCheck() async {
+    let stand = StandInSound()
+    controller = LogoController.live(soundSource: stand)
+    controller.start(brightness: 1, effect: .none); await wait(1)
+    let keyboardBefore = keyboardDuty()
+
+    stand.level = 0
+    controller.setEffect(.sound); await wait(0.8)
+    print(String(format: "%-46@ factor=%.3f %@  listening %@", "sound: silence -> dark" as NSString, factor(),
+                 factor() <= 0.01 ? "ok" : "OFF", stand.isListening ? "ok" : "NO"))
+
+    // Beats: 0.12 s loud, every 0.5 s, for 5 s.
+    stand.play { $0.truncatingRemainder(dividingBy: 0.5) < 0.12 ? 1 : 0 }
+    var samples: [(t: Double, f: Double)] = []
+    var keyboardLo = keyboardBefore, keyboardSum = 0.0, keyboardCount = 0
+    let t0 = Date()
+    while Date().timeIntervalSince(t0) < 5 {
+        samples.append((Date().timeIntervalSince(t0), factor()))
+        let k = keyboardDuty()
+        keyboardLo = min(keyboardLo, k); keyboardSum += k; keyboardCount += 1
+        await wait(0.005)
+    }
+    stand.script = nil
+    stand.level = 0
+    // A peak: up through 0.7, then back below 0.1.
+    var peaks: [(rise: Double, top: Double, fall: Double)] = []
+    var lit = false, riseAt = 0.0, top = 0.0
+    for s in samples {
+        if !lit, s.f > 0.7 { lit = true; riseAt = s.t; top = s.f }
+        if lit { top = max(top, s.f) }
+        if lit, s.f < 0.1 { lit = false; peaks.append((riseAt, top, s.t)) }
+    }
+    let periods = zip(peaks, peaks.dropFirst()).map { $1.rise - $0.rise }
+    print(String(format: "%-46@ %d peaks in 5 s (10 beats), tops %.2f...%.2f, lit for %.2f...%.2f s %@",
+                 "sound: beats at 2 Hz" as NSString, peaks.count,
+                 peaks.map(\.top).min() ?? 0, peaks.map(\.top).max() ?? 0,
+                 peaks.map { $0.fall - $0.rise }.min() ?? 0, peaks.map { $0.fall - $0.rise }.max() ?? 0,
+                 peaks.count >= 9 && peaks.count <= 10 ? "ok" : "OFF"))
+    print("  periods: " + periods.map { String(format: "%.2f", $0) }.joined(separator: " ")
+          + String(format: "  keyboard min %.3f mean %.3f (before %.3f)", keyboardLo,
+                   keyboardCount > 0 ? keyboardSum / Double(keyboardCount) : -1, keyboardBefore))
+
+    // A steady sound at half loudness: a quarter of the peak, held, then nothing more.
+    await wait(0.8)
+    stand.level = 0.5
+    await wait(1)
+    let settled = factor()
+    var lo = settled, hi = settled
+    let steadyStart = Date()
+    while Date().timeIntervalSince(steadyStart) < 2 { lo = min(lo, factor()); hi = max(hi, factor()); await wait(0.01) }
+    print(String(format: "%-46@ factor=%.3f expected 0.25 %@  over 2 s %.3f...%.3f %@", "sound: steady at half loudness" as NSString,
+                 settled, abs(settled - 0.25) <= 0.08 ? "ok" : "OFF", lo, hi, hi - lo <= 0.005 ? "ok (still)" : "MOVING"))
+
+    // Full loudness at brightness 0.5 peaks at its level; then full brightness ends fully lit.
+    controller.setBrightness(0.5)
+    stand.level = 1; await wait(1)
+    report("sound: loud at brightness 0.5", expected: level(0.5))
+    controller.setBrightness(1); await wait(1)
+    report("sound: loud at brightness 1", expected: 1)
+    stand.level = 0; await wait(1)
+    report("sound: silence again -> dark", expected: 0)
+
+    controller.setEffect(.none); await wait(1.2)
+    report("sound: effect None -> back to brightness", expected: 1)
+    print(String(format: "  listening after None: %@  keyboard=%.3f", stand.isListening ? "STILL" : "ok (stopped)", keyboardDuty()))
+}
+
+/// Listens to the real system audio for 8 s and prints the loudness 4 times a second, playing a
+/// system sound at 2 s and 5 s. The logo isn't touched.
+@MainActor func hearCheck() async {
+    guard let source = SystemSound.source() else { print("No system audio tap on this macOS."); return }
+    do {
+        try source.start()
+    } catch {
+        print("start failed: \(error)")
+        return
+    }
+    print("listening (macOS may ask for System Audio Recording Only now)")
+    let sound = "/System/Library/Sounds/Glass.aiff"
+    let t0 = Date()
+    var played: Set<Int> = []
+    var maxLoudness = 0.0
+    while Date().timeIntervalSince(t0) < 8 {
+        let t = Date().timeIntervalSince(t0)
+        for at in [2, 5] where t >= Double(at) && !played.contains(at) {
+            played.insert(at)
+            let afplay = Process()
+            afplay.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+            afplay.arguments = [sound]
+            try? afplay.run()
+        }
+        maxLoudness = max(maxLoudness, source.loudness)
+        print(String(format: "  %.2f s  loudness %.3f", t, source.loudness))
+        await wait(0.25)
+    }
+    source.stop()
+    print(maxLoudness > 0.5 ? "heard the sound: ok" : "heard NOTHING (permission? nothing playing?)")
+}
+
+if CommandLine.arguments.contains("--hear") {
+    await hearCheck()
+    exit(0)
+}
+if CommandLine.arguments.contains("--sound") {
+    await soundCheck()
+    controller.restoreNormalLighting(); await wait(0.8)
+    report("restoreNormalLighting", expected: 1)
+    exit(0)
+}
+
 print("start: setting=\(String(describing: emitter.setting)) factor=\(factor()) keyboard=\(String(format: "%.3f", keyboardDuty()))")
 controller.restoreNormalLighting(); await wait(0.6)
 report("baseline", expected: 1)
@@ -412,6 +548,8 @@ controller.setEffect(.none); await wait(1.2)
 report("  effect None -> back to brightness", expected: level(0.5))
 
 await morseCheck()
+await soundCheck()
+controller.setBrightness(0.5); await wait(0.9)
 
 controller.displayDidSleep(); await wait(0.2)
 report("simulated sleep leaves level", expected: level(0.5))

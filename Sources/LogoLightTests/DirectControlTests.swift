@@ -81,7 +81,8 @@ func effectTests(_ t: TestHarness) async {
     print("\nEffects")
 
     t.test("every effect alternates between dark and lit, with positive durations") {
-        for effect in LogoEffect.allCases where effect != .none {
+        // (Sound has no cycle: it follows the sound the Mac plays.)
+        for effect in LogoEffect.allCases where effect != .none && effect != .sound {
             let cycle = effect.cycle
             t.expect(cycle.count >= 2, "\(effect) needs at least two steps")
             t.expect(cycle.allSatisfy { $0.fade > 0 && $0.hold >= 0 }, "\(effect) durations")
@@ -89,6 +90,7 @@ func effectTests(_ t: TestHarness) async {
                      "\(effect) should alternate")
         }
         t.expectEqual(LogoEffect.none.cycle, [])
+        t.expectEqual(LogoEffect.sound.cycle, [])
     }
 
     t.test("Breathe and Pulse rise more slowly than they fall, and Heartbeat keeps a quick rhythm") {
@@ -101,7 +103,7 @@ func effectTests(_ t: TestHarness) async {
     }
 
     t.test("an effect's cycle can start with a rise or a fall") {
-        for effect in LogoEffect.allCases where effect != .none {
+        for effect in LogoEffect.allCases where effect != .none && effect != .sound {
             for lit in [true, false] {
                 let turned = effect.cycle(startingLit: lit)
                 t.expectEqual(turned.first?.lit, lit)
