@@ -115,7 +115,7 @@ runs but says the logo isn't available. So:
   The README's banner and menu GIF and the site's menu pictures were drawn again for it
   (`make-media.swift`, `make-banner.swift`, and the site's from `LOGOLIGHT_RENDER_PANEL` at scale 5,
   transparent: no effect for on and off, Breathe at 0.9 with the glow at 0 for the hero). The site's
-  `og.jpg` still shows the 1.0 menu (cropped at Pulse); it has no script. **1.1.1 shipped the same
+  `og.jpg` then still showed the 1.0 menu (since 1.2.0 it's the banner, as `og-120.jpg`). **1.1.1 shipped the same
   day**: build 138 (commit e41948d, tag `v1.1.1`), Lit with Lid Closed back in the menu with
   "External display only" under it, notarized with no issues; the hero's HTML menu has the item.
   **1.2.0 shipped 2026-11-09**: build 144 (commit e6960d1, tag `v1.2.0`), the Sound effect (PR #4),
@@ -124,7 +124,9 @@ runs but says the logo isn't available. So:
   snappier rise and fall, which went in before the release. The README's banner and menu GIFs
   and the site's menu pictures were drawn again with the Sound row (the panel is now 450 points
   tall, so the site's menu pictures are 850 × 2250 and `.screen` is 626 points); the taglines say
-  "or glow with your music". The site's `og.jpg` still shows the 1.0 menu.
+  "or glow with your music". The site's pictures are cached for a day under their names (`_headers`),
+  so redrawn ones get a new name: `menu-*-120.png` and `og-120.jpg` (the banner at 1200 × 630,
+  `sips -z 630 1200 docs/banner.jpg`). The user saw the old pictures until that was done.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
