@@ -43,6 +43,9 @@
       <b>Morse code</b><br>
       Type a message and press play to flash it. Turn on loop to repeat it until you stop it.
       <br><br>
+      <b>Sound</b><br>
+      Turn on Sound and the logo glows with whatever your Mac is playing: brighter as it gets louder, dark between beats, peaking at your brightness. macOS asks once to let LogoLight hear it (macOS 14.2 or later); nothing is recorded.
+      <br><br>
       <b>Lit with Lid Closed</b><br>
       Using an external display with the lid closed? The logo can stay lit, with its effects, while the keyboard stays dark.
       <br><br>
@@ -139,6 +142,14 @@ to a stop instead of halting at speed. Then it starts a fade the other way that'
 never visibly moves. The level lasts until the next change. While the slider is dragged, the
 running fade follows it rather than starting again at every step. Quitting LogoLight returns
 the logo to normal brightness.
+
+The Sound effect hears what the Mac plays through a Core Audio process tap on every app's
+output (macOS 14.2 or later, with your permission under System Audio Recording Only), reduces
+each buffer of audio to its level and drops it, and meters the level against the loudest the
+music has been lately, so quiet music and the volume setting don't matter. The logo then
+follows it with the same hardware fades, as few of them as it can: a rise runs until the logo
+has caught up with the sound, a fall until it has dropped to it, and a steady sound is held
+with one write and then left alone.
 
 This is private API, found by inspecting CoreBrightness (the details, measurements and
 the tools used are in [docs/corebrightnessd.md](docs/corebrightnessd.md) and

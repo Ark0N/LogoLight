@@ -335,6 +335,25 @@ author (2026-11-07, with `LOGOLIGHT_SIMULATE=1`) and works.
 `LOGOLIGHT_SIMULATE=1` (debug) runs the app against `SimulatedEmitterService`, a wall-clock
 stand-in for corebrightnessd, so the live view can be watched on any Mac.
 
+**Sound** (2026-11-09, asked for as "sync up the sound that is playing with the lighting"): a
+fourth effect switch, "Sound", under Heartbeat in the EFFECTS card (`LogoEffect.sound`, saved as
+the effect like the others, peaking at the brightness, paused and resumed with them). The sound
+comes from a Core Audio process tap on every app's output (`SystemAudioLevel`, macOS 14.2+; the
+row is hidden where `SystemSound.source()` is nil), metered by `LoudnessMeter` (fast-release
+envelope against a slowly falling ceiling, 24 dB range, silence below -60 dBFS), and the logo
+follows it through `SoundFollower` and `LightEmitter.move`/`holdNow` (docs/corebrightnessd.md,
+"Following the sound"): a rise runs until the logo catches the sound, a fall until it drops to it
+or to dark, a steady level is held once. The level is `peak × loudness²`. If the tap can't start
+(`SoundError`), the effect is dropped, `onSoundFailed` runs, and the app shows an alert that can
+open the System Audio Recording Only pane; `Resources/Info.plist` has
+`NSAudioCaptureUsageDescription`. Checked on the MacBook with `tools/livecheck --sound` (beats at
+2 Hz all peaked, the keyboard didn't dim) and `--hear` (the tap heard a system sound, also from a
+hardened-runtime binary with no entitlements, with no permission prompt from Terminal). Not yet
+seen: the permission prompt from the app itself (and whether a denial makes the tap fail, which
+the alert covers, or deliver silence, which would just leave the logo dark), the logo by eye with
+real music, the Sound row in the real menu, and the cost of the 33 Hz polling on battery. The
+panel renders show the row fits (no truncated label).
+
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
   been seen drawn offscreen, and `liveGlow` was checked through `tools/livecheck`.
@@ -342,5 +361,7 @@ stand-in for corebrightnessd, so the live view can be watched on any Mac.
   logo should come back at that level, and the keyboard should go dark and relight. The lid
   closing left a held level lit (docs/corebrightnessd.md, "The lid"), and a display sleep may
   too: check that the logo goes dark.
-- The `DisplaySelect` route in `docs/corebrightnessd.md`, which might replace holding a fade with a
-  real brightness control. Worth trying if the hold causes trouble.
+- A way to set the logo's brightness without holding a fade. The `DisplaySelect` route in
+  `docs/corebrightnessd.md` turned out to be a dead end (the logo's module ignores the brightness
+  keys it would route); `setProperty:withKey:andDisplay:`, which addresses one display, hasn't been
+  tried, and might reach the logo without the keyboard.
