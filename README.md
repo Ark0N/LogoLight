@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.1.1.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.2.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
   &nbsp;
   <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="56" alt="Buy me a coffee"></a>
 </p>
@@ -78,7 +78,7 @@
 
 ## Install
 
-1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.1.1.zip)**.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.2.0.zip)**.
    It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 

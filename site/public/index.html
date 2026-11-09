@@ -47,12 +47,12 @@
         "@id": "https://logolight.app/#app",
         "name": "LogoLight",
         "url": "https://logolight.app/",
-        "description": "A free, open-source menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display (the OLED MacBook Pro). Turn the logo off and on with a smooth fade, set its brightness, or animate it with Breathe, Pulse or Heartbeat. Includes a Backlight control for Control Center.",
+        "description": "A free, open-source menu bar app for the illuminated Apple logo on the back of the MacBook Pro with PROLED XDR Display (the OLED MacBook Pro). Turn the logo off and on with a smooth fade, set its brightness, animate it with Breathe, Pulse or Heartbeat, or let it glow with the sound your Mac is playing. Includes a Backlight control for Control Center.",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "macOS 14 or later",
         "softwareRequirements": "MacBook Pro with PROLED XDR Display",
-        "softwareVersion": "1.1.1",
-        "datePublished": "2026-11-08",
+        "softwareVersion": "1.2.0",
+        "datePublished": "2026-11-09",
         "downloadUrl": "https://logolight.app/LogoLight.zip",
         "installUrl": "https://logolight.app/#download",
         "image": "https://logolight.app/images/app-icon-256.png",
@@ -63,6 +63,7 @@
           "Effects: Breathe, Pulse and Heartbeat",
           "Battery indicator: the logo dims as the battery runs down",
           "Flash a message in Morse code",
+          "Sound: the logo glows with whatever the Mac is playing",
           "Keep the logo lit with the lid closed, using an external display",
           "Live view of the lid in its own finish, space black or silver",
           "Backlight control for Control Center and the menu bar",
@@ -126,6 +127,7 @@
       <symbol id="i-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2.5-6 4 13 3.5-10 2 3h5"/></symbol>
       <symbol id="i-battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="17" height="10" rx="2.5"/><path d="M22 10.5v3"/><rect x="5" y="10" width="8" height="4" rx="1" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-morse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M4 12h0M9.5 12h5M20 12h0"/></symbol>
+      <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
       <symbol id="i-display" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/></symbol>
       <symbol id="i-option" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5h5.5l7 11H21M14 6.5h7"/></symbol>
       <symbol id="i-login" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/><path d="M3 12h11M10.5 8.5 14 12l-3.5 3.5"/></symbol>
@@ -379,6 +381,11 @@
             <span class="tile tile-indigo"><svg aria-hidden="true" focusable="false"><use href="#i-morse"/></svg></span>
             <h3>Morse code</h3>
             <p>Type a message and press play, and the logo flashes it in Morse code. Turn on loop to repeat it until you stop it.</p>
+          </li>
+          <li class="feature">
+            <span class="tile tile-purple"><svg aria-hidden="true" focusable="false"><use href="#i-note"/></svg></span>
+            <h3>Sound</h3>
+            <p>Turn on Sound, and the logo glows with whatever your Mac is playing: brighter as it gets louder, dark between beats. macOS asks once to let LogoLight hear it; nothing is recorded.</p>
           </li>
           <li class="feature">
             <span class="tile tile-teal"><svg aria-hidden="true" focusable="false"><use href="#i-display"/></svg></span>
