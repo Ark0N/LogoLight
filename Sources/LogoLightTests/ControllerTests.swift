@@ -358,6 +358,33 @@ final class FakeClock {
     }
 }
 
+/// A stand-in for the sound the Mac plays, so tests never tap the real audio. Its loudness is `level`,
+/// or `script` evaluated at `time` (the fake daemon's), for beats.
+@MainActor
+final class FakeSound: SoundLevelSource {
+    var level = 0.0
+    var script: ((Double) -> Double)?
+    var time: @MainActor () -> Double = { 0 }
+    /// Thrown by `start()`, e.g. without permission to hear the sound.
+    var error: Error?
+    private(set) var starts = 0
+    private(set) var stops = 0
+    private(set) var isListening = false
+
+    func start() throws {
+        if let error { throw error }
+        starts += 1
+        isListening = true
+    }
+
+    func stop() {
+        if isListening { stops += 1 }
+        isListening = false
+    }
+
+    var loudness: Double { script?(time()) ?? level }
+}
+
 /// A stand-in for the internal battery, so tests never read the real one.
 @MainActor
 final class FakeBattery {
@@ -374,6 +401,7 @@ struct Fixture {
     let daemon: FakeDaemon
     let clock: FakeClock
     let battery = FakeBattery()
+    let sound = FakeSound()
     let controller: LogoController
 
     /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
@@ -394,6 +422,7 @@ struct Fixture {
         let clock = FakeClock()
         clock.onSleep = { [daemon] in daemon.elapse($0) }
         self.clock = clock
+        sound.time = { [daemon] in daemon.time }
         controller = LogoController(
             reader: LogoStatusReader(hardware: mac),
             emitter: direct ? LightEmitter(service: daemon, clock: { [daemon] in daemon.time }) : nil,
@@ -405,7 +434,8 @@ struct Fixture {
             batteryCharge: { [battery] in
                 battery.reads += 1
                 return battery.charge
-            }
+            },
+            soundSource: sound
         )
     }
 }

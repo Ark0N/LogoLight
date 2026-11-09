@@ -6,6 +6,9 @@ public enum LogoEffect: String, CaseIterable, Sendable {
     case breathe
     case pulse
     case heartbeat
+    /// The logo follows the sound the Mac is playing (see `SoundFollower`). Not a cycle of steps: the
+    /// animator drives it from a `SoundLevelSource`.
+    case sound
 
     public var title: String {
         switch self {
@@ -13,6 +16,7 @@ public enum LogoEffect: String, CaseIterable, Sendable {
         case .breathe: "Breathe"
         case .pulse: "Pulse"
         case .heartbeat: "Heartbeat"
+        case .sound: "Sound"
         }
     }
 
@@ -23,7 +27,7 @@ public enum LogoEffect: String, CaseIterable, Sendable {
     /// values, still to be tuned by eye on the MacBook.
     public var cycle: [FadeStep] {
         switch self {
-        case .none:
+        case .none, .sound:
             []
         case .breathe:
             // Slow and soft, like the old MacBook sleep light.
@@ -66,6 +70,9 @@ public final class LogoAnimator {
     private let emitter: LightEmitter
     private let isDisplayAwake: @MainActor () -> Bool
     private let sleep: Sleep
+    /// The sound the Mac is playing, for the Sound effect. `nil` where it can't be heard (before
+    /// macOS 14.2), and the effect isn't offered.
+    private let soundSource: SoundLevelSource?
     private var task: Task<Void, Never>?
     private var isAdjusting = false {
         didSet { updateActivity() }
@@ -88,6 +95,15 @@ public final class LogoAnimator {
     /// Whether an effect is playing or the logo is fading to the chosen brightness.
     public var isAnimating: Bool { isPlaying || isAdjusting }
 
+    /// Whether the Sound effect can be offered: there's a source for the sound.
+    public var canFollowSound: Bool { soundSource != nil }
+    /// Called when the Sound effect can't start (no permission to hear the sound, see `SoundError`). The
+    /// effect is then `.none` again, and the logo fades to the chosen brightness.
+    public var onSoundFailed: (@MainActor (Error) -> Void)?
+    /// How often the Sound effect looks at the sound and the logo: a little less often than the daemon
+    /// moves the logo (every 17.5 ms), so each write has taken effect by the next look.
+    static let soundTick = 0.03
+
     /// How bright the logo glows (with no effect) or peaks (with one), from 0 (dimmest) to 1.
     public var brightness: Double = 1 {
         didSet { brightness = min(max(brightness, 0), 1) }
@@ -99,10 +115,12 @@ public final class LogoAnimator {
     /// a launch. Slower than the slider, so coming back from dark doesn't snap on.
     public var transitionDuration = 0.8
 
-    public init(emitter: LightEmitter, isDisplayAwake: @escaping @MainActor () -> Bool, sleep: @escaping Sleep) {
+    public init(emitter: LightEmitter, isDisplayAwake: @escaping @MainActor () -> Bool, sleep: @escaping Sleep,
+                soundSource: SoundLevelSource? = nil) {
         self.emitter = emitter
         self.isDisplayAwake = isDisplayAwake
         self.sleep = sleep
+        self.soundSource = soundSource
     }
 
     /// The logo's fade level for a brightness: never quite dark, and perceptually even
@@ -124,11 +142,14 @@ public final class LogoAnimator {
     /// An effect starts with the step that leads away from where the logo is: a rise when it's
     /// dark (e.g. just turned on), a fall when it's lit (e.g. relit by a wake).
     public func resume() {
-        cancel()
+        // The sound source is kept listening when the Sound effect carries on, e.g. after a wake.
+        cancel(keepingSound: morse == nil && effect == .sound)
         if let morse {
             playMorse(morse)
         } else if effect == .none {
             adjustBrightness(over: transitionDuration)
+        } else if effect == .sound {
+            playSound()
         } else {
             let isDark = (emitter.fadeLevel ?? 1) < level / 2
             play(effect.cycle(startingLit: isDark))
@@ -251,6 +272,42 @@ public final class LogoAnimator {
         }
     }
 
+    /// Follows the sound (see `SoundFollower`) until stopped. If the sound can't be heard, the effect is
+    /// dropped and the owner told (`onSoundFailed`).
+    private func playSound() {
+        guard let soundSource else { return soundFailed(SoundError.unsupportedSystem) }
+        do {
+            try soundSource.start()
+        } catch {
+            return soundFailed(error)
+        }
+        isPlaying = true
+        task = Task { [weak self] in
+            var follower = SoundFollower()
+            while let self, !Task.isCancelled, self.isDisplayAwake() {
+                let target = follower.level(forLoudness: soundSource.loudness, peak: self.level)
+                if let now = self.emitter.fadeLevel {
+                    switch follower.decide(now: now, target: target) {
+                    case .none: break
+                    case .hold: self.emitter.holdNow()
+                    case let .move(up, target, time): self.emitter.move(up: up, from: now, toward: target, in: time)
+                    }
+                }
+                do { try await self.sleep(Self.soundTick) } catch { break }
+            }
+            // The display went away (or the sleep failed): stop listening, as a pause does.
+            guard let self, !Task.isCancelled else { return }
+            soundSource.stop()
+            self.taskDidEnd()
+        }
+    }
+
+    private func soundFailed(_ error: Error) {
+        effect = .none
+        onSoundFailed?(error)
+        adjustBrightness(over: transitionDuration)
+    }
+
     /// Fades to the chosen brightness over `duration`. A fade follows changes made meanwhile
     /// (a slider being dragged), and anything it couldn't follow gets a new fade, at the
     /// slider's speed.
@@ -292,10 +349,13 @@ public final class LogoAnimator {
         isAdjusting = false
     }
 
-    private func cancel() {
+    /// Stops whatever is animating, and stops listening to the sound unless the Sound effect is about to
+    /// carry on (`keepingSound`).
+    private func cancel(keepingSound: Bool = false) {
         task?.cancel()
         task = nil
         isPlaying = false
         isAdjusting = false
+        if !keepingSound { soundSource?.stop() }
     }
 }

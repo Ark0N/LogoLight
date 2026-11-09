@@ -484,6 +484,33 @@ public final class LightEmitter {
         return true
     }
 
+    // MARK: - Following the sound
+
+    /// Starts a fade toward lit (`up`) or dark from `current` (the fade level, as the caller has just
+    /// read it) that reaches `target` about `time` seconds from now, and runs on past it, toward 1 or 0,
+    /// until the next write. For the Sound effect (`SoundFollower`), which retargets often and stops the
+    /// logo with `holdNow()`: unlike `fade(to:over:sleep:)` it doesn't poll, ease on or hold, so it costs
+    /// one write (two when a fade heading the same way, or one whose heading isn't known, has to be
+    /// turned round first).
+    public func move(up: Bool, from current: Double, toward target: Double, in time: Double) {
+        let end: Double = up ? 1 : 0
+        let whole = abs(end - current)
+        guard whole > 1e-4 else { return }
+        if isHeadingLit == nil || isHeadingLit == up { turnRound(from: up) }
+        let share = abs(target - current) / whole
+        // A fade's duration covers the whole way to 0 or 1, so stretch it to reach the target in
+        // about `time`, after the start latency. All the way, it's just the time.
+        let duration = share >= 0.95 ? time : max(0.001, time - Self.startLatency) / FadeCurve.springTime(toReach: share)
+        setFadeDuration(duration)
+        setLit(up)
+        if up, current <= 0 { onRiseFromDark?() }
+    }
+
+    /// Stops the logo where it is, with a fade the other way that's too slow to see.
+    public func holdNow() {
+        hold()
+    }
+
     /// Stops the logo where it is.
     private func hold() {
         if let heading = isHeadingLit {
