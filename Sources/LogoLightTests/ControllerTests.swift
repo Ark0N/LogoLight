@@ -178,6 +178,8 @@ final class FakeDaemon: LightEmitterService {
     /// The lid as the logo's module and the keyboard were last told (`ClamshellUpdate`).
     private(set) var logoToldLidClosed = false
     private(set) var keyboardToldLidClosed = false
+    /// The lid as the displays' own modules (brightness, True Tone) were last told.
+    private(set) var displaysToldLidClosed = false
     /// Whether the keyboard backlight is lit: it's dark on Blank, or once told the lid is closed.
     var isKeyboardLit: Bool { keyboardState == 2 && !keyboardToldLidClosed }
     private var lastStateSent = 2
@@ -222,6 +224,7 @@ final class FakeDaemon: LightEmitterService {
     func moveLid(closed: Bool) {
         lidClosed = closed
         keyboardToldLidClosed = closed
+        displaysToldLidClosed = closed
         tellLogo(lidClosed: closed)
     }
 
@@ -303,6 +306,7 @@ final class FakeDaemon: LightEmitterService {
             if end != heading { startFade() }
         case "ClamshellUpdate":
             keyboardToldLidClosed = value.boolValue
+            displaysToldLidClosed = value.boolValue
             tellLogo(lidClosed: value.boolValue)
         default: break
         }
@@ -320,6 +324,13 @@ final class FakeDaemon: LightEmitterService {
             keyboardToldLidClosed = value.boolValue
         default: break
         }
+    }
+
+    func setDisplaysValue(_ value: NSNumber, forKey key: String) {
+        guard key == "ClamshellUpdate" else { return }
+        log.append("displays ClamshellUpdate=\(value)")
+        timeline.append((time, log[log.count - 1]))
+        displaysToldLidClosed = value.boolValue
     }
 
     private func advance(by step: Double) {
