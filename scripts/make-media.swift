@@ -16,9 +16,11 @@
 //
 // It writes:
 // - docs/media/<clip>.gif, the lid alone on the website's #0e1014 (20 fps, lid 348 px wide);
-// - docs/media/menu-breathe-light.gif and menu-breathe-dark.gif, the whole menu (510 × 945, scale 3) on its own
-//   light or dark background, with Breathe on, the slider at the top and the live view breathing, for a
-//   <picture> that follows prefers-color-scheme;
+// - docs/media/menu-breathe-light.gif and menu-breathe-dark.gif, the whole menu (680 × 2328, scale 4): the panel
+//   with Breathe on, the slider at the top and the live view breathing, and the menu's own items under it, in
+//   the menu's rounded shape with clear corners (a GIF's pixels are clear or not, so the corners' edge pixels are
+//   blended onto GitHub's page colour, white or #0d1117), light and dark for a <picture> that follows
+//   prefers-color-scheme;
 // - site/media/<clip>.mp4 (H.264, 30 fps, lid 696 px wide) with site/media/<clip>.png, the video's poster.
 //   The videos are kept outside site/public, so they aren't uploaded: Safari plays <video> only from servers
 //   that answer Range requests, which Cloudflare's static assets don't. Move them into public/ with a Worker
@@ -59,8 +61,8 @@ let clips = [
     Clip(name: "pulse-silver", motion: "pulse", finish: "silver"),
 ]
 
-/// The menu GIFs (`menu-<effect>-light.gif`, `menu-<effect>-dark.gif`): the whole panel with this effect
-/// switched on and its live view playing it, drawn at `gifFormat`'s scale and frame rate.
+/// The menu GIFs (`menu-<effect>-light.gif`, `menu-<effect>-dark.gif`): the whole menu with this effect
+/// switched on and its live view playing it, drawn at `menuFormat`'s scale and frame rate.
 let menuEffect = "breathe"
 
 /// On/Off: how long the logo stays dark after the fade out, and lit after the fade back in. These
@@ -77,9 +79,12 @@ struct Format {
 }
 
 let gifFormat = Format(scale: 3, padding: 24, fps: 20) // lid 348 × 246 px, 396 × 294 in all
+let menuFormat = Format(scale: 4, padding: 0, fps: 20) // the menu is 170 points wide: 680 px, shown at 320 in the README
 let videoFormat = Format(scale: 6, padding: 48, fps: 30) // twice that: 792 × 588
 /// The website's dark background, #0e1014.
 let background = (red: 0x0e, green: 0x10, blue: 0x14)
+/// GitHub's page behind the README, light and dark (0xRRGGBB): what the menu GIFs' clear corners are edged with.
+let page = ["light": UInt32(0xFFFFFF), "dark": UInt32(0x0D1117)]
 /// The H.264 encoder's quality (0–1). Below about 0.85 the first frame, the clip's only keyframe, is coded
 /// coarser than the frames after it, and the lid's edge visibly jumps each time the clip loops; at 0.9 nothing
 /// outside the glow moves by more than 2 levels, and a clip is a few hundred KB.
@@ -146,20 +151,23 @@ if shouldRender {
         fail("the build failed, see \(buildLog.path)")
     }
     let glows = (0...glowSteps).map { String(Double($0) / Double(glowSteps)) }.joined(separator: ",")
-    for format in [gifFormat, videoFormat] {
+    for format in [gifFormat, menuFormat, videoFormat] {
         print("Rendering the live view at scale \(format.scale)…")
         let folder = renders(format)
         try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-        // The panels (`on-dark.png`, `on-light.png`) are drawn as the menu GIFs need them: Breathe on, the
-        // slider at the top, and the live view dark, for the glow to be pasted in.
-        let status = run(repo.appendingPathComponent(".build/debug/LogoLight").path, [], environment: [
+        // At the menu's scale, the whole menu (`menu-dark.png`, `menu-light.png`) is drawn as the menu GIFs need
+        // it: Breathe on, the slider at the top, and the live view dark, for the glow to be pasted in.
+        var environment = [
             "LOGOLIGHT_RENDER_PANEL": folder.path,
             "LOGOLIGHT_RENDER_SCALE": String(format.scale),
             "LOGOLIGHT_RENDER_GLOWS": glows,
             "LOGOLIGHT_RENDER_EFFECT": menuEffect,
             "LOGOLIGHT_RENDER_BRIGHTNESS": "1",
             "LOGOLIGHT_RENDER_GLOW": "0",
-        ], log: renderLog(format))
+        ]
+        if format.scale == menuFormat.scale { environment["LOGOLIGHT_RENDER_MENU"] = "1" }
+        let status = run(repo.appendingPathComponent(".build/debug/LogoLight").path, [], environment: environment,
+                         log: renderLog(format))
         guard status == 0 else { fail("the renderer failed (exit \(status)), see \(framesFolder.path)") }
     }
 }
@@ -330,6 +338,8 @@ struct Levels {
     let height: Int
     /// Where the steps differ, in the frame: nothing outside it ever changes.
     let changed: PixelBox
+    /// Which pixels of the frame are clear (`base` was drawn on clear), top row first; nil when none is.
+    let clear: [Bool]?
 
     /// The live view on the website's background, with a margin.
     init(finish: String, format: Format) {
@@ -344,18 +354,31 @@ struct Levels {
             return context.makeImage()!
         }
         (self.width, self.height) = (width, height)
-        (base, rect, clip) = (nil, CGRect(x: 0, y: 0, width: width, height: height), nil)
+        (base, rect, clip, clear) = (nil, CGRect(x: 0, y: 0, width: width, height: height), nil, nil)
         changed = Self.difference(images).box
     }
 
-    /// The whole menu panel (`panel`, drawn with the live view dark), with the live view's glow pasted in at
-    /// `lid` (its top left in the panel, in pixels). The glow stays inside the lid, where the live view is opaque,
-    /// so this gives the same pixels as the panel drawn at each glow.
-    init(panel: CGImage, lid: (x: Int, y: Int), finish: String, format: Format) {
+    /// The whole menu (`panel`, drawn with the live view dark), with the live view's glow pasted in at `lid` (its
+    /// top left in the picture, in pixels). The glow stays inside the lid, where the live view is opaque, so this
+    /// gives the same pixels as the menu drawn at each glow. The menu's corners are clear: pixels that are
+    /// clear altogether stay so (`clear`), and partly clear ones are blended onto `page` (0xRRGGBB).
+    init(panel: CGImage, lid: (x: Int, y: Int), finish: String, format: Format, page: UInt32) {
         images = (0...glowSteps).map { loadImage(renders(format).appendingPathComponent("live-\(finish)-\($0).png")) }
         let (box, isOpaque) = Self.difference(images)
         guard isOpaque else { fail("the glow reaches the live view's edge, so it can't be pasted into the panel") }
-        (base, width, height) = (panel, panel.width, panel.height)
+        (width, height) = (panel.width, panel.height)
+        // Flattened onto the page, so the frame is opaque wherever it's drawn (the canvases have no alpha).
+        let pixels = rgba(panel)
+        var clear = [Bool](repeating: false, count: width * height)
+        let context = canvas(width: width, height: height)
+        let pageColor = CGColor(srgbRed: CGFloat(page >> 16 & 0xFF) / 255, green: CGFloat(page >> 8 & 0xFF) / 255,
+                                blue: CGFloat(page & 0xFF) / 255, alpha: 1)
+        context.setFillColor(pageColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(panel, in: CGRect(x: 0, y: 0, width: width, height: height))
+        for i in 0..<(width * height) where pixels[i * 4 + 3] == 0 { clear[i] = true }
+        base = context.makeImage()!
+        self.clear = clear.contains(true) ? clear : nil
         rect = CGRect(x: lid.x, y: height - lid.y - images[0].height, width: images[0].width, height: images[0].height)
         clip = CGRect(x: lid.x + box.left, y: height - lid.y - box.bottom - 1,
                       width: box.right - box.left + 1, height: box.bottom - box.top + 1)
@@ -558,14 +581,20 @@ struct GIFWriter {
 
     /// Adds the frame drawn in an RGBX `context`, shown for `delay` hundredths of a second. After the first frame,
     /// only `changing` is looked at (the caller knows nothing outside it changes). `framePalette` gives the frame
-    /// its own colour table instead of the GIF's.
-    mutating func add(_ context: CGContext, delay: Int, changing: PixelBox? = nil, framePalette: Palette? = nil) {
+    /// its own colour table instead of the GIF's. The pixels `clear` marks are left clear in the first frame (and
+    /// must lie outside `changing`): the page shows through them.
+    mutating func add(_ context: CGContext, delay: Int, changing: PixelBox? = nil, framePalette: Palette? = nil,
+                      clear: [Bool]? = nil) {
         let palette = framePalette ?? self.palette
         let isFirst = shown == nil
         var shown = self.shown ?? [UInt32](repeating: 0, count: width * height)
         var indices = [UInt8](repeating: Palette.transparent, count: width * height)
         var (left, top, right, bottom) = (width, height, -1, -1)
         forEachPixel(context, in: isFirst ? nil : changing) { i, color in
+            if isFirst, let clear, clear[i] {
+                (left, top, right, bottom) = (min(left, i % width), min(top, i / width), max(right, i % width), max(bottom, i / width))
+                return
+            }
             let index = palette.index(of: color)
             let drawn = palette.colors[Int(index)]
             guard isFirst || drawn != shown[i] else { return }
@@ -579,8 +608,9 @@ struct GIFWriter {
         for y in top...bottom {
             pixels.append(contentsOf: indices[(y * width + left)...(y * width + right)])
         }
-        // Graphic control: leave the frame in place, the transparent index after the first frame, the delay.
-        data.append(contentsOf: [0x21, 0xF9, 0x04, isFirst ? 0x04 : 0x05])
+        // Graphic control: leave the frame in place, the transparent index (after the first frame, or in a first
+        // frame with clear pixels), the delay.
+        data.append(contentsOf: [0x21, 0xF9, 0x04, isFirst && clear == nil ? 0x04 : 0x05])
         append16(delay)
         data.append(contentsOf: [Palette.transparent, 0])
         data.append(0x2C)
@@ -652,6 +682,7 @@ struct GIFWriter {
 
 /// Writes a GIF of `levels` at each glow. With `ownFirstPalette`, the first frame gets its own colour table
 /// (see `firstFramePalette`), for pictures with more colours than the glow, and `palette` is only the glow's.
+/// The levels' clear pixels are left clear in the GIF.
 func writeGIF(_ glows: [Double], levels: Levels, palette: Palette, ownFirstPalette: Bool = false, fps: Int, to url: URL) {
     // A GIF's delays are in hundredths of a second.
     guard 100 % fps == 0 else { fail("a GIF can't play at \(fps) fps exactly; use one that divides 100") }
@@ -661,7 +692,7 @@ func writeGIF(_ glows: [Double], levels: Levels, palette: Palette, ownFirstPalet
         levels.draw(glow: glow, in: context)
         let framePalette = frame == 0 && ownFirstPalette
             ? firstFramePalette(context, changing: levels.changed) : nil
-        gif.add(context, delay: 100 / fps, changing: levels.changed, framePalette: framePalette)
+        gif.add(context, delay: 100 / fps, changing: levels.changed, framePalette: framePalette, clear: levels.clear)
     }
     do { try gif.finish().write(to: url) } catch { fail("can't write \(url.path): \(error)") }
 }
@@ -804,27 +835,27 @@ for (format, isGIF) in [(gifFormat, true), (videoFormat, false)] {
     }
 }
 
-// The menu, with the effect on and its live view playing it. The panels were drawn with the live view dark; the
+// The menu, with the effect on and its live view playing it. The menus were drawn with the live view dark; the
 // renderer says where the lid is in each.
-let menuFrames = glows(motion(menuEffect), fps: gifFormat.fps)
-let renderOutput = (try? String(contentsOf: renderLog(gifFormat), encoding: .utf8)) ?? ""
+let menuFrames = glows(motion(menuEffect), fps: menuFormat.fps)
+let renderOutput = (try? String(contentsOf: renderLog(menuFormat), encoding: .utf8)) ?? ""
 for appearance in ["light", "dark"] {
-    let name = "on-\(appearance).png"
+    let name = "menu-\(appearance).png"
     let place = try! NSRegularExpression(pattern: NSRegularExpression.escapedPattern(for: "/\(name): lid at x ")
                                          + #"([0-9.]+), y ([0-9.]+)"#)
     guard let match = place.firstMatch(in: renderOutput, range: NSRange(renderOutput.startIndex..., in: renderOutput)),
           let x = Double(renderOutput[Range(match.range(at: 1), in: renderOutput)!]),
           let y = Double(renderOutput[Range(match.range(at: 2), in: renderOutput)!])
     else { fail("the renderer didn't say where the lid is in \(name); render the frames again") }
-    let lid = (x: x * Double(gifFormat.scale), y: y * Double(gifFormat.scale))
+    let lid = (x: x * Double(menuFormat.scale), y: y * Double(menuFormat.scale))
     guard lid.x == lid.x.rounded(), lid.y == lid.y.rounded() else { fail("the lid isn't on whole pixels in \(name)") }
-    let levels = Levels(panel: loadImage(renders(gifFormat).appendingPathComponent(name)), lid: (Int(lid.x), Int(lid.y)),
-                        finish: "black", format: gifFormat)
+    let levels = Levels(panel: loadImage(renders(menuFormat).appendingPathComponent(name)), lid: (Int(lid.x), Int(lid.y)),
+                        finish: "black", format: menuFormat, page: page[appearance]!)
     let url = gifFolder.appendingPathComponent("menu-\(menuEffect)-\(appearance).gif")
     writeGIF(menuFrames, levels: levels, palette: Palette(cutting: colors(of: levels, in: levels.changed)),
-             ownFirstPalette: true, fps: gifFormat.fps, to: url)
+             ownFirstPalette: true, fps: menuFormat.fps, to: url)
     print("\(url.path): \(levels.width) × \(levels.height), \(menuFrames.count) frames, "
-          + String(format: "%.2f s, ", Double(menuFrames.count) / Double(gifFormat.fps)) + size(url))
+          + String(format: "%.2f s, ", Double(menuFrames.count) / Double(menuFormat.fps)) + size(url))
 }
 
 try? fileManager.removeItem(at: videoWork)

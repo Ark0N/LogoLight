@@ -816,6 +816,10 @@ final class LogoSlider: NSView {
 ///   it (the glow's own opacity is g as well, so it shows at g²). The light is the same in both finishes.
 /// - `LOGOLIGHT_RENDER_ICON`: also draws the menu bar icon while the logo is on (`icon-on.png`, black
 ///   on clear, as the template the menu bar tints).
+/// - `LOGOLIGHT_RENDER_MENU`: also draws the whole menu with the logo on (`menu-dark.png`, `menu-light.png`):
+///   the panel and, under it, the menu's own items (Disable Password and Launch at Login checked, Lit with Lid
+///   Closed with its second line, Quit LogoLight), in the menu's rounded shape on clear. An `NSMenu` can't be
+///   drawn offscreen, so the items are drawn here to look like its (`MenuPicture`).
 @MainActor
 enum PanelRenderer {
     private struct Options {
@@ -829,6 +833,7 @@ enum PanelRenderer {
         var glows: [Double] = []
         var light = false
         var icon = false
+        var menu = false
 
         init(_ environment: [String: String]) {
             if let scale = environment["LOGOLIGHT_RENDER_SCALE"].flatMap(Int.init), (1...16).contains(scale) {
@@ -845,6 +850,7 @@ enum PanelRenderer {
                 .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.map { min(max($0, 0), 1) }
             light = environment["LOGOLIGHT_RENDER_LIGHT"] != nil
             icon = environment["LOGOLIGHT_RENDER_ICON"] != nil
+            menu = environment["LOGOLIGHT_RENDER_MENU"] != nil
         }
     }
 
@@ -882,6 +888,16 @@ enum PanelRenderer {
         }
         for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
             write(on, finish: .silver, appearance: appearance, options: options, to: "\(folder)/on-silver-\(suffix).png")
+        }
+        if options.menu {
+            for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
+                let panel = ControlPanel(finish: .spaceBlack)
+                panel.setMorseText("SOS")
+                panel.update(on)
+                panel.showGlow(options.glow)
+                draw(MenuPicture(panel: panel, isDark: appearance == .darkAqua), appearance: appearance, options: options,
+                     background: nil, to: "\(folder)/menu-\(suffix).png")
+            }
         }
         for glow in options.glows {
             for (name, finish) in [("black", MacFinish.spaceBlack), ("silver", .silver)] {
@@ -933,9 +949,9 @@ enum PanelRenderer {
         window.contentView = view
         window.setContentSize(view.frame.size)
         window.displayIfNeeded()
-        if let panel = view as? ControlPanel {
-            reportTruncatedLabels(in: panel, path: path)
-            if !options.glows.isEmpty { reportLid(in: panel, path: path) }
+        if view is ControlPanel || view is MenuPicture {
+            reportTruncatedLabels(in: view, path: path)
+            if !options.glows.isEmpty { reportLid(in: view, path: path) }
         }
 
         guard let layer = view.layer ?? window.contentView?.layer else { return }
@@ -982,15 +998,96 @@ enum PanelRenderer {
         CATransaction.commit()
     }
 
-    /// Prints the live view's lid frame in the panel, in points, and the panel's size.
-    private static func reportLid(in panel: ControlPanel, path: String) {
+    /// Prints the live view's lid frame in the picture (the panel, or the whole menu), in points, and the
+    /// picture's size.
+    private static func reportLid(in picture: NSView, path: String) {
         func previews(in view: NSView) -> [LogoPreview] {
             view.subviews.flatMap { ($0 as? LogoPreview).map { [$0] } ?? previews(in: $0) }
         }
-        guard let preview = previews(in: panel).first, !preview.isHiddenOrHasHiddenAncestor else { return }
-        let lid = panel.convert(preview.renderedLidFrame, from: preview)
+        guard let preview = previews(in: picture).first, !preview.isHiddenOrHasHiddenAncestor else { return }
+        let lid = picture.convert(preview.renderedLidFrame, from: preview)
         print("\(path): lid at x \(lid.minX), y \(lid.minY), \(lid.width) × \(lid.height) in a panel "
-              + "\(panel.bounds.width) × \(panel.bounds.height) pt")
+              + "\(picture.bounds.width) × \(picture.bounds.height) pt")
+    }
+
+    /// The menu as it opens below the menu bar icon: the panel, then the menu's own items laid out as `NSMenu`
+    /// lays them out (5 points above and below, items 22 high or 34 with a second line, the text 24 in and a
+    /// check at 9, separators 11 high with their line 10 in), in the menu's rounded shape, on clear. Drawn here
+    /// because an `NSMenu` can't be drawn offscreen.
+    private final class MenuPicture: NSView {
+        override var isFlipped: Bool { true }
+        private static let padding: CGFloat = 5
+        private static let cornerRadius: CGFloat = 12
+        private let isDark: Bool
+
+        init(panel: ControlPanel, isDark: Bool) {
+            self.isDark = isDark
+            super.init(frame: NSRect(x: 0, y: 0, width: panel.bounds.width, height: panel.bounds.height))
+            wantsLayer = true
+            panel.setFrameOrigin(NSPoint(x: 0, y: Self.padding))
+            addSubview(panel)
+            var y = panel.frame.maxY
+            y = addSeparator(at: y)
+            y = addItem("Disable Password", checked: true, at: y)
+            y = addItem("Lit with Lid Closed", subtitle: "External display only", at: y)
+            y = addItem("Launch at Login", checked: true, at: y)
+            y = addSeparator(at: y)
+            y = addItem("Quit LogoLight", at: y)
+            setFrameSize(NSSize(width: panel.bounds.width, height: y + Self.padding))
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        private func addSeparator(at y: CGFloat) -> CGFloat {
+            let line = NSBox(frame: NSRect(x: 10, y: y + 5, width: bounds.width - 20, height: 1))
+            line.boxType = .separator
+            addSubview(line)
+            return y + 11
+        }
+
+        private func addItem(_ title: String, subtitle: String? = nil, checked: Bool = false, at y: CGFloat) -> CGFloat {
+            let height: CGFloat = subtitle == nil ? 22 : 34
+            let label = NSTextField(labelWithString: title)
+            label.font = .menuFont(ofSize: 13)
+            label.textColor = .labelColor
+            label.sizeToFit()
+            if let subtitle {
+                let second = NSTextField(labelWithString: subtitle)
+                second.font = .menuFont(ofSize: 11)
+                second.textColor = .secondaryLabelColor
+                second.sizeToFit()
+                let both = label.frame.height + second.frame.height - 1
+                label.setFrameOrigin(NSPoint(x: 24, y: y + (height - both) / 2))
+                second.setFrameOrigin(NSPoint(x: 24, y: label.frame.maxY - 1))
+                addSubview(second)
+            } else {
+                label.setFrameOrigin(NSPoint(x: 24, y: y + (height - label.frame.height) / 2))
+            }
+            addSubview(label)
+            if checked, let symbol = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 11, weight: .bold)) {
+                let check = NSImageView(image: symbol)
+                check.contentTintColor = .labelColor
+                check.sizeToFit()
+                check.setFrameOrigin(NSPoint(x: 9 + (11 - check.frame.width) / 2, y: y + (height - check.frame.height) / 2))
+                addSubview(check)
+            }
+            return y + height
+        }
+
+        override func draw(_ dirtyRect: NSRect) {
+            let fill = isDark ? NSColor(srgbRed: 40 / 255, green: 40 / 255, blue: 43 / 255, alpha: 1)
+                : NSColor(srgbRed: 242 / 255, green: 242 / 255, blue: 245 / 255, alpha: 1)
+            let edge = isDark ? NSColor(white: 1, alpha: 0.16) : NSColor(white: 0, alpha: 0.14)
+            fill.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
+            let inner = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25),
+                                     xRadius: Self.cornerRadius - 0.25, yRadius: Self.cornerRadius - 0.25)
+            inner.lineWidth = 0.5
+            edge.setStroke()
+            inner.stroke()
+        }
     }
 
     /// Says which visible one-line labels are narrower than their text, so a narrower panel can be checked.

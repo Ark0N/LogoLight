@@ -55,7 +55,10 @@ runs but says the logo isn't available. So:
   done, with `tools/livecheck`. Say so explicitly if it wasn't.
 - To see the panel anywhere, without touching the logo or the screen, draw it to PNGs in each
   state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`. It
-  prints any label that doesn't fit, so check its output after changing the layout.
+  prints any label that doesn't fit, so check its output after changing the layout. With
+  `LOGOLIGHT_RENDER_MENU=1` it also draws the whole menu (`menu-dark.png`, `menu-light.png`): the panel
+  with the menu's own items under it, imitated (an `NSMenu` can't be drawn offscreen), in the menu's
+  rounded shape on clear. That's what the README's menu GIF is made from.
   The switches are `LogoSwitch`, drawn by the app: AppKit's `NSSwitch` draws grey inside a menu until
   the menu's window becomes key, a moment after it opens, which looked slow. What the panel shows
   and greys out is worked out in `PanelState` (LogoLightCore), which has tests.
@@ -124,7 +127,11 @@ runs but says the logo isn't available. So:
   snappier rise and fall, which went in before the release. The README's banner and menu GIFs
   and the site's menu pictures were drawn again with the Sound row (the panel is now 450 points
   tall, so the site's menu pictures are 850 × 2250 and `.screen` is 626 points); the taglines say
-  "or glow with your music". The site's pictures are cached for a day under their names (`_headers`),
+  "or glow with your music". The user then asked for the README's menu GIF to "show the whole app
+  including the disable password and other options" and to be bigger: since then it's the whole
+  menu (`LOGOLIGHT_RENDER_MENU`, 582 points tall with Disable Password and Launch at Login
+  checked) at scale 4, 680 × 2328, shown 320 wide, with clear corners edged onto GitHub's page
+  colours (`page` in `make-media.swift`). The site's pictures are cached for a day under their names (`_headers`),
   so redrawn ones get a new name: `menu-*-120.png` and `og-120.jpg` (the banner at 1200 × 630,
   `sips -z 630 1200 docs/banner.jpg`). The user saw the old pictures until that was done.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the

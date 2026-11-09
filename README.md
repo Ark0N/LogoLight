@@ -18,10 +18,10 @@
 
 <table>
   <tr>
-    <td width="290" align="center" valign="middle">
+    <td width="360" align="center" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
-        <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery switch, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code.">
+        <img src="docs/media/menu-breathe-light.gif" width="320" alt="LogoLight's whole menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery switch, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code. Under them, the menu's own items: Disable Password, checked; Lit with Lid Closed, for an external display only; Launch at Login, checked; and Quit LogoLight.">
       </picture>
     </td>
     <td valign="middle">
