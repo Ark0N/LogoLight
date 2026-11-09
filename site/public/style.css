@@ -547,11 +547,11 @@ strong {
   position: relative;
 }
 
-/* Tall enough for the menu bar and the whole menu below it: the panel is 413 points tall, and Lit with
+/* Tall enough for the menu bar and the whole menu below it: the panel is 450 points tall, and Lit with
    Lid Closed has a second line. */
 .screen {
   position: relative;
-  height: calc(var(--pt) * 589);
+  height: calc(var(--pt) * 626);
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--wallpaper);

@@ -53,8 +53,8 @@ let w1 = text("glowing ", size: headline, weight: .bold, color: .white, at: CGPo
 _ = text("Apple logo.", size: headline, weight: .bold, color: NSColor(srgbRed: 0.83, green: 0.86, blue: 1, alpha: 1),
          at: CGPoint(x: left + w1, y: 470), kern: -3)
 let grey = NSColor(white: 0.66, alpha: 1)
-_ = text("Turn it off, dim it, or let it breathe,", size: 46, weight: .regular, color: grey, at: CGPoint(x: left, y: 650))
-_ = text("pulse or beat like a heart.", size: 46, weight: .regular, color: grey, at: CGPoint(x: left, y: 712))
+_ = text("Turn it off, dim it, let it breathe or beat", size: 46, weight: .regular, color: grey, at: CGPoint(x: left, y: 650))
+_ = text("like a heart, or glow with your music.", size: 46, weight: .regular, color: grey, at: CGPoint(x: left, y: 712))
 _ = text("Right from the menu bar.", size: 46, weight: .regular, color: grey, at: CGPoint(x: left, y: 774))
 
 // Tags.

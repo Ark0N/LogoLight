@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.jpg" width="100%" alt="LogoLight: Control your glowing Apple logo. Turn it off, dim it, or let it breathe, pulse or beat like a heart. Right from the menu bar. Free, open source, for the MacBook Pro with PROLED XDR Display. Beside the text, LogoLight's live view shows a large lid with the Apple logo glowing, next to its menu with Backlight and Breathe switched on.">
+  <img src="docs/banner.jpg" width="100%" alt="LogoLight: Control your glowing Apple logo. Turn it off, dim it, let it breathe or beat like a heart, or glow with your music. Right from the menu bar. Free, open source, for the MacBook Pro with PROLED XDR Display. Beside the text, LogoLight's live view shows a large lid with the Apple logo glowing, next to its menu with Backlight and Breathe switched on.">
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
     <td width="290" align="center" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
-        <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery switch, the effect switches and Morse code.">
+        <img src="docs/media/menu-breathe-light.gif" width="255" alt="LogoLight's menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery switch, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code.">
       </picture>
     </td>
     <td valign="middle">

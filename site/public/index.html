@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LogoLight: turn off or dim the MacBook Pro's glowing Apple logo</title>
-  <meta name="description" content="Turn off or dim the glowing Apple logo on the OLED MacBook Pro with PROLED XDR Display, or let it breathe, pulse or beat like a heart. A free, open-source menu bar app.">
+  <meta name="description" content="Turn off or dim the glowing Apple logo on the OLED MacBook Pro with PROLED XDR Display, let it breathe, pulse or beat like a heart, or glow with your music. A free, open-source menu bar app.">
   <meta name="robots" content="max-image-preview:large">
   <link rel="alternate" type="text/plain" href="https://logolight.app/llms.txt" title="LogoLight, in plain text for AI assistants">
   <meta name="color-scheme" content="light dark">
@@ -20,7 +20,7 @@
   <meta property="og:site_name" content="LogoLight">
   <meta property="og:url" content="https://logolight.app/">
   <meta property="og:title" content="LogoLight: turn off or dim the MacBook Pro's glowing Apple logo">
-  <meta property="og:description" content="A free, open-source menu bar app for the illuminated Apple logo on the back of the OLED MacBook Pro with PROLED XDR Display. Turn it off, set its brightness, or let it breathe, pulse or beat like a heart.">
+  <meta property="og:description" content="A free, open-source menu bar app for the illuminated Apple logo on the back of the OLED MacBook Pro with PROLED XDR Display. Turn it off, set its brightness, let it breathe, pulse or beat like a heart, or glow with your music.">
   <meta property="og:image" content="https://logolight.app/og.jpg">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
@@ -173,7 +173,7 @@
         <div class="hero-copy">
           <p class="eyebrow">For MacBook Pro with PROLED XDR Display</p>
           <h1 id="hero-title">Control your glowing Apple&nbsp;logo.</h1>
-          <p class="lead">LogoLight is a free menu bar app for the illuminated Apple logo on the back of your new MacBook&nbsp;Pro with PROLED XDR&nbsp;Display. Turn it off, dim it, or let it breathe, pulse or beat like a&nbsp;heart.</p>
+          <p class="lead">LogoLight is a free menu bar app for the illuminated Apple logo on the back of your new MacBook&nbsp;Pro with PROLED XDR&nbsp;Display. Turn it off, dim it, let it breathe, pulse or beat like a heart, or glow with your&nbsp;music.</p>
           <div class="actions">
             <a class="btn btn-primary" href="/LogoLight.zip">
               <svg aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
@@ -193,7 +193,7 @@
             <!-- The menu is a real render of LogoLight's panel (LOGOLIGHT_RENDER_PANEL, see PanelRenderer), with the
                  live view unlit; the menu bar, the menu's frame and its two plain items are drawn here, as the app shows
                  them. The live view's light (LOGOLIGHT_RENDER_LIGHT) is laid over the lid and faded with Breathe's timing. -->
-            <div class="screen" role="img" aria-label="LogoLight's menu, open below its icon in the menu bar. At the top, the Backlight switch is on. Below it, the live view of the lid, with the Apple logo glowing and slowly breathing, then the brightness slider near full and the Battery switch, and of the effects Breathe, Pulse and Heartbeat, Breathe is on. Below them, Morse code: a message field with play and loop buttons. Then Lit with Lid Closed, for an external display only, Launch at Login, checked, and Quit LogoLight.">
+            <div class="screen" role="img" aria-label="LogoLight's menu, open below its icon in the menu bar. At the top, the Backlight switch is on. Below it, the live view of the lid, with the Apple logo glowing and slowly breathing, then the brightness slider near full and the Battery switch, and of the effects Breathe, Pulse, Heartbeat and Sound, Breathe is on. Below them, Morse code: a message field with play and loop buttons. Then Lit with Lid Closed, for an external display only, Launch at Login, checked, and Quit LogoLight.">
               <div class="menubar">
                 <span class="status status-open">
                   <img class="status-icon" src="images/menubar-icon.png" width="12" height="17" alt="">
@@ -201,7 +201,7 @@
                     <span class="menu-panel">
                       <picture>
                         <source srcset="images/menu-breathe-dark.png" media="(prefers-color-scheme: dark)">
-                        <img src="images/menu-breathe-light.png" width="850" height="2065" alt="" fetchpriority="high">
+                        <img src="images/menu-breathe-light.png" width="850" height="2250" alt="" fetchpriority="high">
                       </picture>
                       <span class="glow anim-breathe">
                         <img class="halo" src="images/lid-light-696.png" width="696" height="492" alt="">
@@ -340,7 +340,7 @@
             <span class="menu menu-alone">
               <picture>
                 <source srcset="images/menu-on-dark.png" media="(prefers-color-scheme: dark)">
-                <img src="images/menu-on-light.png" width="850" height="2065" alt="LogoLight's menu with the logo on: the Backlight switch on, the live view of the lid with the Apple logo glowing, the brightness slider at three quarters with the Battery switch off below it, no effect switched on, and the Morse code field with its play and loop buttons." loading="lazy" decoding="async">
+                <img src="images/menu-on-light.png" width="850" height="2250" alt="LogoLight's menu with the logo on: the Backlight switch on, the live view of the lid with the Apple logo glowing, the brightness slider at three quarters with the Battery switch off below it, none of the effects Breathe, Pulse, Heartbeat and Sound switched on, and the Morse code field with its play and loop buttons." loading="lazy" decoding="async">
               </picture>
             </span>
             <figcaption>On, at three quarters</figcaption>
@@ -349,7 +349,7 @@
             <span class="menu menu-alone">
               <picture>
                 <source srcset="images/menu-off-dark.png" media="(prefers-color-scheme: dark)">
-                <img src="images/menu-off-light.png" width="850" height="2065" alt="LogoLight's menu with the logo off: the Backlight switch is off, the live view of the lid is dark, and the slider, the Battery switch, the effect switches and Morse code below it are greyed out, keeping their settings." loading="lazy" decoding="async">
+                <img src="images/menu-off-light.png" width="850" height="2250" alt="LogoLight's menu with the logo off: the Backlight switch is off, the live view of the lid is dark, and the slider, the Battery switch, the effect switches and Morse code below it are greyed out, keeping their settings." loading="lazy" decoding="async">
               </picture>
             </span>
             <figcaption>Off, the rest greyed out</figcaption>

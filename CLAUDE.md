@@ -121,8 +121,10 @@ runs but says the logo isn't available. So:
   **1.2.0 shipped 2026-11-09**: build 144 (commit e6960d1, tag `v1.2.0`), the Sound effect (PR #4),
   notarized with no issues, on the site (a Sound feature tile, no change to the hero's demo, which
   is CSS animation) and as a GitHub Release. The user tried the branch build first and asked for a
-  snappier rise and fall, which went in before the release. The menu GIFs and the site's menu
-  pictures still show the 1.1 menu without the Sound row.
+  snappier rise and fall, which went in before the release. The README's banner and menu GIFs
+  and the site's menu pictures were drawn again with the Sound row (the panel is now 450 points
+  tall, so the site's menu pictures are 850 × 2250 and `.screen` is 626 points); the taglines say
+  "or glow with your music". The site's `og.jpg` still shows the 1.0 menu.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
