@@ -218,9 +218,14 @@ var charging = false
 /// "charges", Breathe plays, from dark to the brightness, 6.3 s a cycle; choosing Heartbeat meanwhile
 /// shouldn't break its rhythm, and Heartbeat follows when charging stops.
 @MainActor func chargingCheck() async {
-    print("real battery: charging \(Battery.isCharging().map { String($0) } ?? "unknown")")
+    let power = Battery.powerState()
+    print("real battery: " + (power.map { "plugged in \($0.isPluggedIn), charging \($0.isCharging), full \($0.isFull)" }
+                                ?? "unknown"))
     charging = false
-    controller = LogoController.live(isCharging: { charging })
+    // Plugged in exactly while it "charges", so the wait for charging to start never comes in.
+    controller = LogoController.live(powerState: {
+        Battery.PowerState(isPluggedIn: charging, isCharging: charging, isFull: false)
+    })
     controller.start(brightness: 0.5, effect: .none, breathesWhileCharging: true); await wait(1.2)
     report("charging light on, not charging", expected: level(0.5))
     charging = true

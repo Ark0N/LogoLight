@@ -8,18 +8,44 @@ public enum Battery {
     /// The charge from 0 (empty) to 1 (full), the percentage the menu bar's battery shows, or `nil` on a
     /// Mac without a battery or when it can't be read.
     public static func charge() -> Double? {
-        guard let description = internalBattery(),
-              let current = description[kIOPSCurrentCapacityKey] as? Int,
+        internalBattery().flatMap(charge(in:))
+    }
+
+    private static func charge(in description: [String: Any]) -> Double? {
+        guard let current = description[kIOPSCurrentCapacityKey] as? Int,
               let capacity = description[kIOPSMaxCapacityKey] as? Int, capacity > 0
         else { return nil }
         return min(max(Double(current) / Double(capacity), 0), 1)
     }
 
-    /// Whether the battery is taking charge, as the menu bar's battery shows with its bolt. It's `false`
-    /// on power when the battery isn't charging: full, or held at a limit (Optimized Battery Charging's
-    /// 80%). `nil` on a Mac without a battery or when it can't be read.
-    public static func isCharging() -> Bool? {
-        internalBattery()?[kIOPSIsChargingKey] as? Bool
+    /// Whether the Mac is plugged in and the battery charging, for the charging light.
+    public struct PowerState: Equatable, Sendable {
+        /// Whether the Mac is on power: a charger is plugged in.
+        public var isPluggedIn: Bool
+        /// Whether the battery is taking charge, as the menu bar's battery shows with its bolt. macOS only
+        /// says so a while after the Mac is plugged in (about a minute on the MacBook Pro, which said
+        /// "AC attached; not charging" meanwhile), and not on power when the battery is full or held at a
+        /// limit (Optimized Battery Charging's 80%).
+        public var isCharging: Bool
+        /// Whether the battery is full (100%).
+        public var isFull: Bool
+
+        public init(isPluggedIn: Bool, isCharging: Bool, isFull: Bool) {
+            self.isPluggedIn = isPluggedIn
+            self.isCharging = isCharging
+            self.isFull = isFull
+        }
+    }
+
+    /// Whether the Mac is plugged in and the battery charging, or `nil` on a Mac without a battery or
+    /// when it can't be read.
+    public static func powerState() -> PowerState? {
+        guard let description = internalBattery(),
+              let state = description[kIOPSPowerSourceStateKey] as? String,
+              let isCharging = description[kIOPSIsChargingKey] as? Bool
+        else { return nil }
+        let isFull = description[kIOPSIsChargedKey] as? Bool == true || (charge(in: description) ?? 0) >= 1
+        return PowerState(isPluggedIn: state == kIOPSACPowerValue, isCharging: isCharging, isFull: isFull)
     }
 
     /// The internal battery's power source description, if there's one.

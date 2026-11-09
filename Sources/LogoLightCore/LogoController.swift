@@ -15,7 +15,10 @@ public final class LogoController {
     private let verificationTimeout: Duration
     private let sleep: LogoAnimator.Sleep
     private let readBatteryCharge: @MainActor () -> Double?
-    private let readIsCharging: @MainActor () -> Bool?
+    private let readPowerState: @MainActor () -> Battery.PowerState?
+    /// For waits that aren't animation (how long charging may take to start after a plug-in). Unlike
+    /// `sleep`, whose fake in the tests moves the logo's clock, tests end these by hand.
+    private let wait: LogoAnimator.Sleep
     /// The setting this process last applied, for when the hardware can't show it.
     private var lastApplied: LogoIllumination?
     /// The setting as of the last `status()` or switch, so the live view needn't read it every frame.
@@ -63,7 +66,8 @@ public final class LogoController {
         // A small tolerance: by default, sleeps can run tens of ms late, which shows in effects.
         sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0), tolerance: .milliseconds(2)) },
         batteryCharge: @escaping @MainActor () -> Double? = Battery.charge,
-        isCharging: @escaping @MainActor () -> Bool? = Battery.isCharging,
+        powerState: @escaping @MainActor () -> Battery.PowerState? = Battery.powerState,
+        wait: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0)) },
         soundSource: SoundLevelSource? = nil
     ) {
         self.reader = reader
@@ -74,18 +78,19 @@ public final class LogoController {
         self.verificationTimeout = verificationTimeout
         self.sleep = sleep
         readBatteryCharge = batteryCharge
-        readIsCharging = isCharging
+        readPowerState = powerState
+        self.wait = wait
         animator = emitter.map { emitter in
             LogoAnimator(emitter: emitter, isDisplayAwake: { Self.canLight(reader: reader, emitter: emitter) },
                          sleep: sleep, soundSource: soundSource)
         }
     }
 
-    /// The controller for this Mac's real hardware. `batteryCharge` and `isCharging` can stand in for
+    /// The controller for this Mac's real hardware. `batteryCharge` and `powerState` can stand in for
     /// the battery (`tools/livecheck` steps them), and `soundSource` for the sound the Mac plays (by
     /// default, the system's audio, where macOS lets it be heard).
     public static func live(batteryCharge: @escaping @MainActor () -> Double? = Battery.charge,
-                            isCharging: @escaping @MainActor () -> Bool? = Battery.isCharging,
+                            powerState: @escaping @MainActor () -> Battery.PowerState? = Battery.powerState,
                             soundSource: SoundLevelSource? = SystemSound.source()) -> LogoController {
         LogoController(
             reader: LogoStatusReader(),
@@ -94,7 +99,7 @@ public final class LogoController {
             sudo: SudoRunner(),
             isRuleInstalled: { PasswordlessRule.isInstalled },
             batteryCharge: batteryCharge,
-            isCharging: isCharging,
+            powerState: powerState,
             soundSource: soundSource
         )
     }
@@ -257,8 +262,8 @@ public final class LogoController {
 
     /// Call when the battery's charge, or whether it's charging, may have changed. While the charge is
     /// followed, it's read again, and a new charge is applied; a charge that can't be read leaves the
-    /// brightness as it is. With `breathesWhileCharging`, charging starting or stopping starts or stops
-    /// the breathing.
+    /// brightness as it is. With `breathesWhileCharging`, a plug-in or charging starting starts the
+    /// breathing, and unplugging or charging stopping stops it.
     public func batteryDidChange() {
         if followsBattery {
             let last = batteryCharge
@@ -286,26 +291,74 @@ public final class LogoController {
     /// Whether the logo breathes while the battery charges, like the old MacBook sleep light: Breathe
     /// plays in place of the chosen effect, peaking at the brightness, until charging stops (the Mac is
     /// unplugged, or the battery is full or held at a charge limit). The chosen effect then comes back.
-    /// It needs the logo on and the display awake, as effects do: nothing can light the logo while the
-    /// Mac sleeps.
+    /// It starts as soon as the Mac is plugged in with the battery not full (`isAwaitingCharge`), since
+    /// macOS takes a while to say it's charging. It needs the logo on and the display awake, as effects
+    /// do: nothing can light the logo while the Mac sleeps.
     public private(set) var breathesWhileCharging = false
 
     /// Whether the battery was charging when it was last read. It's only read while
     /// `breathesWhileCharging` is on.
     public private(set) var isCharging = false
 
+    /// Whether the Mac was plugged in less than `chargingStartWait` ago, with the battery not full, and
+    /// macOS doesn't say it's charging yet. The logo breathes meanwhile. Charging starting, unplugging and a
+    /// full battery end it, and so does the wait running out: the battery is then held at a limit.
+    public private(set) var isAwaitingCharge = false
+
+    /// How long the logo breathes after a plug-in before macOS says the battery is charging. On the
+    /// MacBook Pro it said "AC attached; not charging" for about a minute first (2026-11-09).
+    public static let chargingStartWait = 120.0
+
+    /// Whether the Mac was plugged in when the power was last read: `nil` before the first read (at
+    /// launch, or when the switch is turned on), so only a plug-in that's seen starts `isAwaitingCharge`.
+    private var wasPluggedIn: Bool?
+    private var chargeWait: Task<Void, Never>?
+
     /// Turns the charging light on or off. If the battery is charging, the logo starts breathing, or goes
     /// back to the chosen effect or brightness.
     public func setBreathesWhileCharging(_ breathes: Bool) {
         guard breathes != breathesWhileCharging else { return }
         breathesWhileCharging = breathes
-        if breathes { readCharging() }
+        if breathes {
+            readCharging()
+        } else {
+            endChargeWait()
+            wasPluggedIn = nil
+        }
         if updateStandIn() { activeEffectDidChange() }
     }
 
-    /// A state that can't be read leaves the last one.
+    /// Reads whether the Mac is plugged in and charging. A plug-in with the battery not full starts
+    /// `isAwaitingCharge`. A state that can't be read leaves the last one.
     private func readCharging() {
-        if let charging = readIsCharging() { isCharging = charging }
+        guard let power = readPowerState() else { return }
+        isCharging = power.isCharging
+        if !power.isPluggedIn || power.isFull || power.isCharging {
+            endChargeWait()
+        } else if wasPluggedIn == false {
+            awaitCharge()
+        }
+        wasPluggedIn = power.isPluggedIn
+    }
+
+    /// Breathes until charging starts, for up to `chargingStartWait`, then goes by whether it has.
+    private func awaitCharge() {
+        chargeWait?.cancel()
+        isAwaitingCharge = true
+        chargeWait = Task { [weak self, wait] in
+            do { try await wait(Self.chargingStartWait) } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            chargeWait = nil
+            isAwaitingCharge = false
+            readCharging()
+            if updateStandIn() { activeEffectDidChange() }
+        }
+    }
+
+    private func endChargeWait() {
+        chargeWait?.cancel()
+        chargeWait = nil
+        isAwaitingCharge = false
     }
 
     /// Has Breathe stand in for the chosen effect while the battery charges, or clears it. Returns whether
@@ -314,7 +367,7 @@ public final class LogoController {
     private func updateStandIn() -> Bool {
         guard let animator else { return false }
         let before = animator.activeEffect
-        animator.standInEffect = breathesWhileCharging && isCharging ? .breathe : nil
+        animator.standInEffect = breathesWhileCharging && (isCharging || isAwaitingCharge) ? .breathe : nil
         return animator.activeEffect != before
     }
 

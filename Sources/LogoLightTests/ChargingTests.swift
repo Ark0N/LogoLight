@@ -63,6 +63,17 @@ private func log(setUp: @MainActor (Fixture) -> Void, change: (@MainActor (Fixtu
     return f.daemon.log
 }
 
+/// Turns the charging light on with the Mac unplugged and the battery at `charge`, then plugs it in, with
+/// macOS not saying it's charging yet ("AC attached; not charging").
+@MainActor
+private func plugIn(_ f: Fixture, charge: Double = 0.6) {
+    f.battery.charge = charge
+    f.battery.isPluggedIn = false
+    f.controller.setBreathesWhileCharging(true)
+    f.battery.isPluggedIn = true
+    f.controller.batteryDidChange()
+}
+
 @MainActor
 func chargingTests(_ t: TestHarness) async {
     print("\nCharging light")
@@ -290,7 +301,128 @@ func chargingTests(_ t: TestHarness) async {
         t.expect(f.daemon.lit, "at \(f.daemon.level)")
     }
 
-    await t.test("at launch, breathes if the battery is charging, keeping the chosen effect") {
+    // macOS says "AC attached; not charging" for about a minute after a plug-in.
+
+    await t.test("breathes as soon as it's plugged in, before macOS says it's charging") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.daemon.trace = []
+        plugIn(f)
+        t.expect(f.controller.isAwaitingCharge)
+        t.expect(!f.controller.isCharging)
+        t.expectEqual(f.controller.animator?.activeEffect, .breathe)
+        t.expect(f.controller.animator!.isPlaying)
+        await run(f, for: 8)
+        t.expectEqual(f.timer.requested, [LogoController.chargingStartWait])
+        t.expect(f.controller.isAwaitingCharge)
+        let (low, high) = levelRange(f)
+        t.expect(low <= 0.01, "should fade to dark, lowest \(low)")
+        t.expect(high >= 0.99, "should rise to full, highest \(high)")
+        f.controller.restoreNormalLighting()
+    }
+
+    await t.test("charging starting while it waits carries on with the same breathing") {
+        var awaiting: Bool?
+        let waiting = await log(setUp: { plugIn($0) })
+        let charging = await log(setUp: { plugIn($0) }) { f in
+            f.battery.isCharging = true
+            f.controller.batteryDidChange()
+            awaiting = f.controller.isAwaitingCharge
+        }
+        t.expectEqual(awaiting, false)
+        t.expect(waiting.count > 4, "should have breathed: \(waiting)")
+        t.expectEqual(charging, waiting)
+    }
+
+    await t.test("if charging hasn't started when the wait runs out, it stops; charging later still shows") {
+        let f = Fixture(direct: true, timeDriven: true)
+        plugIn(f, charge: 0.85) // e.g. held at Optimized Battery Charging's 80%
+        await run(f, for: 3)
+        t.expect(f.controller.animator!.isPlaying)
+        f.timer.fire()
+        t.expect(await waitUntil { !f.controller.isAwaitingCharge })
+        t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
+        await finish(f)
+        t.expect(f.daemon.lit, "at \(f.daemon.level)")
+        t.expect(!f.daemon.isHolding)
+        f.controller.batteryDidChange() // still plugged in: no new wait
+        t.expect(!f.controller.isAwaitingCharge)
+        f.battery.isCharging = true
+        f.controller.batteryDidChange()
+        t.expectEqual(f.controller.animator?.activeEffect, .breathe)
+        t.expect(f.controller.animator!.isPlaying)
+        f.controller.restoreNormalLighting()
+    }
+
+    await t.test("unplugged while it waits, it stops at once") {
+        let f = Fixture(direct: true, timeDriven: true)
+        plugIn(f)
+        await run(f, for: 2)
+        f.battery.isPluggedIn = false
+        f.controller.batteryDidChange()
+        t.expect(!f.controller.isAwaitingCharge)
+        t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
+        f.timer.fire() // the cancelled wait changes nothing
+        await settle()
+        t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
+        await finish(f)
+        t.expect(f.daemon.lit, "at \(f.daemon.level)")
+    }
+
+    t.test("plugged in with the battery full, it doesn't breathe") {
+        let f = Fixture(direct: true, timeDriven: true)
+        plugIn(f, charge: 1)
+        t.expect(!f.controller.isAwaitingCharge)
+        t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
+        t.expect(f.timer.requested.isEmpty)
+    }
+
+    t.test("a plug-in while the display slept starts the wait at the wake") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.battery.charge = 0.6
+        f.battery.isPluggedIn = false
+        f.controller.setBreathesWhileCharging(true)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.battery.isPluggedIn = true // with no notification
+        f.mac.displayAwake = true
+        f.controller.displayDidWake()
+        t.expect(f.controller.isAwaitingCharge)
+        t.expectEqual(f.controller.animator?.activeEffect, .breathe)
+        t.expect(f.controller.animator!.isPlaying)
+        f.controller.restoreNormalLighting()
+    }
+
+    t.test("turned on, or launched, while already plugged in and not charging, it doesn't wait") {
+        // No plug-in seen: as far as it can tell, the battery is held at a limit.
+        let f = Fixture(direct: true, timeDriven: true)
+        f.battery.charge = 0.8
+        f.battery.isPluggedIn = true
+        f.controller.setBreathesWhileCharging(true)
+        f.controller.batteryDidChange()
+        t.expect(!f.controller.isAwaitingCharge)
+        t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
+
+        let launched = Fixture(direct: true, timeDriven: true)
+        launched.battery.charge = 0.8
+        launched.battery.isPluggedIn = true
+        launched.controller.start(brightness: 1, effect: .none, breathesWhileCharging: true)
+        t.expect(!launched.controller.isAwaitingCharge)
+        t.expect(!launched.controller.animator!.isAnimating)
+    }
+
+    await t.test("turned off while it waits, the wait ends, and isn't started again by turning it on") {
+        let f = Fixture(direct: true, timeDriven: true)
+        plugIn(f)
+        f.controller.setBreathesWhileCharging(false)
+        t.expect(!f.controller.isAwaitingCharge)
+        t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
+        f.controller.setBreathesWhileCharging(true)
+        t.expect(!f.controller.isAwaitingCharge)
+        await finish(f)
+        t.expect(f.daemon.lit, "at \(f.daemon.level)")
+    }
+
+    t.test("at launch, breathes if the battery is charging, keeping the chosen effect") {
         let f = Fixture(direct: true, timeDriven: true)
         f.battery.isCharging = true
         f.controller.start(brightness: 0.5, effect: .pulse, breathesWhileCharging: true)
@@ -315,7 +447,7 @@ func chargingTests(_ t: TestHarness) async {
         t.expectEqual(f.controller.animator?.activeEffect, LogoEffect.none)
     }
 
-    await t.test("a state that can't be read leaves the last one") {
+    t.test("a state that can't be read leaves the last one") {
         let f = Fixture(direct: true, timeDriven: true)
         f.battery.isCharging = true
         f.controller.setBreathesWhileCharging(true)
