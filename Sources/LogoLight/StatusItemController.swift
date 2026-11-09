@@ -131,6 +131,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // So the play button turns back from stop as soon as a message sent once is done.
         controller.onMorseEnded = { [weak self] in self?.refresh() }
         controller.onRiseFromDark = { [weak self] in self?.showNewFrame() }
+        controller.onSoundFailed = { [weak self] in self?.soundFailed($0) }
 
         // Checked when the sudoers rule is installed. Without direct control, the first password
         // installs it, so it's only needed once.
@@ -268,7 +269,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private var panelState: PanelState {
         PanelState(status: status, requested: requestedSetting, canControlDirectly: controller.canControlDirectly,
-                   effect: controller.effect, brightness: controller.brightness,
+                   canFollowSound: controller.canFollowSound, effect: controller.effect, brightness: controller.brightness,
                    followsBattery: controller.followsBattery, isBusy: isBusy, morse: controller.morse,
                    morseLoops: morseLoops)
     }
@@ -417,6 +418,32 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func stopMorse() {
         controller.stopMorse()
         refresh()
+    }
+
+    /// The Sound effect couldn't start: the controller has dropped it, so the switch goes off and that's
+    /// saved. Without permission to hear the sound, the alert can open the right System Settings pane.
+    private func soundFailed(_ error: Error) {
+        UserDefaults.standard.set(LogoEffect.none.rawValue, forKey: Self.effectDefaultsKey)
+        refresh()
+        whenMenuClosed { [weak self] in
+            guard let self else { return }
+            guard case .cannotListen = error as? SoundError else {
+                return show(error, title: "LogoLight can't follow the sound")
+            }
+            NSApp.activate()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "LogoLight can't hear the sound"
+            alert.informativeText = "To let the logo follow the sound your Mac plays, allow LogoLight under System Audio "
+                + "Recording Only in System Settings › Privacy & Security › Screen & System Audio Recording, then turn "
+                + "Sound on again. Nothing is recorded."
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn,
+               let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     /// Has the display show a new frame, for corebrightnessd's display-ready gate: a rise from dark

@@ -69,6 +69,8 @@ final class ControlPanel: NSView {
     private let effectsHeaderContainer = NSStackView()
     private let effectsCard = Card()
     private var effectRows: [(effect: LogoEffect, tile: IconTile, label: NSTextField, toggle: LogoSwitch)] = []
+    /// The Sound effect's row and the hairline above it, hidden where the sound can't be heard.
+    private var soundRows: [NSView] = []
     private let morseHeader = NSTextField(labelWithString: "MORSE CODE")
     private let morseHeaderContainer = NSStackView()
     private let morseCard = Card()
@@ -125,6 +127,7 @@ final class ControlPanel: NSView {
             row.toggle.setOn(row.effect == state.effect, animated: animated)
             row.toggle.acceptsInput = state.canAdjust
         }
+        for view in soundRows { view.isHidden = !state.showsSound }
         morseField.isEnabled = state.canAdjust
         playButton.isActive = state.isSendingMorse
         playButton.toolTip = state.isSendingMorse ? "Stop" : "Play"
@@ -137,7 +140,7 @@ final class ControlPanel: NSView {
         messageContainer.isHidden = state.message == nil
         // Only these change the panel's height.
         if old?.isSupported != state.isSupported || old?.showsAdjustments != state.showsAdjustments
-            || old?.message != state.message {
+            || old?.showsSound != state.showsSound || old?.message != state.message {
             resizeToFit()
         }
     }
@@ -206,7 +209,8 @@ final class ControlPanel: NSView {
         messageLabel.preferredMaxLayoutWidth = Self.cardWidth - 2 * Self.textIndent
         addIndented(messageLabel, in: messageContainer)
 
-        // Effects: one switch each; at most one is on.
+        // Effects: one switch each; at most one is on. Sound (the logo follows the sound the Mac
+        // plays) is last, and only where the sound can be heard.
         effectsHeader.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1, weight: .medium)
         effectsHeader.textColor = .secondaryLabelColor
         addIndented(effectsHeader, in: effectsHeaderContainer)
@@ -221,7 +225,13 @@ final class ControlPanel: NSView {
             toggle.setAccessibilityLabel(effect.title)
             effectRows.append((effect, tile, label, toggle))
             if !rows.isEmpty { rows.append(Separator()) }
-            rows.append(row(tile: tile, label: label, toggle: toggle))
+            let row = row(tile: tile, label: label, toggle: toggle)
+            rows.append(row)
+            if effect == .sound {
+                row.toolTip = "The logo glows with the sound your Mac is playing: brighter as it gets louder, "
+                    + "peaking at your brightness. macOS asks once to let LogoLight hear it."
+                soundRows = [rows[rows.count - 2], row]
+            }
         }
         effectsCard.add(rows)
         addFullWidth(effectsCard)
@@ -395,6 +405,7 @@ final class ControlPanel: NSView {
         case .breathe: "wind"
         case .pulse: "waveform"
         case .heartbeat: "heart.fill"
+        case .sound: "music.note"
         }
     }
 
@@ -404,6 +415,7 @@ final class ControlPanel: NSView {
         case .breathe: .systemTeal
         case .pulse: .systemIndigo
         case .heartbeat: .systemPink
+        case .sound: .systemPurple
         }
     }
 
@@ -850,17 +862,18 @@ enum PanelRenderer {
     static func render(to folder: String) {
         let options = Options(ProcessInfo.processInfo.environment)
         func state(_ setting: LogoIllumination, isSupported: Bool = true, canControlDirectly: Bool = true,
-                   followsBattery: Bool = false) -> PanelState {
+                   canFollowSound: Bool = true, followsBattery: Bool = false) -> PanelState {
             let status = LogoStatus(isSupported: isSupported, setting: isSupported ? setting : nil, source: .daemon,
                                     isLit: setting == .on, outputLevel: 0.2)
-            return PanelState(status: status, canControlDirectly: canControlDirectly, effect: options.effect,
-                              brightness: options.brightness, followsBattery: followsBattery)
+            return PanelState(status: status, canControlDirectly: canControlDirectly, canFollowSound: canFollowSound,
+                              effect: options.effect, brightness: options.brightness, followsBattery: followsBattery)
         }
         let on = state(.on)
         var looping = on
         looping.morse = MorseMessage(text: "SOS", loops: true)
         looping.morseLoops = true
         let states = [("on", on), ("morse", looping), ("off", state(.off)), ("battery", state(.on, followsBattery: true)),
+                      ("nosound", state(.on, canFollowSound: false)),
                       ("fallback", state(.on, canControlDirectly: false)), ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {
             for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
