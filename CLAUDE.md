@@ -89,7 +89,8 @@ runs but says the logo isn't available. So:
 - Remote: `https://github.com/Ark0N/LogoLight` (**public** since 2026-11-07, MIT). Work on `main`
   unless asked otherwise, commit in small logical steps, and push when a piece of work is done.
   Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134; `v1.1.1` is e41948d, build 138) and published as GitHub Releases
-  with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`).
+  with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`). `v1.2.0` is e6960d1,
+  build 144.
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
   `git config user.name` and `git config user.email` if the new machine differs.
@@ -117,6 +118,11 @@ runs but says the logo isn't available. So:
   `og.jpg` still shows the 1.0 menu (cropped at Pulse); it has no script. **1.1.1 shipped the same
   day**: build 138 (commit e41948d, tag `v1.1.1`), Lit with Lid Closed back in the menu with
   "External display only" under it, notarized with no issues; the hero's HTML menu has the item.
+  **1.2.0 shipped 2026-11-09**: build 144 (commit e6960d1, tag `v1.2.0`), the Sound effect (PR #4),
+  notarized with no issues, on the site (a Sound feature tile, no change to the hero's demo, which
+  is CSS animation) and as a GitHub Release. The user tried the branch build first and asked for a
+  snappier rise and fall, which went in before the release. The menu GIFs and the site's menu
+  pictures still show the 1.1 menu without the Sound row.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
