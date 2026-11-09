@@ -8,11 +8,12 @@
 // must stop the `&&` chain, or a stale binary runs against the hardware. It also dims the
 // keyboard backlight twice, for a simulated display sleep.
 //
-//   .build/debug/LogoLightLiveTest --morse   # only the Morse code check (about 15 s)
-//   .build/debug/LogoLightLiveTest --sound   # only the Sound effect, with a stand-in for the sound (about 20 s)
-//   .build/debug/LogoLightLiveTest --hear    # only listens: prints the loudness of what the Mac plays for 8 s,
-//                                            # playing a system sound meanwhile (asks for System Audio
-//                                            # Recording Only the first time; the logo isn't touched)
+//   .build/debug/LogoLightLiveTest --morse      # only the Morse code check (about 15 s)
+//   .build/debug/LogoLightLiveTest --sound      # only the Sound effect, with a stand-in for the sound (about 20 s)
+//   .build/debug/LogoLightLiveTest --charging   # only the charging light check (about 30 s)
+//   .build/debug/LogoLightLiveTest --hear       # only listens: prints the loudness of what the Mac plays for 8 s,
+//                                               # playing a system sound meanwhile (asks for System Audio
+//                                               # Recording Only the first time; the logo isn't touched)
 //   .build/debug/LogoLightLiveTest --lid
 //
 // checks Lit with Lid Closed instead, with an external display attached. It asks aloud for the
@@ -184,6 +185,63 @@ if CommandLine.arguments.contains("--morse") {
     controller.start(brightness: 0.5, effect: .none); await wait(1.5)
     report("brightness 0.5", expected: level(0.5))
     await morseCheck()
+    controller.restoreNormalLighting(); await wait(0.8)
+    report("restoreNormalLighting", expected: 1)
+    exit(0)
+}
+
+// MARK: - Charging light (also alone, with --charging)
+
+/// Whether the battery "charges", a stand-in so it can be switched.
+var charging = false
+
+/// Prints how long each cycle of an effect took, from one rise past half of `peak` to the next, over
+/// `seconds`. Breathe's cycle is planned at 6.3 s.
+@MainActor func cycles(_ label: String, peak: Double, seconds: Double) async {
+    var rises: [Double] = []
+    var wasHigh = factor() > peak / 2
+    var lo = 2.0, hi = -1.0
+    let t0 = Date()
+    while Date().timeIntervalSince(t0) < seconds {
+        let f = factor()
+        lo = min(lo, f); hi = max(hi, f)
+        if f > peak / 2, !wasHigh { rises.append(Date().timeIntervalSince(t0)) }
+        wasHigh = f > peak / 2
+        await wait(0.005)
+    }
+    let lengths = zip(rises, rises.dropFirst()).map { String(format: "%.2f", $1 - $0) }
+    print(String(format: "%-46@ min=%.3f max=%.3f (peak ~%.3f)  cycles: %@", label as NSString, lo, hi, peak,
+                 lengths.isEmpty ? "fewer than two rises" : lengths.joined(separator: " ") + " s"))
+}
+
+/// The charging light, with a stand-in for charging, from the logo held at brightness 0.5. While it
+/// "charges", Breathe plays, from dark to the brightness, 6.3 s a cycle; choosing Heartbeat meanwhile
+/// shouldn't break its rhythm, and Heartbeat follows when charging stops.
+@MainActor func chargingCheck() async {
+    print("real battery: charging \(Battery.isCharging().map { String($0) } ?? "unknown")")
+    charging = false
+    controller = LogoController.live(isCharging: { charging })
+    controller.start(brightness: 0.5, effect: .none, breathesWhileCharging: true); await wait(1.2)
+    report("charging light on, not charging", expected: level(0.5))
+    charging = true
+    controller.batteryDidChange()
+    await cycles("charging -> breathing", peak: level(0.5), seconds: 14)
+    controller.setEffect(.heartbeat)
+    await cycles("  Heartbeat chosen: still breathing", peak: level(0.5), seconds: 8)
+    charging = false
+    controller.batteryDidChange()
+    await sample("charging stopped -> Heartbeat", seconds: 4)
+    controller.setEffect(.none); await wait(1.2)
+    report("  effect None -> back to brightness", expected: level(0.5))
+    charging = true
+    controller.batteryDidChange(); await wait(2.2)
+    await landing(to: 0.5, "Charging off while breathing -> 0.5", change: { controller.setBreathesWhileCharging(false) })
+    charging = false
+}
+
+if CommandLine.arguments.contains("--charging") {
+    controller.restoreNormalLighting(); await wait(0.6)
+    await chargingCheck()
     controller.restoreNormalLighting(); await wait(0.8)
     report("restoreNormalLighting", expected: 1)
     exit(0)
@@ -599,6 +657,8 @@ await landing(to: 0.3, "Battery off -> the slider's 0.3", change: { controller.s
 charge = 1
 await landing(to: 1, "Battery on at 100% -> normal", change: { controller.setFollowsBattery(true) })
 controller.setFollowsBattery(false); await wait(0.9)
+
+await chargingCheck()
 
 controller.setBrightness(1); await wait(0.7)
 report("brightness back to 1", expected: 1)
