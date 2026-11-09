@@ -290,6 +290,8 @@ public final class LogoController {
         pendingWake = nil
         animator?.pause()
         switchFadeTask?.cancel()
+        // Codeman, which has the logo, does the same for its own fades.
+        guard !isLent else { return }
         // So corebrightnessd's own fades (when the display sleeps and wakes) work normally,
         // instead of using a brightness hold's endless duration.
         emitter?.setFadeDuration(0)
@@ -333,9 +335,37 @@ public final class LogoController {
     /// interrupted by a crash. The chosen effect and brightness are kept. With the lid closed,
     /// normal is dark, so a logo lit by `lightsWithLidClosed` goes dark.
     public func restoreNormalLighting() {
-        // Handing it back first releases a held level, so the lid state then darkens it.
-        animator?.reset()
+        // Handing it back first releases a held level, so the lid state then darkens it. A logo lent
+        // to Codeman is left to it: Codeman returns it to normal when it's done.
+        if isLent { animator?.pause() } else { animator?.reset() }
         emitter?.endLidOverride()
+    }
+
+    // MARK: - Lending the logo
+
+    /// Whether the logo is lent to Codeman, which blinks it while its agents work (see
+    /// `CodemanLoan`). Meanwhile nothing here writes to the logo: an effect is paused, and choosing
+    /// an effect or a brightness only records it, as while the display sleeps. Switching the logo
+    /// on or off still changes the setting, without the fade; off, Codeman sees it and stops.
+    public private(set) var isLent = false
+
+    /// Lends the logo: pauses the effect and stops writing to the logo, leaving it as it is.
+    public func lend() {
+        guard !isLent else { return }
+        isLent = true
+        pendingWake?.cancel()
+        pendingWake = nil
+        animator?.pause()
+        switchFadeTask?.cancel()
+    }
+
+    /// Takes the logo back, as after a wake: the effect or brightness chosen comes back, also one
+    /// chosen meanwhile. Codeman has left the logo lit at normal brightness, heading for lit, but
+    /// that's not known here, so it's handled like any change made elsewhere.
+    public func takeBack() {
+        guard isLent else { return }
+        isLent = false
+        displayDidWake()
     }
 
     // MARK: - The lid
@@ -410,7 +440,7 @@ public final class LogoController {
         animator.select(effect)
         if isLitAndAwake, animator.level < 1 || effect != .none {
             animator.resume()
-        } else {
+        } else if !isLent {
             animator.reset()
         }
     }
@@ -449,9 +479,10 @@ public final class LogoController {
 
     // MARK: - Private
 
-    /// Whether the logo can light: the built-in display is on, or the lid is closed with the logo
-    /// told otherwise (`lightsWithLidClosed`) and an external display on.
-    private var isDisplayAwake: Bool { Self.canLight(reader: reader, emitter: emitter) }
+    /// Whether the logo can light for this app: the built-in display is on, or the lid is closed with
+    /// the logo told otherwise (`lightsWithLidClosed`) and an external display on, and the logo isn't
+    /// lent to Codeman (`isLent`). Every path that starts an effect or a fade checks this.
+    private var isDisplayAwake: Bool { !isLent && Self.canLight(reader: reader, emitter: emitter) }
 
     private static func canLight(reader: LogoStatusReader, emitter: LightEmitter?) -> Bool {
         if reader.isDisplayAwake() == true { return true }
@@ -475,6 +506,14 @@ public final class LogoController {
     /// The display can sleep or wake during a fade, so it's checked again after each one.
     private func setDirectly(_ target: LogoIllumination, emitter: LightEmitter) async throws -> SwitchOutcome {
         animator?.pause()
+        // Lent to Codeman: only the setting changes, with no fade and no other write (this app's idea
+        // of where the logo is heading is out of date). Off, Codeman sees it and stops; on, the effect
+        // comes back with the logo.
+        if isLent {
+            let applied = emitter.setSetting(target) && emitter.setting == target
+            if applied { knownSetting = target }
+            return applied ? .applied : .notApplied
+        }
         // Like the animator, hold off App Nap, so the fades stop on time.
         let activity = ProcessInfo.processInfo.beginActivity(
             options: .userInitiatedAllowingIdleSystemSleep, reason: "Switching the Apple logo on or off")
