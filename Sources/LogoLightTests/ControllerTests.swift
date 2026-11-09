@@ -391,6 +391,9 @@ final class FakeBattery {
     /// From 0 to 1, or `nil` when it can't be read.
     var charge: Double? = 1
     var reads = 0
+    /// Whether it's charging, or `nil` when that can't be read.
+    var isCharging: Bool? = false
+    var chargingReads = 0
 }
 
 @MainActor
@@ -434,6 +437,10 @@ struct Fixture {
             batteryCharge: { [battery] in
                 battery.reads += 1
                 return battery.charge
+            },
+            isCharging: { [battery] in
+                battery.chargingReads += 1
+                return battery.isCharging
             },
             soundSource: sound
         )

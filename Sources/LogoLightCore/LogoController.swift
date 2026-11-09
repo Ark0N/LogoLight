@@ -15,6 +15,7 @@ public final class LogoController {
     private let verificationTimeout: Duration
     private let sleep: LogoAnimator.Sleep
     private let readBatteryCharge: @MainActor () -> Double?
+    private let readIsCharging: @MainActor () -> Bool?
     /// The setting this process last applied, for when the hardware can't show it.
     private var lastApplied: LogoIllumination?
     /// The setting as of the last `status()` or switch, so the live view needn't read it every frame.
@@ -62,6 +63,7 @@ public final class LogoController {
         // A small tolerance: by default, sleeps can run tens of ms late, which shows in effects.
         sleep: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0), tolerance: .milliseconds(2)) },
         batteryCharge: @escaping @MainActor () -> Double? = Battery.charge,
+        isCharging: @escaping @MainActor () -> Bool? = Battery.isCharging,
         soundSource: SoundLevelSource? = nil
     ) {
         self.reader = reader
@@ -72,16 +74,18 @@ public final class LogoController {
         self.verificationTimeout = verificationTimeout
         self.sleep = sleep
         readBatteryCharge = batteryCharge
+        readIsCharging = isCharging
         animator = emitter.map { emitter in
             LogoAnimator(emitter: emitter, isDisplayAwake: { Self.canLight(reader: reader, emitter: emitter) },
                          sleep: sleep, soundSource: soundSource)
         }
     }
 
-    /// The controller for this Mac's real hardware. `batteryCharge` can stand in for the battery
-    /// (`tools/livecheck` steps it), and `soundSource` for the sound the Mac plays (by default, the
-    /// system's audio, where macOS lets it be heard).
+    /// The controller for this Mac's real hardware. `batteryCharge` and `isCharging` can stand in for
+    /// the battery (`tools/livecheck` steps them), and `soundSource` for the sound the Mac plays (by
+    /// default, the system's audio, where macOS lets it be heard).
     public static func live(batteryCharge: @escaping @MainActor () -> Double? = Battery.charge,
+                            isCharging: @escaping @MainActor () -> Bool? = Battery.isCharging,
                             soundSource: SoundLevelSource? = SystemSound.source()) -> LogoController {
         LogoController(
             reader: LogoStatusReader(),
@@ -90,6 +94,7 @@ public final class LogoController {
             sudo: SudoRunner(),
             isRuleInstalled: { PasswordlessRule.isInstalled },
             batteryCharge: batteryCharge,
+            isCharging: isCharging,
             soundSource: soundSource
         )
     }
@@ -170,12 +175,17 @@ public final class LogoController {
     public var effect: LogoEffect { animator?.effect ?? .none }
 
     /// Chooses an effect, and plays it now if the logo is on and the display is awake.
-    /// Choosing `.none` returns the logo to the chosen brightness.
+    /// Choosing `.none` returns the logo to the chosen brightness. While the logo breathes for the
+    /// battery charging (`breathesWhileCharging`), it carries on, and the new effect plays once that
+    /// stops.
     public func setEffect(_ effect: LogoEffect) {
         guard let animator else { return }
+        let wasSendingMorse = animator.morse != nil
         animator.select(effect)
         animator.stopMorse() // the effect takes over from a Morse message
         guard !isSwitching else { return }
+        // Restarting would only break the breathing's rhythm.
+        if animator.standInEffect != nil, animator.isPlaying, !wasSendingMorse { return }
         if isLitAndAwake { animator.resume() } else { animator.pause() }
     }
 
@@ -245,13 +255,20 @@ public final class LogoController {
         apply(currentBrightness)
     }
 
-    /// Call when the battery's charge may have changed. While it's followed, it's read again, and
-    /// a new charge is applied. A charge that can't be read leaves the brightness as it is.
+    /// Call when the battery's charge, or whether it's charging, may have changed. While the charge is
+    /// followed, it's read again, and a new charge is applied; a charge that can't be read leaves the
+    /// brightness as it is. With `breathesWhileCharging`, charging starting or stopping starts or stops
+    /// the breathing.
     public func batteryDidChange() {
-        guard followsBattery else { return }
-        let last = batteryCharge
-        readBattery()
-        if batteryCharge != last { apply(currentBrightness) }
+        if followsBattery {
+            let last = batteryCharge
+            readBattery()
+            if batteryCharge != last { apply(currentBrightness) }
+        }
+        if breathesWhileCharging {
+            readCharging()
+            if updateStandIn() { activeEffectDidChange() }
+        }
     }
 
     /// The brightness to show: the battery's charge while it's followed (the chosen brightness if it
@@ -263,6 +280,53 @@ public final class LogoController {
     private func readBattery() {
         if let charge = readBatteryCharge() { batteryCharge = charge }
     }
+
+    // MARK: - Charging light
+
+    /// Whether the logo breathes while the battery charges, like the old MacBook sleep light: Breathe
+    /// plays in place of the chosen effect, peaking at the brightness, until charging stops (the Mac is
+    /// unplugged, or the battery is full or held at a charge limit). The chosen effect then comes back.
+    /// It needs the logo on and the display awake, as effects do: nothing can light the logo while the
+    /// Mac sleeps.
+    public private(set) var breathesWhileCharging = false
+
+    /// Whether the battery was charging when it was last read. It's only read while
+    /// `breathesWhileCharging` is on.
+    public private(set) var isCharging = false
+
+    /// Turns the charging light on or off. If the battery is charging, the logo starts breathing, or goes
+    /// back to the chosen effect or brightness.
+    public func setBreathesWhileCharging(_ breathes: Bool) {
+        guard breathes != breathesWhileCharging else { return }
+        breathesWhileCharging = breathes
+        if breathes { readCharging() }
+        if updateStandIn() { activeEffectDidChange() }
+    }
+
+    /// A state that can't be read leaves the last one.
+    private func readCharging() {
+        if let charging = readIsCharging() { isCharging = charging }
+    }
+
+    /// Has Breathe stand in for the chosen effect while the battery charges, or clears it. Returns whether
+    /// that changed the effect that plays: not when Breathe is chosen anyway.
+    @discardableResult
+    private func updateStandIn() -> Bool {
+        guard let animator else { return false }
+        let before = animator.activeEffect
+        animator.standInEffect = breathesWhileCharging && isCharging ? .breathe : nil
+        return animator.activeEffect != before
+    }
+
+    /// Shows a new active effect at once if the logo is lit. A Morse message carries on, and the new
+    /// effect follows it; a switch under way applies it when it's done.
+    private func activeEffectDidChange() {
+        guard let animator, animator.morse == nil, !isSwitching, isLitAndAwake else { return }
+        animator.resume()
+    }
+
+    /// The effect that plays when the logo is lit: the chosen one, or Breathe while the battery charges.
+    private var activeEffect: LogoEffect { animator?.activeEffect ?? .none }
 
     /// Fades to a new brightness if the logo is lit, or keeps it for when it is. A playing effect picks
     /// it up at its next step.
@@ -325,6 +389,11 @@ public final class LogoController {
         if followsBattery {
             readBattery()
             animator?.brightness = currentBrightness
+        }
+        // Likewise the Mac may have been plugged in or unplugged.
+        if breathesWhileCharging {
+            readCharging()
+            updateStandIn()
         }
         if !isSwitching, status().setting == .on { animator?.resume() }
     }
@@ -397,9 +466,10 @@ public final class LogoController {
     /// endless fade duration. If the logo is on and a level or an effect is chosen, it goes
     /// straight there: the fades' own writes replace that duration, without first relighting to
     /// full. Otherwise it's returned to normal, which ends that duration too. With `followsBattery`,
-    /// the level is the battery's charge, and `brightness` is kept for when that's turned off.
+    /// the level is the battery's charge, and `brightness` is kept for when that's turned off. With
+    /// `breathesWhileCharging` and the battery charging, Breathe plays in place of `effect`.
     public func start(brightness: Double?, effect: LogoEffect, followsBattery: Bool = false,
-                      lightsWithLidClosed: Bool = false) {
+                      lightsWithLidClosed: Bool = false, breathesWhileCharging: Bool = false) {
         guard let animator else { return }
         self.lightsWithLidClosed = lightsWithLidClosed
         updateLidOverride()
@@ -408,7 +478,10 @@ public final class LogoController {
         if followsBattery { readBattery() }
         animator.brightness = currentBrightness
         animator.select(effect)
-        if isLitAndAwake, animator.level < 1 || effect != .none {
+        self.breathesWhileCharging = breathesWhileCharging
+        if breathesWhileCharging { readCharging() }
+        updateStandIn()
+        if isLitAndAwake, animator.level < 1 || activeEffect != .none {
             animator.resume()
         } else {
             animator.reset()
@@ -499,14 +572,14 @@ public final class LogoController {
         knownSetting = .on // so the live view shows the fade in
         if fade > 0, isDisplayAwake {
             // An effect or a Morse loop takes over from dark, starting with a rising step.
-            if effect != .none || morse != nil { return .applied }
+            if activeEffect != .none || morse != nil { return .applied }
             let level = animator?.level ?? 1
             await switchFade(to: level, over: fade, emitter: emitter)
             if isDisplayAwake {
                 // Below full it's now held at the level; at full it goes back to normal.
                 if level >= 1 { emitter.restore(displayAwake: true) }
                 // An effect or brightness chosen during the fade still needs applying.
-                return effect == .none && morse == nil && animator?.level == level ? .appliedAtLevel : .applied
+                return activeEffect == .none && morse == nil && animator?.level == level ? .appliedAtLevel : .applied
             }
         }
         emitter.restore(displayAwake: isDisplayAwake)
