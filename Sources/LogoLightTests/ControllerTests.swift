@@ -10,6 +10,8 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
     /// The built-in display: off while it sleeps and while the lid is closed.
     var displayAwake = true
     var externalDisplayAwake = false
+    /// Whether an external display is connected; `nil` goes by whether one is awake.
+    var externalDisplayConnected: Bool?
     /// When false, corebrightnessd ignores changes to the default.
     var daemonResponds = true
     /// Called when the root default changes, as corebrightnessd observes it.
@@ -82,6 +84,7 @@ final class SimulatedMac: HardwareReading, @unchecked Sendable {
 
     func isBuiltInDisplayAwake() -> Bool? { displayAwake }
     func isExternalDisplayAwake() -> Bool? { externalDisplayAwake }
+    func hasExternalDisplay() -> Bool? { externalDisplayConnected ?? externalDisplayAwake }
 }
 
 @MainActor

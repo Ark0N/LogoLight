@@ -13,6 +13,16 @@ public protocol HardwareReading: Sendable {
     func isBuiltInDisplayAwake() -> Bool?
     /// Whether any other display is on (connected and not asleep), or `nil` if unknown.
     func isExternalDisplayAwake() -> Bool?
+    /// Whether any other display is connected, awake or asleep, or `nil` if unknown.
+    func hasExternalDisplay() -> Bool?
+    /// Whether the lid is closed, as the power management root domain has it, or `nil` if unknown
+    /// (a Mac without a lid).
+    func isLidClosed() -> Bool?
+}
+
+public extension HardwareReading {
+    func hasExternalDisplay() -> Bool? { isExternalDisplayAwake() }
+    func isLidClosed() -> Bool? { nil }
 }
 
 /// Reads the logo's state. Needs no special privileges.
@@ -28,6 +38,12 @@ public struct LogoStatusReader: Sendable {
 
     /// Whether an external display is on, or `nil` if unknown.
     public func isExternalDisplayAwake() -> Bool? { hardware.isExternalDisplayAwake() }
+
+    /// Whether an external display is connected, awake or asleep, or `nil` if unknown.
+    public func hasExternalDisplay() -> Bool? { hardware.hasExternalDisplay() }
+
+    /// Whether the lid is closed, or `nil` if unknown.
+    public func isLidClosed() -> Bool? { hardware.isLidClosed() }
 
     public func read() -> LogoStatus {
         let nvram = hardware.nvramValue(forKey: LogoHardware.nvramKey)
@@ -104,9 +120,25 @@ public struct SystemHardware: HardwareReading {
 
     public func isBuiltInDisplayAwake() -> Bool? {
         guard let displays = Self.onlineDisplays() else { return nil }
-        // With the lid closed, the built-in display isn't online at all.
+        // With the lid closed and an external display, the built-in display isn't online at all.
         guard let builtIn = displays.first(where: { CGDisplayIsBuiltin($0) != 0 }) else { return false }
+        // With the lid closed, no other display, and the Mac kept awake (LogoLight does that on
+        // power for Lit with Lid Closed), the built-in display stays online and CoreGraphics doesn't
+        // call it asleep, though it's dark.
+        if isLidClosed() == true { return false }
         return CGDisplayIsAsleep(builtIn) == 0
+    }
+
+    public func hasExternalDisplay() -> Bool? {
+        Self.onlineDisplays().map { $0.contains { CGDisplayIsBuiltin($0) == 0 } }
+    }
+
+    public func isLidClosed() -> Bool? {
+        let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard root != IO_OBJECT_NULL else { return nil }
+        defer { IOObjectRelease(root) }
+        return IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? Bool
     }
 
     public func isExternalDisplayAwake() -> Bool? {

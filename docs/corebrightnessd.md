@@ -326,6 +326,18 @@ how LogoLight's Lit with Lid Closed works.
   should get the daemon's own lid state from `addDisplayContainerForBrightnessControl:` (read from
   the disassembly, not tried).
 
+- **With no external display, the same override works once the Mac is kept awake.** Measured on
+  2026-11-10 with `tools/probes/lidawake`, on power: with a `PreventSystemSleep` assertion (and, in
+  that run, an idle-sleep assertion and the root domain's `kPMSetClamshellSleepState` too) the Mac
+  stayed awake for the minute the lid was closed. The logo went dark and the keyboard followed
+  within 0.3 s; `CBClamshellState` read 1 at once. The global `ClamshellUpdate = 0` relit the logo
+  (18% duty at a factor of 1), the keyboards told `1` stayed dark, fades out and in worked, and it
+  stayed lit when left alone. `DisplayPowerStateEvent` wasn't needed. The built-in display stays
+  online meanwhile and `CGDisplayIsAsleep` says 0, so the lid itself has to be asked
+  (`AppleClamshellState` on `IOPMrootDomain`, and its `kIOPMMessageClamshellStateChange` interest
+  notification). Which of the three kept the Mac awake wasn't separated; LogoLight uses the
+  assertion alone, which goes away with the process.
+
 ## Reading the LED without corebrightnessd
 
 - I/O Registry `bklb-backlight@0` has `enabled`, `high-period` and `low-period`. The duty cycle

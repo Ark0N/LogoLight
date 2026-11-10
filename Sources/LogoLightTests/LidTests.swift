@@ -214,11 +214,41 @@ func lidTests(_ t: TestHarness) async {
         t.expect(f.daemon.lit, "the logo should be lit again, but it's at \(f.daemon.level)")
     }
 
+    await t.test("lights the logo with the lid closed and no display, while the Mac is kept awake") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.start(brightness: 0.5, effect: .none, lightsWithLidClosed: true)
+        // No external display: the Mac is awake with the lid closed only because it's kept awake.
+        f.mac.displayAwake = false
+        f.mac.externalDisplayAwake = false
+        f.mac.externalDisplayConnected = false
+        f.daemon.moveLid(closed: true)
+        await f.handleLidClosing()
+        await run(f)
+        t.expect(abs(f.daemon.level - 0.2655) < 0.01, "the logo should be lit at its brightness, but it's at \(f.daemon.level)")
+        // An effect plays there too.
+        f.controller.setEffect(.pulse)
+        await settle()
+        t.expect(f.controller.animator!.isAnimating, "the effect should play with the lid closed")
+    }
+
+    await t.test("with the option off, leaves the logo dark with the lid closed and no display") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.start(brightness: 0.5, effect: .pulse)
+        f.mac.displayAwake = false
+        f.mac.externalDisplayConnected = false
+        f.daemon.moveLid(closed: true)
+        await f.handleLidClosing()
+        await run(f)
+        t.expect(!f.controller.animator!.isAnimating, "nothing should play")
+        t.expectEqual(f.daemon.level, 0)
+    }
+
     await t.test("doesn't relight the logo while the external display sleeps") {
         let f = Fixture(direct: true, timeDriven: true)
         f.controller.start(brightness: 0.5, effect: .pulse, lightsWithLidClosed: true)
         f.closeLid()
         f.mac.externalDisplayAwake = false
+        f.mac.externalDisplayConnected = true
         await f.handleLidClosing()
         t.expect(!f.controller.animator!.isAnimating, "nothing should play while no display is on")
     }

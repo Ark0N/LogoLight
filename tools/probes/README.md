@@ -37,6 +37,7 @@ is ignored, so a held level isn't released by a lone `DisplayLogicalState=2`.
 | Tool | What it does |
 | --- | --- |
 | `lectl KEY=VALUE[@SECONDS]…` | Sets each key in turn and prints the fade factor, nits and the PWM duty every 0.1 s. Values with a `.` are sent as doubles. The workhorse. |
+| `lidawake [log]` | Keeps the Mac awake with the lid closed and no external display, and tries each way of relighting the logo there. Asks aloud for the lid to be closed. |
 | `setmode N` | Sets `LEBacklightMode` and watches the LED for 1.5 s. |
 | `sidefx` | Blanks, unblanks, then sets mode 1 and 2, printing the screen state each time. It was used to check that `DisplayLogicalState` doesn't touch the screen. |
 | `fadecurve` | Measures a 2 s fade's curve, a fade from the midpoint, and holding a level (see "Holding a level" in the notes). |

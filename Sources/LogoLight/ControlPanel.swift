@@ -1050,7 +1050,7 @@ enum PanelRenderer {
             var y = panel.frame.maxY
             y = addSeparator(at: y)
             y = addItem("Disable Password", checked: true, at: y)
-            y = addItem("Lit with Lid Closed", subtitle: "External display only", at: y)
+            y = addItem("Lit with Lid Closed", subtitle: "On power or a display", at: y)
             y = addItem("Launch at Login", checked: true, at: y)
             y = addSeparator(at: y)
             y = addItem("Quit LogoLight", at: y)

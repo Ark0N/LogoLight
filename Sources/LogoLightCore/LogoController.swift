@@ -492,7 +492,8 @@ public final class LogoController {
 
     // MARK: - The lid
 
-    /// Whether the logo stays lit while the lid is closed, with an external display attached.
+    /// Whether the logo stays lit while the lid is closed: with an external display attached, or
+    /// with none while the Mac is awake all the same (the app keeps it awake on power).
     /// corebrightnessd darkens it then, so it's told the lid is open, and the keyboard that it's
     /// closed (see `LightEmitter.overrideLid()`). Effects and the brightness carry on as with the
     /// lid open. The light sensor is covered, though, so the logo glows as in a dark room.
@@ -606,13 +607,16 @@ public final class LogoController {
     // MARK: - Private
 
     /// Whether the logo can light for this app: the built-in display is on, or the lid is closed with
-    /// the logo told otherwise (`lightsWithLidClosed`) and an external display on, and the logo isn't
-    /// lent to Codeman (`isLent`). Every path that starts an effect or a fade checks this.
+    /// the logo told otherwise (`lightsWithLidClosed`) and either an external display on or none
+    /// connected (the Mac is then awake only because something keeps it awake, as the app does on
+    /// power), and the logo isn't lent to Codeman (`isLent`). Every path that starts an effect or a
+    /// fade checks this.
     private var isDisplayAwake: Bool { !isLent && Self.canLight(reader: reader, emitter: emitter) }
 
     private static func canLight(reader: LogoStatusReader, emitter: LightEmitter?) -> Bool {
         if reader.isDisplayAwake() == true { return true }
-        return emitter?.isLidOverridden == true && reader.isExternalDisplayAwake() == true
+        guard emitter?.isLidOverridden == true else { return false }
+        return reader.isExternalDisplayAwake() == true || reader.hasExternalDisplay() == false
     }
 
     private var isLitAndAwake: Bool { isDisplayAwake && status().setting == .on }

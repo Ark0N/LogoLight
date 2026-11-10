@@ -1,5 +1,6 @@
 import AppKit
 import LogoLightCore
+import os
 import WidgetKit
 
 /// The menu bar icon and its menu, which starts with the control panel.
@@ -15,6 +16,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let panelItem = NSMenuItem()
     private let passwordlessItem = NSMenuItem()
     private let lidClosedItem = NSMenuItem()
+    private var lidObserver: LidObserver?
+    private let sleepBlocker = LidSleepBlocker()
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "LogoLight", category: "lid")
     private let launchAtLoginItem = NSMenuItem()
 
     private var status = LogoStatus.unsupported
@@ -92,6 +96,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
         controller.willPromptForPassword = { [weak self] in await self?.closeMenuForPasswordDialog() }
         observeDisplay()
+        lidObserver = LidObserver { [weak self] in self?.lidDidChange() }
         // About once a minute, and when the Mac is plugged in or unplugged. The controller only reads the
         // battery while it's followed, or while the logo breathes when it charges, and only changes the
         // logo when the percentage, or whether it's charging, has changed; the panel's slider then shows
@@ -153,14 +158,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         passwordlessItem.action = #selector(togglePasswordless)
         passwordlessItem.toolTip = "Turn the logo on and off without entering your password. Uncheck to ask for it again."
 
-        // The widest item: 158 points, and its second line 163 at most, inside the panel's 170. The
-        // second line says it needs an external display: without one, closing the lid sleeps the Mac,
-        // and the logo goes dark with it, which looked as if the option didn't work.
+        // The widest item: `NSMenu` measures the menu 160 points wide with it, inside the panel's 170.
+        // The second line says what it needs: the Mac on power (the app then keeps it awake when the
+        // lid closes) or an external display. Otherwise closing the lid sleeps the Mac, and the logo
+        // goes dark with it, which looked as if the option didn't work.
         lidClosedItem.title = "Lit with Lid Closed"
-        if #available(macOS 14.4, *) { lidClosedItem.subtitle = "External display only" }
+        if #available(macOS 14.4, *) { lidClosedItem.subtitle = "On power or a display" }
         lidClosedItem.target = self
         lidClosedItem.action = #selector(toggleLightsWithLidClosed)
-        lidClosedItem.toolTip = "Keep the logo lit when you close the lid to use an external display. The keyboard stays dark."
+        lidClosedItem.toolTip = "Keep the logo lit when you close the lid, on power or with an external display. On power, your Mac stays awake with the lid closed. The keyboard stays dark."
 
         launchAtLoginItem.title = "Launch at Login"
         launchAtLoginItem.target = self
@@ -302,6 +308,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // Only with direct control: the logo is told about the lid through corebrightnessd.
         lidClosedItem.isHidden = !status.isSupported || !controller.canLightWithLidClosed
         lidClosedItem.state = controller.lightsWithLidClosed ? .on : .off
+        updateSleepBlocker()
         launchAtLoginItem.state = isLaunchAtLoginEnabled ? .on : .off
         updateControl(state)
     }
@@ -491,7 +498,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
             observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.displayDidSleep() }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.displayDidSleep()
+                    Self.log.info("\(name.rawValue, privacy: .public)")
+                    // The screens are said to sleep when the lid closes, too. Kept awake with the lid
+                    // closed and no other display, the logo is lit again a moment later.
+                    if name == NSWorkspace.screensDidSleepNotification, self.lightsLogoBehindClosedLid {
+                        self.scheduleWake()
+                    }
+                }
             })
         }
         for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
@@ -521,6 +537,28 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             // (An effect still playing means nothing was paused: handling a wake would restart it.)
             scheduleWake()
         }
+    }
+
+    /// The lid closed or opened. Without an external display nothing else says so: the app keeps the
+    /// Mac awake (`updateSleepBlocker()`), and the built-in display stays online. It's handled as the
+    /// built-in display going away or coming back.
+    private func lidDidChange() {
+        Self.log.info("lid \(self.displayReader.isLidClosed() == true ? "closed" : "open", privacy: .public), keeping awake: \(self.sleepBlocker.isHolding)")
+        screensDidChange()
+    }
+
+    /// Whether the lid is closed with no other display, the Mac is kept awake for it, and the logo
+    /// is to be lit.
+    private var lightsLogoBehindClosedLid: Bool {
+        sleepBlocker.isHolding && displayReader.isLidClosed() == true && displayReader.hasExternalDisplay() == false
+    }
+
+    /// Keeps the Mac awake when the lid closes, while Lit with Lid Closed is on, the logo is on and
+    /// the Mac is on power: without an external display a closed lid puts it to sleep, and the logo
+    /// goes dark with it. On battery it's left to sleep.
+    private func updateSleepBlocker() {
+        sleepBlocker.set(controller.lightsWithLidClosed && controller.canLightWithLidClosed
+            && status.setting == .on && Battery.powerState()?.isPluggedIn == true)
     }
 
     /// The display or the Mac went to sleep.
