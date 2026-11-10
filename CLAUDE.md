@@ -393,6 +393,26 @@ Not yet seen: the menu item in the real menu, the app's own screen-change handli
 calls the same controller methods), the logo by eye, and whether the external display changes
 when the logo is lit this way.
 
+**Lit with Lid Closed on power, with no display** (2026-11-10, after 1.3.0; the user: "when I close
+the lid, while charging for example it still does not glow, still not working try to fix that"). The
+user closes the lid with no external display, where the Mac sleeps. `tools/probes/lidawake` (the
+user closed the lid for it) showed that kept awake, the Mac lights the logo with the same lid
+override (docs/corebrightnessd.md, "The lid"). So while the option and the logo are on and the Mac
+is plugged in, the app holds a `PreventSystemSleep` assertion (`LidSleepBlocker`, updated in
+`updateMenu`): a closed lid then doesn't sleep the Mac. That also holds off idle sleep on power
+while the option is on, which the user wasn't asked about. Unplugged, it's released (a Mac in a
+bag sleeps). `LidObserver` (the root domain's clamshell notification) tells the app the lid moved,
+since the built-in display stays online and awake to CoreGraphics; `SystemHardware` counts it as
+off while the lid is closed, and `canLight` allows a closed lid with no display connected. The
+item's second line is "On power or a display" (160 points). The app logs lid events (`log show
+--predicate 'subsystem == "app.logolight.LogoLight"'`). Codeman's own keep-awake (`keepAwake.lid`
+in its `desktop.json`) does the same job while Codeman runs. 273 tests pass; an ad-hoc build is
+installed on the MacBook and holds the assertion. **Not yet seen:** the app itself with the lid
+really closed (the probe used three ways of keeping awake at once; the app uses the assertion
+alone, so the Mac may still sleep), the lid opening again, unplugging with the lid closed, and
+whether `screensDidSleep` arrives there. Not released: the README, the site and `llms.txt` still
+say an external display is needed.
+
 **Morse code** (PR #1 from johnseth97, 2026-11-07, built on a Mac without the logo; merged
 2026-11-08): `MorseCode` (LogoLightCore) turns a message into
 `FadeStep`s with standard timing (dot 1 unit, dash 3, gaps 1/3/7, unit 0.2 s = 6 wpm), and
