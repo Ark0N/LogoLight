@@ -51,7 +51,7 @@ final class ControlPanel: NSView {
     private let stack = NSStackView()
     private let preview: LogoPreview
     private let logoTile = IconTile(symbol: "lightbulb.fill", color: .systemOrange)
-    private let logoLabel = NSTextField(labelWithString: "Backlight")
+    private let logoLabel = NSTextField(labelWithString: "LogoLight")
     private let logoSwitch = LogoSwitch()
     private let brightnessCard = Card()
     private let brightnessRow = NSView()

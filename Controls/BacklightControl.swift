@@ -21,11 +21,11 @@ struct BacklightControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: ControlLink.kind, provider: BacklightValue()) { isOn in
             ControlWidgetToggle(isOn: isOn, action: SetBacklightIntent()) {
-                Label("Backlight", systemImage: isOn ? "lightbulb.fill" : "lightbulb.slash")
+                Label("LogoLight", systemImage: isOn ? "lightbulb.fill" : "lightbulb.slash")
             }
             .tint(.blue)
         }
-        .displayName("Backlight")
+        .displayName("LogoLight")
         .description("Turns the logo on the back of the lid on or off.")
     }
 }
@@ -41,10 +41,10 @@ struct BacklightValue: ControlValueProvider {
 }
 
 struct SetBacklightIntent: SetValueIntent {
-    static let title: LocalizedStringResource = "Turn Backlight On or Off"
+    static let title: LocalizedStringResource = "Turn LogoLight On or Off"
     static let description = IntentDescription("Turns the logo on the back of the lid on or off, through LogoLight.")
 
-    @Parameter(title: "Backlight")
+    @Parameter(title: "LogoLight")
     var value: Bool
 
     init() {}
