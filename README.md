@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.1.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
   &nbsp;
   <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="56" alt="Buy me a coffee"></a>
 </p>
@@ -21,7 +21,7 @@
     <td width="360" align="center" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
-        <img src="docs/media/menu-breathe-light.gif" width="320" alt="LogoLight's whole menu with the LogoLight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery and Charging switches, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code. Under them, the menu's own items: Disable Password, checked; Lit with Lid Closed, for an external display only; Launch at Login, checked; and Quit LogoLight.">
+        <img src="docs/media/menu-breathe-light.gif" width="320" alt="LogoLight's whole menu with the LogoLight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery and Charging switches, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code. Under them, the menu's own items: Disable Password, checked; Lit with Lid Closed, on power or with a display; Launch at Login, checked; and Quit LogoLight.">
       </picture>
     </td>
     <td valign="middle">
@@ -50,7 +50,7 @@
       Turn on Sound and the logo glows with whatever your Mac is playing: brighter as it gets louder, dark between beats, peaking at your brightness. macOS asks once to let LogoLight hear it (macOS 14.2 or later); nothing is recorded.
       <br><br>
       <b>Lit with Lid Closed</b><br>
-      Using an external display with the lid closed? The logo can stay lit, with its effects, while the keyboard stays dark.
+      Close the lid and the logo stays lit, with its effects, while the keyboard stays dark: on power, where LogoLight keeps your Mac awake behind the closed lid, or with an external display. On battery with no display, the Mac sleeps as usual.
       <br><br>
       <b>Control Center</b><br>
       A LogoLight switch for Control Center or the menu bar (macOS 26 or later).
@@ -84,7 +84,7 @@
 
 ## Install
 
-1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.0.zip)**.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.1.zip)**.
    It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
@@ -136,7 +136,7 @@ LogoLight uses these to switch the logo without a password and to fade it smooth
 turning off fades out over a second first, and turning on starts from dark and fades in
 (with an effect chosen, the effect's first rise is the fade in). The effects are loops of
 the same fades. They pause when the logo is off, the display sleeps, or the built-in display
-goes away (lid closed with an external display).
+goes away (the lid closed, unless Lit with Lid Closed is on).
 
 The keyboard backlight also listens to `DisplayLogicalState`, so right after every Blank,
 LogoLight tells the keyboard alone that the display is still on, which keeps it lit. When the

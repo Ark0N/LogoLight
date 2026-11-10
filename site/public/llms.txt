@@ -5,7 +5,7 @@
 - Works only on the MacBook Pro with PROLED XDR Display, the model with the illuminated Apple logo on the back of the lid. Needs macOS 14 or later (these Macs ship with macOS 27). On other Macs it opens but says the logo isn't available.
 - Free: every feature, with no purchase or subscription. An optional Buy Me a Coffee link unlocks nothing.
 - Signed with a Developer ID and notarized by Apple. It isn't on the Mac App Store, because it uses system interfaces that Store apps aren't allowed to use, and Store apps must run in a sandbox.
-- Current version: 1.3.0, released 2026-11-10. Made by Ark0N.
+- Current version: 1.3.1, released 2026-11-10. Made by Ark0N.
 - Not affiliated with or endorsed by Apple Inc.
 
 ## Features
@@ -17,7 +17,7 @@
 - Charging light: with the Charging switch on, the logo breathes like an old Mac's sleep light while the battery charges, from the moment the Mac is plugged in, then goes back to the chosen effect. It stops when the battery is full or held at a charge limit.
 - Morse code: type a message and the logo flashes it, once or over and over.
 - Sound: the logo glows with whatever the Mac is playing, brighter as it gets louder (macOS 14.2 or later; macOS asks once to let LogoLight hear the sound, nothing is recorded).
-- Lit with Lid Closed: with an external display and the lid closed, the logo can stay lit, with its effects, while the keyboard stays dark. macOS itself turns it off then. Without an external display, closing the lid puts the Mac to sleep, and the logo goes dark with it.
+- Lit with Lid Closed: with the lid closed, the logo can stay lit, with its effects, while the keyboard stays dark. macOS itself turns it off then. It works on power, where LogoLight keeps the Mac awake behind the closed lid (and from idle sleep while the option is on), or with an external display. On battery with no external display, closing the lid puts the Mac to sleep as usual, and the logo goes dark with it.
 - Live view: the menu shows the lid as it is right now, in the Mac's own finish (space black or silver), read from the hardware while the menu is open.
 - Control Center: a LogoLight switch for Control Center or the menu bar (macOS 26 or later). Control Center offers apps no sliders, so brightness stays in the menu.
 - Launch at Login, remembering the brightness and effect.

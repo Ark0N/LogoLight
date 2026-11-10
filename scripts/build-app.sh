@@ -5,7 +5,7 @@
 #   scripts/build-app.sh
 #
 # Environment overrides:
-#   VERSION          marketing version (default: 1.3.0)
+#   VERSION          marketing version (default: 1.3.1)
 #   BUILD_NUMBER     build number      (default: number of git commits)
 #   BUNDLE_ID        bundle identifier (default: app.logolight.LogoLight)
 #   SIGN_IDENTITY    codesign identity (default: "-", ad-hoc)
@@ -13,7 +13,7 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-1.3.0}"
+VERSION="${VERSION:-1.3.1}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 BUNDLE_ID="${BUNDLE_ID:-app.logolight.LogoLight}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
