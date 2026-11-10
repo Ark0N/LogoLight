@@ -8,6 +8,8 @@ public protocol LightEmitterService: AnyObject {
     func setValue(_ value: NSNumber, forKey key: String) -> Bool
     /// Sends a key to the keyboard backlights only.
     func setKeyboardValue(_ value: NSNumber, forKey key: String)
+    /// Sends a key to the displays' own modules only (brightness and True Tone), not the logo.
+    func setDisplaysValue(_ value: NSNumber, forKey key: String)
 }
 
 /// Talks to `corebrightnessd` through CoreBrightness's `BrightnessSystemClient`.
@@ -19,14 +21,17 @@ public final class CoreBrightnessService: LightEmitterService {
     private typealias CopyFunction = @convention(c) (AnyObject, Selector, NSString) -> Unmanaged<AnyObject>?
     private typealias SetFunction = @convention(c) (AnyObject, Selector, AnyObject, NSString) -> Bool
     private typealias SetForKeyboardFunction = @convention(c) (AnyObject, Selector, AnyObject, NSString, UInt64) -> Bool
+    private typealias SetForDisplayFunction = @convention(c) (AnyObject, Selector, AnyObject, NSString, UInt64) -> Bool
 
     private let client: NSObject
     private let copySelector = NSSelectorFromString("copyPropertyForKey:")
     private let setSelector = NSSelectorFromString("setProperty:forKey:")
     private let keyboardSetSelector = NSSelectorFromString("setProperty:withKey:keyboardID:")
+    private let displaySetSelector = NSSelectorFromString("setProperty:withKey:andDisplay:")
     private let copyFunction: CopyFunction
     private let setFunction: SetFunction
     private let setForKeyboardFunction: SetForKeyboardFunction?
+    private let setForDisplayFunction: SetForDisplayFunction?
     private let keyboardIDs: [UInt64]
 
     public init?() {
@@ -40,6 +45,9 @@ public final class CoreBrightnessService: LightEmitterService {
         setFunction = unsafeBitCast(client.method(for: setSelector), to: SetFunction.self)
         setForKeyboardFunction = type.instancesRespond(to: keyboardSetSelector)
             ? unsafeBitCast(client.method(for: keyboardSetSelector), to: SetForKeyboardFunction.self)
+            : nil
+        setForDisplayFunction = type.instancesRespond(to: displaySetSelector)
+            ? unsafeBitCast(client.method(for: displaySetSelector), to: SetForDisplayFunction.self)
             : nil
         keyboardIDs = Self.copyKeyboardIDs()
     }
@@ -66,6 +74,19 @@ public final class CoreBrightnessService: LightEmitterService {
         guard let setForKeyboardFunction else { return }
         for id in keyboardIDs {
             _ = setForKeyboardFunction(client, keyboardSetSelector, value, key as NSString, id)
+        }
+    }
+
+    /// The displays corebrightnessd has a container for (`CBDisplayList`), read each time since
+    /// displays come and go. The IDs are the CoreGraphics display IDs. A display's container passes
+    /// a key to its own modules, which include its colour module (True Tone), but not the logo's.
+    public func setDisplaysValue(_ value: NSNumber, forKey key: String) {
+        guard let setForDisplayFunction,
+              let list = self.value(forKey: "CBDisplayList") as? [String: Any],
+              let ids = list["CBDisplayDeviceIDs"] as? [NSNumber]
+        else { return }
+        for id in ids {
+            _ = setForDisplayFunction(client, displaySetSelector, value, key as NSString, id.uint64Value)
         }
     }
 }
@@ -213,9 +234,15 @@ public final class LightEmitter {
     /// state only when the lid opens or closes, so this lasts until then (see docs/corebrightnessd.md,
     /// "The lid"). Call it once the daemon has handled the lid closing (`isLidClosed`), or its own
     /// update would come after this one.
+    ///
+    /// The displays are told the lid is closed again too. Otherwise True Tone, told the lid is open,
+    /// adapts external displays to the covered light sensor: on a Mac with two external displays it
+    /// tinted both warm and dim (a colour matrix of 0.91/0.85/0.71). Told it's closed, they went back
+    /// to neutral and the logo stayed lit.
     public func overrideLid() {
         _ = service.setValue(NSNumber(value: false), forKey: Key.clamshell)
         service.setKeyboardValue(NSNumber(value: true), forKey: Key.clamshell)
+        service.setDisplaysValue(NSNumber(value: true), forKey: Key.clamshell)
         lidOverride = true
     }
 

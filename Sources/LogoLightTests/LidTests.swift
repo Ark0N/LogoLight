@@ -50,10 +50,12 @@ func lidTests(_ t: TestHarness) async {
         f.daemon.log.removeAll()
         await f.handleLidClosing()
         await run(f)
-        // The logo is told the lid is open, then the keyboard alone that it's closed.
-        t.expectEqual(Array(f.daemon.log.prefix(3)), ["fade=0.0", "ClamshellUpdate=0", "keyboard ClamshellUpdate=1"])
+        // The logo is told the lid is open, then the keyboard and the displays alone that it's closed.
+        t.expectEqual(Array(f.daemon.log.prefix(4)),
+                      ["fade=0.0", "ClamshellUpdate=0", "keyboard ClamshellUpdate=1", "displays ClamshellUpdate=1"])
         t.expect(f.daemon.lit, "the logo should be lit, but it's at \(f.daemon.level)")
         t.expect(!f.daemon.isKeyboardLit, "the keyboard should stay dark")
+        t.expect(f.daemon.displaysToldLidClosed, "the displays (True Tone) should still be told the lid is closed")
     }
 
     await t.test("holds the chosen brightness with the lid closed") {

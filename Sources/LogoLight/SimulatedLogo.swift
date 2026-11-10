@@ -66,6 +66,8 @@ final class SimulatedEmitterService: LightEmitterService {
     func setKeyboardValue(_ value: NSNumber, forKey key: String) {
         if key == "DisplayLogicalState" { lastStateSent = value.intValue }
     }
+
+    func setDisplaysValue(_ value: NSNumber, forKey key: String) {}
 }
 
 /// What the status reader sees with the simulated logo: a logo that's there, on or off as the simulated

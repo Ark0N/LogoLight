@@ -307,9 +307,24 @@ how LogoLight's Lit with Lid Closed works.
   same minute without it. A fall to dark isn't gated.
 - Below the daemon, `bklb-backlight@0` is a PWM device on its own controller
   (`AppleARMPWMDevice` on `pwm1@5044000`), outside the display pipeline, with no lid property.
-- **Not checked:** whether telling the display containers and the colour module (True Tone) that
-  the lid is open, while it's closed, changes anything on an external display, or the built-in
-  display's brightness when the lid opens again.
+- **Telling every module the lid is open tints external displays.** Measured on 2026-11-09 on a
+  Mac17,13 (macOS 27.2) with two third-party external displays and the lid closed: after the
+  global `ClamshellUpdate = 0`, both displays' colour modules had `ColorAdaptationActive = 1`
+  (True Tone, adapting to the covered light sensor) and a `ColorRampTarget` diagonal of
+  0.91 / 0.85 / 0.71, which looks warm and dim. Read per display with
+  `copyPropertyForKey:andDisplay:` (keys `ColorAdaptationActive`, `ColorRamp`).
+- **A display alone can be told the lid is closed again.** `setProperty:withKey:andDisplay:` (the
+  display ID is the CoreGraphics one, as listed in `CBDisplayList` → `CBDisplayDeviceIDs`) goes
+  to `-[BLControl setProperty:forKey:andHandle:error:]`, which passes the key to the display
+  container whose `displayID` matches; the container passes it to its own modules, and
+  `-[CBColorModule clamshellStatePropertyHandler:]` calls `updateClamshellState:`. Writing
+  `ClamshellUpdate = 1` to both displays turned True Tone off on them (diagonal 1 / 1 / 1) within
+  3 s, and the logo stayed at `Factor` 1: its module isn't in a display container. Lit with Lid
+  Closed does this after its global write (`LightEmitter.overrideLid()`).
+- **Not checked:** the built-in display's brightness when the lid opens again, and an Apple
+  display with its own light sensor (Studio Display). A display attached during the override
+  should get the daemon's own lid state from `addDisplayContainerForBrightnessControl:` (read from
+  the disassembly, not tried).
 
 ## Reading the LED without corebrightnessd
 
