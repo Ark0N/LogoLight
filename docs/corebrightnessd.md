@@ -337,6 +337,10 @@ how LogoLight's Lit with Lid Closed works.
   (`AppleClamshellState` on `IOPMrootDomain`, and its `kIOPMMessageClamshellStateChange` interest
   notification). Which of the three kept the Mac awake wasn't separated; LogoLight uses the
   assertion alone, which goes away with the process.
+- **A client's `DisplayPowerStateEvent = 4` (DidSleep) darkens the logo until a DidWake.** The
+  probe wrote it at its end, and the logo stayed dark with the lid open (`Factor` 0, with
+  `DisplayLogicalState` 2, `CBClamshellState` 0 and `ClamshellUpdate = 0` written again) until
+  `DisplayPowerStateEvent = 2` was written, which lit it within 3 s. LogoLight never writes this key.
 
 ## Reading the LED without corebrightnessd
 

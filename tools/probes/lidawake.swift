@@ -254,7 +254,10 @@ attempt("G slow fade out (1.5 s)", 3) { set("LEPWMFactorFadeDuration", NSNumber(
 attempt("G2 slow fade in (1.5 s)", 4) { set("DisplayLogicalState", NSNumber(value: 2)) }
 attempt("H left alone for 10 s: does it stay lit, does the Mac stay awake", 10) { set("LEPWMFactorFadeDuration", NSNumber(value: 0)) }
 say("== Putting things back")
-set("DisplayPowerStateEvent", NSNumber(value: 4))
+// The display's power state is left at DidWake, as attempts D and F wrote it. The first run wrote
+// DidSleep (4) here to "put it back": the logo then stayed dark with the lid open, whatever else was
+// written, until DisplayPowerStateEvent = 2 was written again. Kept awake with the lid closed, the
+// display never sleeps as far as the daemon goes, so no wake follows to undo it.
 restoreNormal()
 say("after: " + describe(sample()) + "  " + builtInState())
 say("")
