@@ -134,6 +134,13 @@ runs but says the logo isn't available. So:
   colours (`page` in `make-media.swift`). The site's pictures are cached for a day under their names (`_headers`),
   so redrawn ones get a new name: `menu-*-120.png` and `og-120.jpg` (the banner at 1200 × 630,
   `sips -z 630 1200 docs/banner.jpg`). The user saw the old pictures until that was done.
+  On a phone the hero's scene was taller than the screen (626 points at 1.25 px each), so Safari's
+  floating toolbar covered the menu's last items, and the menu sat right of centre (2026-11-10, the
+  user: "on the website this is fucked up"). In one column (≤ 959 px) the scene is now only the corner
+  around the menu, 237 × 650 points, with `--pt` taken from the small viewport's height (`100svh`,
+  less 155 px for the header and the toolbar), so it's seen whole; the pause button sits under the
+  menu. Checked in Chromium at phone sizes, not yet on the user's iPhone. A taller panel (the
+  Charging row's 487 points) needs both heights raised by the difference, and the 155 px checked.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the

@@ -530,10 +530,31 @@ strong {
   }
 }
 
-/* One column: a narrower corner, so the menu fills it. */
+/* One column: only the corner around the menu, small enough to be seen whole on a phone. The menu bar's items put
+   the menu's left edge 202-204 points from the screen's right edge (the clock's width varies a little with the
+   size), and the menu is 170 wide, so a corner 237 points wide leaves about as much wallpaper on its left as on its
+   right. The height leaves room for the sticky header (53 pixels) and a phone browser's toolbar (iOS Safari's floats
+   over the page's last 82 or so), with a little to spare. The screen is taller than beside the copy, so the pause
+   button sits under the menu, not over its corner. */
 @media (max-width: 959px) {
   .scene {
-    max-width: 440px;
+    --pt: clamp(0.85px, min((100svh - 155px) / 650, (100vw - 32px) / 237), 1.25px);
+    max-width: calc(var(--pt) * 237);
+  }
+
+  .scene .screen {
+    height: calc(var(--pt) * 650);
+  }
+
+  .screen-frame .pause {
+    right: calc(var(--pt) * 12);
+    bottom: calc(var(--pt) * 12);
+  }
+}
+
+@media (min-width: 600px) and (max-width: 959px) {
+  .scene {
+    --pt: clamp(0.85px, min((100svh - 155px) / 650, (100vw - 32px) / 237), 1.45px);
   }
 }
 
