@@ -16,7 +16,7 @@
 //
 // It writes:
 // - docs/media/<clip>.gif, the lid alone on the website's #0e1014 (20 fps, lid 348 px wide);
-// - docs/media/menu-breathe-light.gif and menu-breathe-dark.gif, the whole menu (680 × 2328, scale 4): the panel
+// - docs/media/menu-breathe-light.gif and menu-breathe-dark.gif, the whole menu (680 × 2476, scale 4): the panel
 //   with Breathe on, the slider at the top and the live view breathing, and the menu's own items under it, in
 //   the menu's rounded shape with clear corners (a GIF's pixels are clear or not, so the corners' edge pixels are
 //   blended onto GitHub's page colour, white or #0d1117), light and dark for a <picture> that follows

@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="docs/banner.jpg" width="100%" alt="LogoLight: Control your glowing Apple logo. Turn it off, dim it, let it breathe or beat like a heart, or glow with your music. Right from the menu bar. Free, open source, for the MacBook Pro with PROLED XDR Display. Beside the text, LogoLight's live view shows a large lid with the Apple logo glowing, next to its menu with Backlight and Breathe switched on.">
+  <img src="docs/banner.jpg" width="100%" alt="LogoLight: Control your glowing Apple logo. Turn it off, dim it, let it breathe or beat like a heart, or glow with your music. Right from the menu bar. Free, open source, for the MacBook Pro with PROLED XDR Display. Beside the text, LogoLight's live view shows a large lid with the Apple logo glowing, next to its menu with the LogoLight switch and Breathe switched on.">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.2.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
   &nbsp;
   <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="56" alt="Buy me a coffee"></a>
 </p>
@@ -21,11 +21,11 @@
     <td width="360" align="center" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/media/menu-breathe-dark.gif">
-        <img src="docs/media/menu-breathe-light.gif" width="320" alt="LogoLight's whole menu with the Backlight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery switch, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code. Under them, the menu's own items: Disable Password, checked; Lit with Lid Closed, for an external display only; Launch at Login, checked; and Quit LogoLight.">
+        <img src="docs/media/menu-breathe-light.gif" width="320" alt="LogoLight's whole menu with the LogoLight switch on and Breathe switched on: the live view of the lid shows the Apple logo slowly glowing, fading out and glowing again, above the brightness slider, the Battery and Charging switches, the effect switches (Breathe, Pulse, Heartbeat and Sound) and Morse code. Under them, the menu's own items: Disable Password, checked; Lit with Lid Closed, for an external display only; Launch at Login, checked; and Quit LogoLight.">
       </picture>
     </td>
     <td valign="middle">
-      <b>Backlight switch</b><br>
+      <b>LogoLight switch</b><br>
       At the top of the menu, or Option-click the menu bar icon. The logo fades out and back in smoothly, with no password.
       <br><br>
       <b>Live view</b><br>
@@ -53,7 +53,7 @@
       Using an external display with the lid closed? The logo can stay lit, with its effects, while the keyboard stays dark.
       <br><br>
       <b>Control Center</b><br>
-      A Backlight control for Control Center or the menu bar (macOS 26 or later).
+      A LogoLight switch for Control Center or the menu bar (macOS 26 or later).
       <br><br>
       <b>A password once, at most</b><br>
       Usually none at all. Where macOS asks, <a href="#fallback-the-documented-command">Disable Password</a> makes it the only time.
@@ -76,7 +76,7 @@
   </tr>
   <tr>
     <td align="center"><img src="docs/media/heartbeat.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo beats twice, then rests (Heartbeat)."><br><b>Heartbeat</b></td>
-    <td align="center"><img src="docs/media/on-off.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo fades out, stays dark, then fades back in (the Backlight switch)."><br><b>On and off</b></td>
+    <td align="center"><img src="docs/media/on-off.gif" width="330" alt="LogoLight's live view of the lid: the Apple logo fades out, stays dark, then fades back in (the LogoLight switch)."><br><b>On and off</b></td>
   </tr>
 </table>
 
@@ -84,7 +84,7 @@
 
 ## Install
 
-1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.2.0.zip)**.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.0.zip)**.
    It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
@@ -95,10 +95,10 @@ On other Macs, LogoLight opens but says the logo isn't available.
 
 1. Click Control Center in the menu bar, then **Edit Controls** at the bottom.
 2. Search for **LogoLight**.
-3. Drag **Backlight** into Control Center, or straight into the menu bar.
+3. Drag **LogoLight** into Control Center, or straight into the menu bar.
 
 <p align="center">
-  <img src="docs/control-center.png" width="720" alt="Control Center with LogoLight's Backlight button at the top left. An arrow points to it: one tap turns the glowing logo on your lid on or off, shown as the lid lit and dark. A second arrow points to Edit Controls, with the steps to add it: open Control Center, click Edit Controls, search for LogoLight, drag Backlight in.">
+  <img src="docs/control-center.png" width="720" alt="Control Center with LogoLight's button at the top left. An arrow points to it: one tap turns the glowing logo on your lid on or off, shown as the lid lit and dark. A second arrow points to Edit Controls, with the steps to add it: open Control Center, click Edit Controls, search for LogoLight, drag LogoLight in.">
 </p>
 
 <sub>Apple only lets apps add switches and buttons to Control Center, so the brightness slider stays in LogoLight's own menu.</sub>

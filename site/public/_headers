@@ -11,7 +11,7 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 # Pictures and icons are kept for a day, so a visit doesn't check each one again. A picture replaced under the
-# same name can show for up to a day afterwards, so a redrawn picture gets a new name (menu-on-light-120.png for 1.2.0). The pages and style.css are checked on every visit (the default),
+# same name can show for up to a day afterwards, so a redrawn picture gets a new name (menu-on-light-130.png for 1.3.0). The pages and style.css are checked on every visit (the default),
 # so a new page never meets an old stylesheet.
 /images/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
@@ -25,7 +25,7 @@
 /apple-touch-icon.png
   Cache-Control: public, max-age=86400
 
-/og-120.jpg
+/og-130.jpg
   Cache-Control: public, max-age=86400
 
 # The notarized build (make dist). Always download it rather than open it in the browser.

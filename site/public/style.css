@@ -522,7 +522,7 @@ strong {
   /* The panel's height in points (the menu pictures are 170 points wide and this tall). The screen's height
      and the place of the light over the lid follow from it, so it's the one number to change when a row is
      added to the panel. */
-  --panel-height: 450;
+  --panel-height: 487;
   justify-self: center;
   width: 100%;
   max-width: 600px;
@@ -1253,6 +1253,7 @@ strong {
 .tile-pink { background: #e5335c; }
 .tile-purple { background: #a550d6; }
 .tile-green { background: #26a04f; }
+.tile-yellow { background: #d99a00; }
 
 /* Cards */
 
