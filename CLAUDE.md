@@ -417,6 +417,24 @@ the alert covers, or deliver silence, which would just leave the logo dark), the
 real music, the Sound row in the real menu, and the cost of the 33 Hz polling on battery. The
 panel renders show the row fits (no truncated label).
 
+**Lending the logo to Codeman** (2026-11-09, asked for by the user, who also makes Codeman): Codeman's
+Mac app blinks the logo with what its AI agents are doing, through the same `DisplayLogicalState`
+fades, and declined to while a process named LogoLight ran, so the two never fought. Now LogoLight
+steps aside instead: `CodemanLoan` (the contract, also kept in Codeman's
+`packages/desktop/src/logo.rs`) reads `~/Library/Application Support/Codeman/logo-fade`, which holds
+the blinker's process ID while it moves the logo; `LoanWatcher` looks every second and calls
+`LogoController.lend()` / `takeBack()`, taking it back only after the logo has been free for 1.5 s,
+since Codeman puts the logo back to normal for a moment between blinks. While lent, `isDisplayAwake`
+reads false, so every path that starts an effect or a fade only records the choice; a sleep, a wake,
+a launch and a quit write nothing; switching the logo off changes only the setting, with no fade,
+and Codeman stops when it sees that. `LogoLightStepsAsideForCodeman` (an integer, 1) in
+`Resources/Info.plist` is how Codeman tells this LogoLight from an older one, which it still leaves
+the logo to. Codeman waits longer than the watcher's interval after writing the file before it
+first moves the logo. Tests: `LoanTests.swift` (244 passed on the Mac mini; four of them fail when
+lending doesn't pause or gate the writes). **Not checked on the MacBook**: no `tools/livecheck` run,
+and the handover with a real Codeman needs the Codeman side, which isn't released yet. Not decided:
+whether the menu should say that Codeman has the logo (the live view already shows its blinking).
+
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
   been seen drawn offscreen, and `liveGlow` was checked through `tools/livecheck`.

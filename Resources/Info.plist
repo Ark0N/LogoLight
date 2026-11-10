@@ -28,6 +28,8 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>LogoLightStepsAsideForCodeman</key>
+	<integer>1</integer>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>With the Sound effect on, LogoLight listens to the sound your Mac plays so the Apple logo can glow with it. Nothing is recorded or kept.</string>
 	<key>NSHumanReadableCopyright</key>

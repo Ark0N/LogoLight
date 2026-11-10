@@ -52,6 +52,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var controlState: ControlLink.State?
     /// Tells the controller when the battery may have changed, for the battery indicator.
     private var batteryObserver: BatteryObserver?
+    /// Lends the logo to Codeman while it blinks it, and takes it back after (see `CodemanLoan`).
+    private let loanWatcher: LoanWatcher
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
@@ -69,6 +71,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     init(controller: LogoController) {
         self.controller = controller
+        loanWatcher = LoanWatcher(controller: controller)
         super.init()
         buildMenu()
 
@@ -78,6 +81,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let brightness = defaults.object(forKey: Self.brightnessDefaultsKey) != nil
             ? defaults.double(forKey: Self.brightnessDefaultsKey) : nil
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
+        // Codeman may be blinking the logo already: then it's left to Codeman until it's done.
+        loanWatcher.check()
         controller.start(brightness: brightness, effect: effect ?? .none,
                          followsBattery: defaults.bool(forKey: Self.followsBatteryDefaultsKey),
                          lightsWithLidClosed: defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey),
@@ -106,6 +111,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         readMenuSettings()
         refresh()
         scheduleRefresh(every: 10)
+        loanWatcher.onChange = { [weak self] in self?.refresh() }
+        loanWatcher.start()
 
         // (A debug build run from .build has no bundle ID, and no control.)
         if let bundleID = Bundle.main.bundleIdentifier {

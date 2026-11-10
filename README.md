@@ -60,6 +60,9 @@
       <br><br>
       <b>Launch at Login</b><br>
       Nothing to set up: it remembers your brightness and effect.
+      <br><br>
+      <b>Steps aside for Codeman</b><br>
+      <a href="https://getcodeman.com">Codeman</a>'s Mac app can show what your AI coding agents are doing on the logo. While it does, LogoLight pauses, and picks up where it left off when Codeman is done.
     </td>
   </tr>
 </table>
@@ -171,6 +174,19 @@ name. A tap asks the app to flip its switch, as Option-click does; if LogoLight 
 opened in the background first. The app reloads the control whenever its switch changes. (Apple
 only lets apps add switches and buttons to Control Center, so there's no brightness slider
 there.)
+
+#### Sharing the logo with Codeman
+
+Codeman's Mac app blinks the logo while its agents work, through the same fades, so the two apps
+would fight over every one. Right before it first moves the logo, Codeman's blinker writes its
+process ID to `~/Library/Application Support/Codeman/logo-fade`, and it removes the file once the
+logo is back to normal. LogoLight looks every second (`LoanWatcher`): while that file names a running
+`codeman-desktop` process, it pauses its effect and writes nothing to the logo; a brightness or an
+effect chosen meanwhile is kept. Once the file has been gone for 1.5 s (Codeman puts the logo back
+for a moment between one blink and the next), LogoLight takes the logo back as it does after a wake.
+A Codeman that was killed leaves the file behind, but its process is gone, so that doesn't count.
+The `LogoLightStepsAsideForCodeman` key in the app's Info.plist is how Codeman knows this LogoLight
+steps aside: with an older LogoLight running, Codeman leaves the logo to it.
 
 #### Reading the state
 
