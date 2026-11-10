@@ -519,6 +519,10 @@ strong {
 
 .scene {
   --pt: 1.25px;
+  /* The panel's height in points (the menu pictures are 170 points wide and this tall). The screen's height
+     and the place of the light over the lid follow from it, so it's the one number to change when a row is
+     added to the panel. */
+  --panel-height: 450;
   justify-self: center;
   width: 100%;
   max-width: 600px;
@@ -538,12 +542,12 @@ strong {
    button sits under the menu, not over its corner. */
 @media (max-width: 959px) {
   .scene {
-    --pt: clamp(0.85px, min((100svh - 155px) / 650, (100vw - 32px) / 237), 1.25px);
+    --pt: clamp(0.85px, min((100svh - 155px) / (var(--panel-height) + 200), (100vw - 32px) / 237), 1.25px);
     max-width: calc(var(--pt) * 237);
   }
 
   .scene .screen {
-    height: calc(var(--pt) * 650);
+    height: calc(var(--pt) * (var(--panel-height) + 200));
   }
 
   .screen-frame .pause {
@@ -554,7 +558,7 @@ strong {
 
 @media (min-width: 600px) and (max-width: 959px) {
   .scene {
-    --pt: clamp(0.85px, min((100svh - 155px) / 650, (100vw - 32px) / 237), 1.45px);
+    --pt: clamp(0.85px, min((100svh - 155px) / (var(--panel-height) + 200), (100vw - 32px) / 237), 1.45px);
   }
 }
 
@@ -568,11 +572,11 @@ strong {
   position: relative;
 }
 
-/* Tall enough for the menu bar and the whole menu below it: the panel is 450 points tall, and Lit with
-   Lid Closed has a second line. */
+/* Tall enough for the menu bar and the whole menu below it: the panel, and 176 points for the menu bar, the
+   menu's own items (Lit with Lid Closed has a second line) and the space under them. */
 .screen {
   position: relative;
-  height: calc(var(--pt) * 626);
+  height: calc(var(--pt) * (var(--panel-height) + 176));
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--wallpaper);
@@ -668,12 +672,14 @@ strong {
   height: auto;
 }
 
-/* The lid inside the panel: 116 × 82 points at (27, 50), in a panel 170 × 413 points. The renderer prints
-   these (LOGOLIGHT_RENDER_GLOWS); update them with the panel pictures. */
+/* The lid inside the panel: 116 × 82 points at (27, 50), in a panel 170 points wide and --panel-height tall.
+   The renderer prints these (LOGOLIGHT_RENDER_GLOWS). The lid's place from the top is in points, so it's the
+   panel's height that turns it into a percentage: with the height of an older, shorter panel here, the light
+   sat below the logo it belongs to. */
 .menu-panel .glow {
-  inset: 12.1065% auto auto 15.8824%;
-  width: 68.2353%;
-  height: 19.8547%;
+  inset: calc(50 / var(--panel-height) * 100%) auto auto calc(27 / 170 * 100%);
+  width: calc(116 / 170 * 100%);
+  height: calc(82 / var(--panel-height) * 100%);
 }
 
 .menu-sep {

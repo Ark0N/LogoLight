@@ -139,8 +139,13 @@ runs but says the logo isn't available. So:
   user: "on the website this is fucked up"). In one column (≤ 959 px) the scene is now only the corner
   around the menu, 237 × 650 points, with `--pt` taken from the small viewport's height (`100svh`,
   less 155 px for the header and the toolbar), so it's seen whole; the pause button sits under the
-  menu. Checked in Chromium at phone sizes, not yet on the user's iPhone. A taller panel (the
-  Charging row's 487 points) needs both heights raised by the difference, and the 155 px checked.
+  menu. Checked in Chromium at phone sizes, not yet on the user's iPhone. The scene's heights and
+  the place of the light over the hero's lid come from `--panel-height` (450) in `style.css`: a
+  taller panel (the Charging row's 487 points) needs that one number changed, and the 155 px
+  checked. The light was still placed for the 413-point panel after the Sound row made it 450, so
+  it sat 3.7 points below the logo (the user: "the lighted mac logo moves down"). **Fetch before
+  deploying**: a deploy from a checkout behind `origin/main` put an older `style.css` live for a
+  few minutes (2026-11-10).
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
