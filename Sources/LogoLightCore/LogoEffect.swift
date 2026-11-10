@@ -82,6 +82,12 @@ public final class LogoAnimator {
 
     /// The chosen effect. It keeps its value while paused (e.g. the logo is off or the display sleeps).
     public private(set) var effect: LogoEffect = .none
+    /// An effect that plays in place of the chosen one while it's set: Breathe while the battery charges
+    /// (`LogoController.breathesWhileCharging`). The chosen effect keeps its value, and comes back when
+    /// this is cleared. Setting it starts nothing: the next `resume()` plays it.
+    public var standInEffect: LogoEffect?
+    /// The effect `resume()` plays: the stand-in while there is one, otherwise the chosen effect.
+    public var activeEffect: LogoEffect { standInEffect ?? effect }
     /// The Morse message being sent, if any. While it's set it takes the place of the effect, which
     /// keeps its value and comes back when the message is done or stopped.
     public private(set) var morse: MorseMessage?
@@ -138,10 +144,11 @@ public final class LogoAnimator {
         self.effect = effect
     }
 
-    /// Starts (or restarts) the chosen effect, or with no effect, fades to the chosen brightness.
-    /// An effect starts with the step that leads away from where the logo is: a rise when it's
-    /// dark (e.g. just turned on), a fall when it's lit (e.g. relit by a wake).
+    /// Starts (or restarts) the active effect (the chosen one, or its stand-in), or with no effect, fades
+    /// to the chosen brightness. An effect starts with the step that leads away from where the logo is:
+    /// a rise when it's dark (e.g. just turned on), a fall when it's lit (e.g. relit by a wake).
     public func resume() {
+        let effect = activeEffect
         // The sound source is kept listening when the Sound effect carries on, e.g. after a wake.
         cancel(keepingSound: morse == nil && effect == .sound)
         if let morse {

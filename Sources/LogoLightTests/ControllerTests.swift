@@ -402,6 +402,35 @@ final class FakeBattery {
     /// From 0 to 1, or `nil` when it can't be read.
     var charge: Double? = 1
     var reads = 0
+    /// Whether it's charging, or `nil` when that (and whether it's plugged in) can't be read.
+    var isCharging: Bool? = false
+    /// Whether the Mac is plugged in. `nil` means exactly while it's charging.
+    var isPluggedIn: Bool?
+    /// How many times the charging light read the power.
+    var chargingReads = 0
+}
+
+/// Holds the controller's waits that aren't animation (for charging to start after a plug-in) until
+/// `fire()`, so they neither return at once nor move the fake clock, as `FakeClock`'s sleeps do.
+@MainActor
+final class FakeTimer {
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    /// The length of every wait asked for.
+    private(set) var requested: [Double] = []
+    var pending: Int { waiting.count }
+
+    func sleep(_ seconds: Double) async throws {
+        requested.append(seconds)
+        await withCheckedContinuation { waiting.append($0) }
+        try Task.checkCancellation()
+    }
+
+    /// Ends every wait. A cancelled one then throws, as `Task.sleep` does.
+    func fire() {
+        let ending = waiting
+        waiting = []
+        for wait in ending { wait.resume() }
+    }
 }
 
 @MainActor
@@ -413,6 +442,7 @@ struct Fixture {
     let clock: FakeClock
     let battery = FakeBattery()
     let sound = FakeSound()
+    let timer = FakeTimer()
     let controller: LogoController
 
     /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
@@ -446,6 +476,13 @@ struct Fixture {
                 battery.reads += 1
                 return battery.charge
             },
+            powerState: { [battery] in
+                battery.chargingReads += 1
+                guard let charging = battery.isCharging else { return nil }
+                return Battery.PowerState(isPluggedIn: battery.isPluggedIn ?? charging, isCharging: charging,
+                                          isFull: (battery.charge ?? 0) >= 1)
+            },
+            wait: { [timer] in try await timer.sleep($0) },
             soundSource: sound
         )
     }

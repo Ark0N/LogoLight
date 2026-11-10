@@ -56,6 +56,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
     private static let followsBatteryDefaultsKey = "FollowsBattery"
+    /// The Charging switch: on, the logo breathes while the battery charges.
+    private static let breathesWhileChargingDefaultsKey = "BreathesWhileCharging"
     /// The Morse message typed last, put back in the field at launch.
     private static let morseTextDefaultsKey = "MorseText"
     /// The Morse loop switch: on, a message repeats until it's stopped.
@@ -78,14 +80,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let effect = defaults.string(forKey: Self.effectDefaultsKey).flatMap(LogoEffect.init(rawValue:))
         controller.start(brightness: brightness, effect: effect ?? .none,
                          followsBattery: defaults.bool(forKey: Self.followsBatteryDefaultsKey),
-                         lightsWithLidClosed: defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey))
+                         lightsWithLidClosed: defaults.bool(forKey: Self.lightsWithLidClosedDefaultsKey),
+                         breathesWhileCharging: defaults.bool(forKey: Self.breathesWhileChargingDefaultsKey))
         // Without direct control, the first password also turns on Disable Password, unless the user
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
         controller.willPromptForPassword = { [weak self] in await self?.closeMenuForPasswordDialog() }
         observeDisplay()
-        // About once a minute. The controller only reads the battery while it's followed, and only
-        // fades when the percentage has changed; the panel's slider then shows the new charge.
+        // About once a minute, and when the Mac is plugged in or unplugged. The controller only reads the
+        // battery while it's followed, or while the logo breathes when it charges, and only changes the
+        // logo when the percentage, or whether it's charging, has changed; the panel's slider then shows
+        // the new charge.
         batteryObserver = BatteryObserver { [weak self] in
             self?.controller.batteryDidChange()
             self?.updateMenu()
@@ -122,6 +127,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         panel.onLogoSwitched = { [weak self] isOn in self?.setLogo(isOn ? .on : .off) }
         panel.onBrightnessChanged = { [weak self] in self?.setBrightness($0) }
         panel.onFollowsBatteryChanged = { [weak self] in self?.setFollowsBattery($0) }
+        panel.onBreathesWhileChargingChanged = { [weak self] in self?.setBreathesWhileCharging($0) }
         panel.onEffectChosen = { [weak self] in self?.chooseEffect($0) }
         panel.onMorsePlay = { [weak self] in self?.playMorse($0) }
         panel.onMorseLoopsChanged = { [weak self] in self?.setMorseLoops($0) }
@@ -270,7 +276,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var panelState: PanelState {
         PanelState(status: status, requested: requestedSetting, canControlDirectly: controller.canControlDirectly,
                    canFollowSound: controller.canFollowSound, effect: controller.effect, brightness: controller.brightness,
-                   followsBattery: controller.followsBattery, isBusy: isBusy, morse: controller.morse,
+                   followsBattery: controller.followsBattery,
+                   breathesWhileCharging: controller.breathesWhileCharging, isBusy: isBusy, morse: controller.morse,
                    morseLoops: morseLoops)
     }
 
@@ -393,6 +400,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         controller.setFollowsBattery(follows)
         UserDefaults.standard.set(follows, forKey: Self.followsBatteryDefaultsKey)
         // The slider now shows the charge, or the chosen brightness again.
+        updateMenu()
+    }
+
+    private func setBreathesWhileCharging(_ breathes: Bool) {
+        controller.setBreathesWhileCharging(breathes)
+        UserDefaults.standard.set(breathes, forKey: Self.breathesWhileChargingDefaultsKey)
         updateMenu()
     }
 

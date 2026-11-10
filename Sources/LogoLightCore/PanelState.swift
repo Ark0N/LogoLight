@@ -21,6 +21,8 @@ public struct PanelState: Equatable, Sendable {
     public var brightness: Double
     /// Whether the brightness follows the battery's charge (the Battery switch).
     public var followsBattery: Bool
+    /// Whether the logo breathes while the battery charges (the Charging switch).
+    public var breathesWhileCharging: Bool
     /// The Morse message being sent, if any.
     public var morse: MorseMessage?
     /// Whether Morse code repeats until it's stopped (the loop switch).
@@ -35,7 +37,8 @@ public struct PanelState: Equatable, Sendable {
     /// straight away, so the rest of the panel follows the switch at once instead of when the fade ends.
     public init(status: LogoStatus, requested: LogoIllumination? = nil, canControlDirectly: Bool,
                 canFollowSound: Bool = true, effect: LogoEffect, brightness: Double, followsBattery: Bool = false,
-                isBusy: Bool = false, morse: MorseMessage? = nil, morseLoops: Bool = false) {
+                breathesWhileCharging: Bool = false, isBusy: Bool = false, morse: MorseMessage? = nil,
+                morseLoops: Bool = false) {
         let setting = requested ?? status.setting
         isSupported = status.isSupported
         isOn = status.isSupported && setting != .off
@@ -45,6 +48,7 @@ public struct PanelState: Equatable, Sendable {
         self.effect = effect
         self.brightness = brightness
         self.followsBattery = followsBattery
+        self.breathesWhileCharging = breathesWhileCharging
         self.morse = canControlDirectly ? morse : nil
         self.morseLoops = morseLoops
         message = status.isSupported ? nil : "Needs a MacBook Pro with PROLED XDR Display"
@@ -59,8 +63,9 @@ public struct PanelState: Equatable, Sendable {
     /// Whether the logo switch takes clicks. It looks disabled otherwise.
     public var canSwitch: Bool { isSupported && !isBusy }
 
-    /// Whether the brightness and the effects can be changed: only while the logo is (or is being
-    /// turned) on. Otherwise they're greyed out, and keep their values for when it's back on.
+    /// Whether the brightness, the Battery and Charging switches and the effects can be changed: only
+    /// while the logo is (or is being turned) on. Otherwise they're greyed out, and keep their values for
+    /// when it's back on.
     public var canAdjust: Bool { showsAdjustments && isOn }
 
     /// Whether the brightness slider can be moved: as for the rest, and not while the battery sets the

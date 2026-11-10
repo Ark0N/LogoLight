@@ -317,6 +317,40 @@ like a slider click. Checked with `tools/livecheck` (2026-11-08, a stand-in char
 69% → 40%, Pulse at 40%, off, 100%): every landing within 0.002, smooth, no bounce. Not yet seen
 in the real menu, or followed through a real discharge.
 
+**The charging light** (2026-11-09, asked for as "pulse when it's asleep or being charged, like the
+sleep light of the old days"; branch `breathe-while-charging`): a Charging switch under Battery, in
+the brightness card, saved as `BreathesWhileCharging`, off by default. While it's on and the battery
+is charging (`Battery.powerState()`, IOKit's `Is Charging`: false on power when the battery is full
+or held at a limit such as Optimized Battery Charging's 80%), Breathe plays in place of the chosen
+effect (`LogoAnimator.standInEffect`), peaking at the brightness (or the charge, with Battery on).
+The chosen effect keeps its value and its switch, and comes back when charging stops. Choosing an
+effect while it breathes doesn't restart the breathing; a Morse message carries on and the breathing
+follows it. It stands in for Sound too: the tap stops while it breathes and starts again after, so
+Sound chosen for the first time while it breathes asks for its permission (or shows its alert) only
+when charging stops. Charging is read only while the switch is on: on `kIOPSNotifyAnyPowerSource` (which also
+fires on plugging in and unplugging), on a wake, and at launch. **It starts at the plug-in**: on the
+MacBook, macOS said "AC attached; not charging" for about a minute after the charger went in
+(`pmset -g batt` every second: plugged in at 18:31:33, "charging" by 18:32:38), so the light started
+late, and the user asked for it to breathe "as soon as its plugged in and the battery is not at 100%
+... until it really notices that its not charging". A plug-in with the battery not full now starts it
+at once (`isAwaitingCharge`), until charging starts (it carries on, without a restart), the Mac is
+unplugged, the battery is full, or 2 minutes pass (`chargingStartWait`; a battery still not charging
+is taken to be held at a limit). Only a plug-in that's seen starts it, not a launch or the switch
+turned on while plugged in. That wait uses its own injected timer (`wait`; `FakeTimer` in the tests),
+since `FakeClock`'s sleeps return at once and move the logo's clock. **The asleep half isn't possible**:
+nothing runs while the Mac sleeps, and corebrightnessd darkens the logo with the display
+(WillSleep/DidSleep give a target of 0, and `bklb-backlight@0` reads `enabled = No`). A display
+asleep with the Mac awake might be lit by telling the logo's module `DisplayPowerStateEvent` =
+DidWake, as `ClamshellUpdate` is overridden for the lid, but on a laptop the Mac usually sleeps soon
+after its display does, and the display-ready gate would hold back every rise from dark; not tried.
+The row makes the panel 487 points tall (450 before), so the README's menu GIF and the site's menu
+pictures need drawing again when it ships.
+Built and tested on the Mac mini (256 tests; the panel drawn offscreen, no truncated labels). On the
+MacBook, the user saw it breathe slowly with a real charger (a debug build of the branch, before the
+plug-in wait), late as above. **Not yet run there:** `tools/livecheck --charging` (a first run was on
+`main`, which ignores the flag), which switches a stand-in for charging and prints Breathe's cycle
+lengths (6.3 s planned); and the plug-in wait with a real charger.
+
 **Lit with Lid Closed** (2026-11-08, asked for on Reddit): a menu item, off by default and saved as
 `LightsWithLidClosed`, with a second line, "External display only" (`NSMenuItem.subtitle`, macOS
 14.4+; 163 points at most, and `NSMenu` measured the menu still 170 wide). The user closed the lid

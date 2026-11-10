@@ -2,14 +2,15 @@ import AppKit
 import LogoLightCore
 
 /// The iOS Settings-style panel at the top of the menu: a switch for the logo first, where it's
-/// easiest to reach, then a live view of it, a brightness slider with the Battery switch under it,
-/// then a switch for each effect. Everything below the live view is greyed out while the logo is off,
+/// easiest to reach, then a live view of it, a brightness slider with the Battery and Charging switches
+/// under it, then a switch for each effect. Everything below the live view is greyed out while the logo is off,
 /// and the slider is while the battery sets the brightness.
 @MainActor
 final class ControlPanel: NSView {
     var onLogoSwitched: ((Bool) -> Void)?
     var onBrightnessChanged: ((Double) -> Void)?
     var onFollowsBatteryChanged: ((Bool) -> Void)?
+    var onBreathesWhileChargingChanged: ((Bool) -> Void)?
     var onEffectChosen: ((LogoEffect) -> Void)?
     /// Play pressed (or Return in the field), with the message typed.
     var onMorsePlay: ((String) -> Void)?
@@ -62,6 +63,11 @@ final class ControlPanel: NSView {
     private let batteryLabel = NSTextField(labelWithString: "Battery")
     private let batterySwitch = LogoSwitch()
     private var batteryRow = NSView()
+    /// Under it: the charging light, which has the logo breathe while the battery charges.
+    private let chargingTile = IconTile(symbol: "bolt.fill", color: .systemYellow)
+    private let chargingLabel = NSTextField(labelWithString: "Charging")
+    private let chargingSwitch = LogoSwitch()
+    private var chargingRow = NSView()
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let effectsHeader = NSTextField(labelWithString: "EFFECTS")
     /// Each line of text outside the cards is in one of these, which indents it (and is what's hidden).
@@ -123,6 +129,8 @@ final class ControlPanel: NSView {
         brightnessSlider.isEnabled = state.canChangeBrightness
         batterySwitch.setOn(state.followsBattery, animated: animated)
         batterySwitch.acceptsInput = state.canAdjust
+        chargingSwitch.setOn(state.breathesWhileCharging, animated: animated)
+        chargingSwitch.acceptsInput = state.canAdjust
         for row in effectRows {
             row.toggle.setOn(row.effect == state.effect, animated: animated)
             row.toggle.acceptsInput = state.canAdjust
@@ -134,7 +142,8 @@ final class ControlPanel: NSView {
         loopButton.isActive = state.morseLoops
         updateMorseButtons()
         greyOut([brightnessRow: !state.canChangeBrightness, batteryRow: !state.canAdjust,
-                 effectsCard.rows: !state.canAdjust, morseCard.rows: !state.canAdjust], animated: animated)
+                 chargingRow: !state.canAdjust, effectsCard.rows: !state.canAdjust,
+                 morseCard.rows: !state.canAdjust], animated: animated)
 
         messageLabel.stringValue = state.message ?? ""
         messageContainer.isHidden = state.message == nil
@@ -145,7 +154,7 @@ final class ControlPanel: NSView {
         }
     }
 
-    /// Greys out the brightness, the Battery switch, the effects and Morse code, or brings them back, as one fade
+    /// Greys out the brightness, the Battery and Charging switches, the effects and Morse code, or brings them back, as one fade
     /// of their rows (the controls in them don't change their own look).
     private func greyOut(_ rows: [NSView: Bool], animated: Bool) {
         let changes = rows.map { (view: $0.key, alpha: $0.value ? Self.greyedOutAlpha : 1) }
@@ -199,7 +208,12 @@ final class ControlPanel: NSView {
         batterySwitch.setAccessibilityLabel("Brightness follows battery")
         batteryRow = row(tile: batteryTile, label: batteryLabel, toggle: batterySwitch)
         batteryRow.toolTip = "The logo shows the battery's charge: normal brightness when it's full, dimmer as it runs down."
-        brightnessCard.add([brightnessRow, Separator(), batteryRow])
+        chargingSwitch.target = self
+        chargingSwitch.action = #selector(chargingSwitchChanged)
+        chargingSwitch.setAccessibilityLabel("Breathe while charging")
+        chargingRow = row(tile: chargingTile, label: chargingLabel, toggle: chargingSwitch)
+        chargingRow.toolTip = "While the battery charges, the logo breathes like the old MacBook sleep light, then goes back to your effect."
+        brightnessCard.add([brightnessRow, Separator(), batteryRow, Separator(), chargingRow])
         addFullWidth(brightnessCard)
 
         // Only on a Mac without the logo, where nothing else is shown.
@@ -370,6 +384,10 @@ final class ControlPanel: NSView {
 
     @objc private func batterySwitchChanged() {
         onFollowsBatteryChanged?(batterySwitch.isOn)
+    }
+
+    @objc private func chargingSwitchChanged() {
+        onBreathesWhileChargingChanged?(chargingSwitch.isOn)
     }
 
     @objc private func playPressed() {
@@ -868,11 +886,13 @@ enum PanelRenderer {
     static func render(to folder: String) {
         let options = Options(ProcessInfo.processInfo.environment)
         func state(_ setting: LogoIllumination, isSupported: Bool = true, canControlDirectly: Bool = true,
-                   canFollowSound: Bool = true, followsBattery: Bool = false) -> PanelState {
+                   canFollowSound: Bool = true, followsBattery: Bool = false,
+                   breathesWhileCharging: Bool = false) -> PanelState {
             let status = LogoStatus(isSupported: isSupported, setting: isSupported ? setting : nil, source: .daemon,
                                     isLit: setting == .on, outputLevel: 0.2)
             return PanelState(status: status, canControlDirectly: canControlDirectly, canFollowSound: canFollowSound,
-                              effect: options.effect, brightness: options.brightness, followsBattery: followsBattery)
+                              effect: options.effect, brightness: options.brightness, followsBattery: followsBattery,
+                              breathesWhileCharging: breathesWhileCharging)
         }
         let on = state(.on)
         var looping = on
@@ -880,6 +900,7 @@ enum PanelRenderer {
         looping.morseLoops = true
         let states = [("on", on), ("morse", looping), ("off", state(.off)), ("battery", state(.on, followsBattery: true)),
                       ("nosound", state(.on, canFollowSound: false)),
+                      ("charging", state(.on, breathesWhileCharging: true)),
                       ("fallback", state(.on, canControlDirectly: false)), ("unsupported", state(.off, isSupported: false))]
         for (name, state) in states {
             for (suffix, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {

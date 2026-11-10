@@ -60,6 +60,20 @@ func panelStateTests(_ t: TestHarness) {
         t.expect(chosen.canChangeBrightness)
     }
 
+    t.test("the Charging switch shows its setting, greys out with the logo off, and leaves the chosen effect") {
+        let on = PanelState(status: status(.on), canControlDirectly: true, effect: .pulse, brightness: 0.6,
+                            breathesWhileCharging: true)
+        t.expect(on.breathesWhileCharging)
+        t.expect(on.canAdjust)
+        t.expect(on.canChangeBrightness, "the slider still sets the breathing's peak")
+        t.expectEqual(on.effect, .pulse)
+        let off = PanelState(status: status(.off), canControlDirectly: true, effect: .pulse, brightness: 0.6,
+                             breathesWhileCharging: true)
+        t.expect(off.breathesWhileCharging, "keeps its value")
+        t.expect(!off.canAdjust)
+        t.expect(on != PanelState(status: status(.on), canControlDirectly: true, effect: .pulse, brightness: 0.6))
+    }
+
     t.test("without direct control, the brightness and effects are hidden") {
         let state = PanelState(status: status(.on), canControlDirectly: false, effect: .heartbeat, brightness: 0.5)
         t.expect(state.isOn)
