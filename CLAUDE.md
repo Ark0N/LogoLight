@@ -23,7 +23,8 @@ make install   # copy to /Applications, (re)launch
   `@MainActor`, and Timer and notification closures use `MainActor.assumeIsolated`.
 - The app bundle is assembled by `scripts/build-app.sh` (there's no Xcode project).
   `Resources/Info.plist` is a template with `LSUIElement` (no Dock icon).
-- The Control Center control (Backlight, a toggle) is an extension. It's sandboxed (the system
+- The Control Center control (a toggle, shown as "LogoLight" since 1.3.0; its kind is still
+  `Backlight`, which mustn't change, or placed controls are orphaned) is an extension. It's sandboxed (the system
   ignores extensions that aren't), and reaches the running app through `ControlLink` (a Mach port
   named `<bundle ID>.control`, the one name its entitlements let it look up); only the app touches
   the logo. `ControlLink.swift` is compiled into both, so it mustn't use the rest of LogoLightCore.
@@ -93,7 +94,7 @@ runs but says the logo isn't available. So:
   unless asked otherwise, commit in small logical steps, and push when a piece of work is done.
   Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134; `v1.1.1` is e41948d, build 138) and published as GitHub Releases
   with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`). `v1.2.0` is e6960d1,
-  build 144.
+  build 144; `v1.3.0` is 5c25500, build 163.
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
   `git config user.name` and `git config user.email` if the new machine differs.
@@ -146,6 +147,29 @@ runs but says the logo isn't available. So:
   it sat 3.7 points below the logo (the user: "the lighted mac logo moves down"). **Fetch before
   deploying**: a deploy from a checkout behind `origin/main` put an older `style.css` live for a
   few minutes (2026-11-10).
+  **1.3.0 shipped 2026-11-10**: build 163 (commit 5c25500, tag `v1.3.0`), asked for as "rename the
+  Backlight text with LogoLight and merge all the PRs and make a new release, update ALL the
+  graphics for it". It has the Charging light (PR #5), stepping aside for Codeman (PR #6), external
+  displays kept told the lid is closed (PR #7, from p3solutions-co, read before merging), and the
+  switch at the top called LogoLight, in the menu and in Control Center (the README and site say
+  "the LogoLight switch"). Notarized with no issues, on the site and as a GitHub Release. The
+  notarized app was only launched for a few seconds and quit; the user didn't try this build first.
+  Every picture was drawn again: the banner, the menu GIFs (the whole menu is 619 points tall,
+  680 × 2476), the lid clips, the site's menu pictures (850 × 2435, `menu-*-130.png`) and
+  `og-130.jpg`. `control-center.png` (`control-center-130.png` on the site) is the user's
+  screenshot with arrows and has no script: the word Backlight was replaced in its heading and its
+  fourth step, in the system font sized to match (bold 59.9 px, regular 32.1 px, on #0e1014). The
+  site has a Charging feature (`tile-yellow`, `#i-bolt`).
+  On the MacBook before the release (Codeman closed): `tools/livecheck --charging` twice and the
+  full run, all ok but one line. Breathe while "charging" peaked at the brightness (0.265 at 0.5)
+  with cycles of 6.31 and 6.29 s, and switching Charging off landed in 1.0 s with no bounce.
+  **Codeman's blinker (`codeman-desktop --logo-blink`) drives the logo while LogoLight is quit**: a
+  first run with it going read a peak of 1.0 and cycles of 7.5 and 3.8 s. Check for it before
+  livecheck. The one line: `sound: beats at 2 Hz` counted 8, 1 and 6 of 10 beats; 1.2.0's code
+  counted 7 twice the same evening, so it isn't from this release, and wasn't looked into.
+  Not checked for 1.3.0: PR #7 with the lid closed (its author measured it), the loan with a real
+  Codeman, the plug-in wait with a real charger, and the Charging row and the new name in the real
+  menu and in Control Center.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
@@ -203,7 +227,8 @@ whose shortcut column alone would make it 190 points wide. At their request the 
 wide, measured:
 - The widest row is Heartbeat's: the text column starts at 40, the label needs 61 (13 pt; 64 with
   Bold Text), then at least 4, the switch 40 and 8 to the card's edge (the tiles' inset), so 153
-  (156); plus the 6-point margins, 165 (168). "Backlight" (the user renamed "Apple Logo") needs
+  (156); plus the 6-point margins, 165 (168). "Backlight" (the user renamed "Apple Logo", and on 2026-11-10 renamed it again, to
+  "LogoLight", which fits: the renderer reports no truncated label) needs
   56.5, Breathe 47.5, Pulse 33. The renderer reports no truncated label.
 - The menu's own items need 143 ("Launch at Login", "Quit LogoLight"), or 153 with
   "Disable Password", so the panel sets the menu's width.
@@ -211,7 +236,7 @@ wide, measured:
   user chose them over a regular `NSSwitch`'s size on macOS 27 (54 × 24 with a 32 × 20 capsule
   knob, which would need a 179-point panel).
 
-The panel's order is the user's: the Backlight switch first ("so its much easier to enable,
+The panel's order is the user's: the LogoLight switch (then called Backlight) first ("so its much easier to enable,
 disable it"), then the live view, then the brightness slider (its own card), then the effects.
 The live view is drawn as the lid of this MacBook Pro in its real proportions and
 its own finish, space black or silver (`MacFinish`, read from the device tree's `housing-color` and
@@ -343,13 +368,11 @@ nothing runs while the Mac sleeps, and corebrightnessd darkens the logo with the
 asleep with the Mac awake might be lit by telling the logo's module `DisplayPowerStateEvent` =
 DidWake, as `ClamshellUpdate` is overridden for the lid, but on a laptop the Mac usually sleeps soon
 after its display does, and the display-ready gate would hold back every rise from dark; not tried.
-The row makes the panel 487 points tall (450 before), so the README's menu GIF and the site's menu
-pictures need drawing again when it ships.
+The row makes the panel 487 points tall (450 before); the pictures were drawn again for 1.3.0.
 Built and tested on the Mac mini (256 tests; the panel drawn offscreen, no truncated labels). On the
 MacBook, the user saw it breathe slowly with a real charger (a debug build of the branch, before the
-plug-in wait), late as above. **Not yet run there:** `tools/livecheck --charging` (a first run was on
-`main`, which ignores the flag), which switches a stand-in for charging and prints Breathe's cycle
-lengths (6.3 s planned); and the plug-in wait with a real charger.
+plug-in wait), late as above. `tools/livecheck --charging` (a stand-in for charging) passed there on 2026-11-10, before 1.3.0
+(see the release's note above). **Not yet seen:** the plug-in wait with a real charger.
 
 **Lit with Lid Closed** (2026-11-08, asked for on Reddit): a menu item, off by default and saved as
 `LightsWithLidClosed`, with a second line, "External display only" (`NSMenuItem.subtitle`, macOS
