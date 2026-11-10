@@ -94,7 +94,8 @@ runs but says the logo isn't available. So:
   unless asked otherwise, commit in small logical steps, and push when a piece of work is done.
   Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134; `v1.1.1` is e41948d, build 138) and published as GitHub Releases
   with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`). `v1.2.0` is e6960d1,
-  build 144; `v1.3.0` is 5c25500, build 163.
+  build 144; `v1.3.0` is 5c25500, build 163;
+  `v1.3.1` is e859ecd, build 169.
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
   `git config user.name` and `git config user.email` if the new machine differs.
@@ -416,9 +417,12 @@ in its `desktop.json`) does the same job while Codeman runs. 273 tests pass; an 
 installed on the MacBook and holds the assertions. The probe's last step once left the logo dark
 with the lid open (docs/corebrightnessd.md: a client's DidSleep), which the user saw as "no logo on
 at all now". **Not yet seen:** the app itself with the lid
-really closed, the lid opening again, unplugging with the lid closed, and
-whether `screensDidSleep` arrives there. Not released: the README, the site and `llms.txt` still
-say an external display is needed.
+really closed (**seen by the user on 2026-11-10 with the second build: "finally its working"**, and
+**1.3.1 shipped the same day**: build 169, commit e859ecd, tag `v1.3.1`, notarized with no issues, on
+the site and as a GitHub Release, and installed on the MacBook; the README, site and `llms.txt` say
+"on power or with an external display", and the README's menu GIFs were drawn again for the item's
+second line). Still not seen: the lid opening again, unplugging with the lid closed, and
+whether `screensDidSleep` arrives there.
 
 **Morse code** (PR #1 from johnseth97, 2026-11-07, built on a Mac without the logo; merged
 2026-11-08): `MorseCode` (LogoLightCore) turns a message into
