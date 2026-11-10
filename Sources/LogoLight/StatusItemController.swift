@@ -486,6 +486,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// Returns the logo to normal before the app quits.
     func prepareToQuit() {
+        sleepBlocker.set(false)
         controller.restoreNormalLighting()
     }
 
@@ -555,7 +556,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// Keeps the Mac awake when the lid closes, while Lit with Lid Closed is on, the logo is on and
     /// the Mac is on power: without an external display a closed lid puts it to sleep, and the logo
-    /// goes dark with it. On battery it's left to sleep.
+    /// goes dark with it. On battery it's left to sleep. Unplugged with the lid closed, lid sleep comes back
+    /// on, and the Mac sleeps.
     private func updateSleepBlocker() {
         sleepBlocker.set(controller.lightsWithLidClosed && controller.canLightWithLidClosed
             && status.setting == .on && Battery.powerState()?.isPluggedIn == true)

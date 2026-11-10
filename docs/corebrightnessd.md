@@ -335,8 +335,9 @@ how LogoLight's Lit with Lid Closed works.
   stayed lit when left alone. `DisplayPowerStateEvent` wasn't needed. The built-in display stays
   online meanwhile and `CGDisplayIsAsleep` says 0, so the lid itself has to be asked
   (`AppleClamshellState` on `IOPMrootDomain`, and its `kIOPMMessageClamshellStateChange` interest
-  notification). Which of the three kept the Mac awake wasn't separated; LogoLight uses the
-  assertion alone, which goes away with the process.
+  notification). The `PreventSystemSleep` assertion alone isn't enough: with only that, the Mac
+  entered a dark wake when the lid closed and the logo stayed dark. LogoLight holds all three, and
+  a guard process turns lid sleep back on when the app exits, since the kernel keeps the setting.
 - **A client's `DisplayPowerStateEvent = 4` (DidSleep) darkens the logo until a DidWake.** The
   probe wrote it at its end, and the logo stayed dark with the lid open (`Factor` 0, with
   `DisplayLogicalState` 2, `CBClamshellState` 0 and `ClamshellUpdate = 0` written again) until

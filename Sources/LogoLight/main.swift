@@ -1,5 +1,11 @@
 import AppKit
 
+// The lid guard (see `LidSleepBlocker`): no app, it only waits for the app that started it to exit.
+if let index = CommandLine.arguments.firstIndex(of: LidSleep.guardArgument),
+   CommandLine.arguments.indices.contains(index + 1), let pid = pid_t(CommandLine.arguments[index + 1]) {
+    LidSleep.runGuard(for: pid)
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

@@ -398,18 +398,25 @@ the lid, while charging for example it still does not glow, still not working tr
 user closes the lid with no external display, where the Mac sleeps. `tools/probes/lidawake` (the
 user closed the lid for it) showed that kept awake, the Mac lights the logo with the same lid
 override (docs/corebrightnessd.md, "The lid"). So while the option and the logo are on and the Mac
-is plugged in, the app holds a `PreventSystemSleep` assertion (`LidSleepBlocker`, updated in
-`updateMenu`): a closed lid then doesn't sleep the Mac. That also holds off idle sleep on power
-while the option is on, which the user wasn't asked about. Unplugged, it's released (a Mac in a
-bag sleeps). `LidObserver` (the root domain's clamshell notification) tells the app the lid moved,
+is plugged in, the app turns lid sleep off (`LidSleepBlocker`, updated in `updateMenu`): the root
+domain's `kPMSetClamshellSleepState`, with `PreventSystemSleep` and `PreventUserIdleSystemSleep`
+assertions, the three the probe held. A first build held `PreventSystemSleep` alone: the Mac then
+went into a dark wake when the lid closed ("Entering DarkWake state due to 'Clamshell Sleep'" in
+`pmset -g log`) and the logo stayed dark; the user: "I closed the lid, its not working...". The
+kernel keeps the setting after the process is gone, so the app starts a guard (`LogoLight
+--lid-guard <pid>`, the same binary) that turns lid sleep back on when the app exits, however it
+ends; killing the app with SIGKILL made the guard exit (that it had reset the setting can't be read
+back). The assertions also hold off idle sleep on power while the option is on, which the user
+wasn't asked about. Unplugged, it's all released (a Mac in a bag sleeps). `LidObserver` (the root domain's clamshell notification) tells the app the lid moved,
 since the built-in display stays online and awake to CoreGraphics; `SystemHardware` counts it as
 off while the lid is closed, and `canLight` allows a closed lid with no display connected. The
 item's second line is "On power or a display" (160 points). The app logs lid events (`log show
 --predicate 'subsystem == "app.logolight.LogoLight"'`). Codeman's own keep-awake (`keepAwake.lid`
 in its `desktop.json`) does the same job while Codeman runs. 273 tests pass; an ad-hoc build is
-installed on the MacBook and holds the assertion. **Not yet seen:** the app itself with the lid
-really closed (the probe used three ways of keeping awake at once; the app uses the assertion
-alone, so the Mac may still sleep), the lid opening again, unplugging with the lid closed, and
+installed on the MacBook and holds the assertions. The probe's last step once left the logo dark
+with the lid open (docs/corebrightnessd.md: a client's DidSleep), which the user saw as "no logo on
+at all now". **Not yet seen:** the app itself with the lid
+really closed, the lid opening again, unplugging with the lid closed, and
 whether `screensDidSleep` arrives there. Not released: the README, the site and `llms.txt` still
 say an external display is needed.
 
