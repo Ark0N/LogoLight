@@ -172,7 +172,11 @@ runs but says the logo isn't available. So:
   Codeman, the plug-in wait with a real charger, and the Charging row and the new name in the real
   menu and in Control Center.
 - The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
-  user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
+  user's Cloudflare account on the MacBook and, since 2026-11-11, on the Mac mini; the Worker
+  "logolight" serves logolight.app and www). The user's browser may be on another device, where
+  the usual `wrangler login` can't reach its localhost callback and times out after 2 minutes:
+  run `npx wrangler login --device` in the background and give the user the link and code it
+  prints (5 minutes to approve). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
   version and date in the site's JSON-LD (`index.html`) and `llms.txt` and the sitemap's
   `lastmod`, deploy, tag, `gh release create`, then ping IndexNow (below), and run
