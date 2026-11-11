@@ -88,6 +88,12 @@
    It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
+Or with [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask ark0n/tap/logolight
+```
+
 Needs a MacBook Pro with PROLED XDR Display and macOS 14 or later (these Macs ship with macOS 27).
 On other Macs, LogoLight opens but says the logo isn't available.
 

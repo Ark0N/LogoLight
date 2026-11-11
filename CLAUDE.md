@@ -175,7 +175,24 @@ runs but says the logo isn't available. So:
   user's Cloudflare account; the Worker "logolight" serves logolight.app and www). For a new
   version: bump `VERSION`, `make dist`, copy the zip to `site/public/LogoLight.zip`, update the
   version and date in the site's JSON-LD (`index.html`) and `llms.txt` and the sitemap's
-  `lastmod`, deploy, tag, `gh release create`, then ping IndexNow (below).
+  `lastmod`, deploy, tag, `gh release create`, then ping IndexNow (below), and run
+  `gh workflow run logolight.yml -R Ark0N/homebrew-tap` (or the tap catches up within a day).
+- **Homebrew** (2026-11-11, the user's choice): `brew install --cask ark0n/tap/logolight`, from
+  the public tap `Ark0N/homebrew-tap` (`Casks/logolight.rb`). Its workflow looks for a newer
+  LogoLight release daily, points the cask at it, and pushes that only after `brew style`, `brew
+  audit` and a real install and `--zap` uninstall pass on a macOS runner; pushes and PRs get the
+  same checks. Homebrew 6+ loads a non-official tap only once it's trusted: installing by the full
+  name trusts that cask, so the README's line works as it is. The official homebrew-cask needs a
+  more notable repo (far more stars when self-submitted); worth trying once LogoLight has them.
+  The cask's `zap` removes the sudoers rule (it's not in `uninstall`, whose `delete` runs `sudo`
+  even when there's nothing to delete).
+- **Promotion on GitHub** (2026-11-11): the repo has 20 topics (GitHub's limit). LogoLight is in
+  jaywcjlove/awesome-mac (Menu Bar Tools, PR #4349); serhii-londar/open-source-mac-os-apps PR
+  #2026 waits for that list's batch merges. iCHAIT/awesome-macOS takes PRs only from
+  collaborators since 2026-10-21 and closed outside suggestions as not planned, so don't retry it.
+  gendotnew/macos-apps (100 open PRs, rare merges) and guyzyl/awesome-macos-apps (the owner
+  curates it) aren't worth a PR. The repo has no custom social preview yet (Settings, Social
+  preview: `docs/banner.jpg` fits, 2400 × 1260 and 300 KB); GitHub has no API for it.
 - SEO and AI search: `robots.txt` welcomes every crawler and lists `sitemap.xml`; `llms.txt` is a
   plain-text summary for AI assistants; `index.html` has JSON-LD (the app, and the FAQ, which must
   match the page's). ChatGPT's search leans on Bing's index, so after a deploy that changes the
