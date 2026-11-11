@@ -181,10 +181,10 @@ runs but says the logo isn't available. So:
   version and date in the site's JSON-LD (`index.html`) and `llms.txt` and the sitemap's
   `lastmod`, deploy, tag, `gh release create`, then ping IndexNow (below), and run
   `gh workflow run logolight.yml -R Ark0N/homebrew-tap` (or the tap catches up within a day).
-  The release notes follow 1.3.1's: what changed, the download paragraph, then "Or install it
-  with [Homebrew](https://brew.sh):" and the command in a `sh` block (the user asked for it,
-  2026-11-12); from the next release on, also `brew upgrade --cask logolight` for those who
-  installed it that way.
+  The release notes follow 1.3.1's: they open with "Install it with [Homebrew](https://brew.sh),
+  or download `LogoLight-X.Y.Z.zip` below:" and the command in a `sh` block (the user asked for
+  it at the top, 2026-11-12), then what changed, then the download paragraph; from the next
+  release on, also `brew upgrade --cask logolight` for those who installed it that way.
 - **Homebrew** (2026-11-11, the user's choice): `brew install --cask ark0n/tap/logolight`, from
   the public tap `Ark0N/homebrew-tap` (`Casks/logolight.rb`). Its workflow looks for a newer
   LogoLight release daily, points the cask at it, and pushes that only after `brew style`, `brew
