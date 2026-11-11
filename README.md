@@ -300,7 +300,8 @@ the logo back on without the app:
 
 ## Support
 
-LogoLight is free. If you like it, you can buy me a coffee:
+LogoLight is free. If you like it, a ⭐ on this repo helps other MacBook Pro owners find it.
+And you can buy me a coffee:
 
 <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" alt="Buy me a coffee"></a>
 
