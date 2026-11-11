@@ -186,7 +186,8 @@ runs but says the logo isn't available. So:
   LogoLight release daily, points the cask at it, and pushes that only after `brew style`, `brew
   audit` and a real install and `--zap` uninstall pass on a macOS runner; pushes and PRs get the
   same checks. Homebrew 6+ loads a non-official tap only once it's trusted: installing by the full
-  name trusts that cask, so the README's line works as it is. The official homebrew-cask needs a
+  name trusts that cask, so the README's line works as it is (the user installed 1.3.1 that way,
+  2026-11-12: "brew install works"). The official homebrew-cask needs a
   more notable repo (far more stars when self-submitted); worth trying once LogoLight has them.
   The cask's `zap` removes the sudoers rule (it's not in `uninstall`, whose `delete` runs `sudo`
   even when there's nothing to delete).
