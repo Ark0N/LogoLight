@@ -27,6 +27,7 @@
 
 - [Download LogoLight](https://logolight.app/LogoLight.zip): unzip it, move LogoLight to the Applications folder and open it. It lives in the menu bar.
 - [GitHub Releases](https://github.com/Ark0N/LogoLight/releases/latest): the same notarized zip.
+- Homebrew: `brew install --cask ark0n/tap/logolight` (from [Ark0N/homebrew-tap](https://github.com/Ark0N/homebrew-tap), kept on the latest release).
 
 ## Turning the Apple logo off without LogoLight
 

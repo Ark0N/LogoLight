@@ -1414,6 +1414,37 @@ strong {
   margin-top: 6px;
 }
 
+/* The Homebrew command, under the steps. The page runs no scripts, so there's no copy button:
+   a click selects the whole command instead. */
+.brew {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin: -12px 0 40px;
+  color: var(--text-2);
+  font-size: 0.98rem;
+}
+
+/* On a phone it's too long for one line, so it breaks between its two halves and nowhere else. */
+.brew-command {
+  display: block;
+  max-width: 100%;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  overflow-wrap: normal;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.brew-command span {
+  white-space: nowrap;
+}
+
 /* FAQ */
 
 .faq-wrap {
