@@ -44,6 +44,17 @@ is ignored, so a held level isn't released by a lone `DisplayLogicalState=2`.
 | `clamshell` | With an external display attached: asks aloud for the lid to be closed, then tries ways of lighting the logo with it closed (`ClamshellUpdate`, `DisplayLogicalState`), reading both LEDs from the I/O Registry, restores normal lighting and says which way worked. `--sample-only` writes nothing. See "The lid" in the notes. |
 | `setmapping KEY JSON` | Writes a mapping key, e.g. `LEPWMLuxToMaxNitsRestrictionMapping '[[0,60],[190,300],[3.402823e38,300]]'`, watches for 5 s, then restores the original. |
 
+## The screen
+
+Not the logo: the display drivers' temporal dithering, which the app's Disable Dithering turns
+off. It can be run while LogoLight runs (with Disable Dithering unchecked).
+
+| Tool | What it does |
+| --- | --- |
+| `dither` | Prints each display pipe (`IOMobileFramebufferAP`) and its `enableDither`. Safe. |
+| `dither off`, `dither on` | Sets it on every pipe, as [Stillcolor](https://github.com/aiaf/Stillcolor) does, and prints what each then reads. It takes effect at once, and a restart turns dithering back on. |
+| `dither try` | Off, reads it back, and on again after a second. |
+
 ## Reading the binary
 
 CoreBrightness lives in the dyld shared cache, so there's no file to open in a disassembler;
