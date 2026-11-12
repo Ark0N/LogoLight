@@ -257,8 +257,8 @@ wide, measured:
   (156); plus the 6-point margins, 165 (168). "Backlight" (the user renamed "Apple Logo", and on 2026-11-10 renamed it again, to
   "LogoLight", which fits: the renderer reports no truncated label) needs
   56.5, Breathe 47.5, Pulse 33. The renderer reports no truncated label.
-- The menu's own items need 143 ("Launch at Login", "Quit LogoLight"), or 153 with
-  "Disable Password", so the panel sets the menu's width.
+- The menu's own items need 143 ("Launch at Login", "Quit LogoLight"), 150 ("Disable
+  Dithering"), or 153 with "Disable Password", so the panel sets the menu's width.
 - The switches are 40 × 24 with a round knob 20 across, about an iOS switch's proportions: the
   user chose them over a regular `NSSwitch`'s size on macOS 27 (54 × 24 with a 32 × 20 capsule
   knob, which would need a 179-point panel).
@@ -514,6 +514,29 @@ first moves the logo. Tests: `LoanTests.swift` (244 passed on the Mac mini; four
 lending doesn't pause or gate the writes). **Not checked on the MacBook**: no `tools/livecheck` run,
 and the handover with a real Codeman needs the Codeman side, which isn't released yet. Not decided:
 whether the menu should say that Codeman has the logo (the live view already shows its blinking).
+
+**Disable Dithering** (2026-11-12, asked for as "could we add this to the app?" with a link to
+Stillcolor, https://github.com/aiaf/Stillcolor, MIT; branch `disable-dithering`): a menu item under
+Lit with Lid Closed, off by default and saved as `DisablesDithering`. It's about the screen, not the
+logo: it sets `enableDither` to No on every display pipe (`IOMobileFramebufferAP` services; on this
+MacBook five `IOMobileFramebufferShim`s, `disp0` and `dispext0`–`3`), as Stillcolor does, with no
+privileges (`DisplayDithering` in LogoLightCore, written fresh, not copied). It's applied at launch,
+a second after the displays change or wake (Stillcolor's finding is that a connected display dithers
+again; not seen here, no external display was at hand), and when the menu opens; quitting turns
+dithering back on (my choice, like the logo going back to normal; Stillcolor leaves it off until a
+restart). Unchecked, nothing is written. The item is hidden where no pipe has the property, and shows
+on a Mac without the logo. If the drivers don't take the change, the item stays unchecked and an
+alert says so. Stillcolor's second switch (`uniformity2D`) was left out. "Disable Dithering" needs
+150 points, so the menu stays 170 wide; the whole menu is now 641 points tall, and **the README's
+menu GIFs and the site's pictures and hero menu haven't been drawn again** (for the release).
+Checked on the MacBook (macOS 27.2): `tools/probes/dither try` (the write is taken and reads back),
+`tools/livecheck --dither` (all ok; it needs no logo and can run beside LogoLight), and a debug
+build with `LOGOLIGHT_SIMULATE=1 … -DisablesDithering YES` turned it off at launch and back on when
+quit with SIGTERM. A copy of the probe signed with the hardened runtime made the write too. 282
+tests pass. **Not checked:** that the picture really changes (it needs the eye on a gradient, or a
+capture card; only the driver's property was read), the item clicked in the real menu, an external
+display being connected, a sleep and wake, and the app bundle itself (`make app` would replace
+`build/LogoLight.app`, which the user's LogoLight was running from).
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only

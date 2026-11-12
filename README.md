@@ -56,6 +56,9 @@
       <b>Lit with Lid Closed</b><br>
       Close the lid and the logo stays lit, with its effects, while the keyboard stays dark: on power, where LogoLight keeps your Mac awake behind the closed lid, or with an external display. On battery with no display, the Mac sleeps as usual.
       <br><br>
+      <b>Disable Dithering</b><br>
+      Stops your displays from flickering pixels between two colours to show the shades in between (temporal dithering), which tires some people's eyes, the way <a href="https://github.com/aiaf/Stillcolor">Stillcolor</a> does. Smooth gradients may show faint bands. It lasts while LogoLight is running.
+      <br><br>
       <b>Control Center</b><br>
       A LogoLight switch for Control Center or the menu bar (macOS 26 or later).
       <br><br>
@@ -116,7 +119,7 @@ On other Macs, LogoLight opens but says the logo isn't available.
 ## How it works
 
 <details>
-<summary><b>The details</b>: the private interface, the fades, Control Center, reading the state and the password fallback</summary>
+<summary><b>The details</b>: the private interface, the fades, Control Center, reading the state, the password fallback and dithering</summary>
 
 Apple documents a single setting for the logo in
 [About the illuminated Apple logo](https://support.apple.com/en-us/149248):
@@ -235,6 +238,25 @@ Uncheck **Disable Password** to remove the rule and be asked every time. LogoLig
 that and doesn't install the rule again until you check the item again. (Deleting the file
 yourself, `sudo rm /etc/sudoers.d/logolight`, also removes it, but then the next password
 installs it again.)
+
+#### Disable Dithering
+
+This one has nothing to do with the logo. Apple silicon's display drivers dither what they send
+to a display: pixels switch between two colours from frame to frame, to show the shades in
+between. [Stillcolor](https://github.com/aiaf/Stillcolor) (MIT, by Abdullah Arif) found the
+switch, and LogoLight uses it the same way: each display pipe is an `IOMobileFramebufferAP`
+service in the I/O Registry with an `enableDither` property, which any app may set, with no
+password. It takes effect at once, on every display:
+
+```sh
+ioreg -lw0 | grep -i enableDither    # "enableDither" = No while Disable Dithering is checked
+```
+
+macOS turns dithering back on at a restart, and for a display that's connected later, so
+LogoLight turns it off again when it launches and when the displays change or wake. When it
+quits, it turns dithering back on. Unchecked, it writes nothing, so Stillcolor or another tool
+can be used beside it. The display's own electronics may still dither; this only stops the
+Mac's part.
 
 </details>
 

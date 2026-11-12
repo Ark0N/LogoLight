@@ -20,9 +20,57 @@
 // lid to be closed (a `!` command in Claude Code shows its output only at the end), runs for
 // about a minute with it closed, then asks for it to be opened. Ctrl-C restores normal lighting.
 
+//
+//   .build/debug/LogoLightLiveTest --dither
+//
+// checks Disable Dithering against the real display drivers, on any Apple silicon Mac, with LogoLight
+// running or not: it turns the displays' dithering off for about two seconds (smooth gradients may band
+// meanwhile) and back on, and doesn't touch the logo. With dithering already off (Disable Dithering is
+// checked, or Stillcolor runs), it changes nothing and says so.
+
 import Foundation
 import IOKit
 import LogoLightCore
+
+// MARK: - Disable Dithering (--dither)
+
+/// Before the controller below is made: this check needs no logo.
+@MainActor func ditherCheck() async {
+    let hardware = SystemDisplayPipes()
+    func show(_ label: String, expected: Bool) {
+        let pipes = hardware.pipes().filter { $0.dithers != nil }
+        let text = pipes.map { "\($0.isExternal ? "external" : "built-in")=\($0.dithers == true ? "Yes" : "No")" }
+        let ok = !pipes.isEmpty && pipes.allSatisfy { $0.dithers == expected }
+        print(String(format: "%-46@ %@ %@", label as NSString, text.joined(separator: " "), ok ? "ok" : "OFF"))
+    }
+    let before = hardware.pipes()
+    guard before.contains(where: { $0.dithers != nil }) else { print("This Mac's displays have no dithering switch."); return }
+    guard before.allSatisfy({ $0.dithers != false }) else {
+        print("Dithering is already off on a display (Disable Dithering, or another tool): nothing was changed."); return
+    }
+    let dithering = DisplayDithering(hardware: hardware)
+    dithering.start(disabled: false)
+    show("left on at launch", expected: true)
+    print("Disable Dithering checked: \(dithering.setDisabled(true) ? "taken" : "NOT TAKEN")")
+    show("  dithering off", expected: false)
+    await wait(1)
+    show("  still off after 1 s", expected: false)
+    // As a display that's connected: its driver dithers again.
+    if let pipe = before.first { _ = hardware.setDithers(true, pipe: pipe.id) }
+    dithering.reapply()
+    show("  off again after one came back on", expected: false)
+    dithering.restore()
+    show("quit: dithering back on", expected: true)
+    dithering.start(disabled: true)
+    show("launch with it saved: off", expected: false)
+    print("Disable Dithering unchecked: \(dithering.setDisabled(false) ? "taken" : "NOT TAKEN")")
+    show("  dithering on", expected: true)
+}
+
+if CommandLine.arguments.contains("--dither") {
+    await ditherCheck()
+    exit(0)
+}
 
 var controller = LogoController.live()
 let emitter = LightEmitter(service: CoreBrightnessService()!, clock: LightEmitter.uptime)

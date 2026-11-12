@@ -19,6 +19,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var lidObserver: LidObserver?
     private let sleepBlocker = LidSleepBlocker()
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "LogoLight", category: "lid")
+    private let ditheringItem = NSMenuItem()
+    /// Disable Dithering: the displays' temporal dithering, which has nothing to do with the logo.
+    private let dithering = DisplayDithering()
+    /// Turns dithering off again a second after the displays change or wake.
+    private var ditheringTimer: Timer?
     private let launchAtLoginItem = NSMenuItem()
 
     private var status = LogoStatus.unsupported
@@ -72,6 +77,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Set when the user unchecks Disable Password, so the rule isn't installed again with the next password.
     private static let keepsPasswordDefaultsKey = "KeepsPassword"
     private static let lightsWithLidClosedDefaultsKey = "LightsWithLidClosed"
+    private static let disablesDitheringDefaultsKey = "DisablesDithering"
 
     init(controller: LogoController) {
         self.controller = controller
@@ -95,6 +101,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // has turned it off before.
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
         controller.willPromptForPassword = { [weak self] in await self?.closeMenuForPasswordDialog() }
+        dithering.start(disabled: defaults.bool(forKey: Self.disablesDitheringDefaultsKey))
         observeDisplay()
         lidObserver = LidObserver { [weak self] in self?.lidDidChange() }
         // About once a minute, and when the Mac is plugged in or unplugged. The controller only reads the
@@ -168,6 +175,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         lidClosedItem.action = #selector(toggleLightsWithLidClosed)
         lidClosedItem.toolTip = "Keep the logo lit when you close the lid, on power or with an external display. On power, your Mac stays awake with the lid closed. The keyboard stays dark."
 
+        // Only on a Mac whose display drivers have the switch (Apple silicon), with or without the logo.
+        // `NSMenu` measures it 150 points wide.
+        ditheringItem.title = "Disable Dithering"
+        ditheringItem.target = self
+        ditheringItem.action = #selector(toggleDithering)
+        ditheringItem.toolTip = "Stop your displays from flickering pixels between two colours to show the shades in between (temporal dithering), which tires some people's eyes. Smooth gradients may show faint bands. It lasts while LogoLight is running."
+        ditheringItem.isHidden = !dithering.isAvailable
+
         launchAtLoginItem.title = "Launch at Login"
         launchAtLoginItem.target = self
         launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
@@ -178,7 +193,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.items = [
             panelItem,
             .separator(),
-            passwordlessItem, lidClosedItem, launchAtLoginItem,
+            passwordlessItem, lidClosedItem, ditheringItem, launchAtLoginItem,
             .separator(),
             quitItem,
         ]
@@ -201,6 +216,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
         readMenuSettings()
+        // So the item's check is true when it's seen, whatever has turned dithering back on.
+        dithering.reapply()
         refresh()
         scheduleRefresh(every: 1)
 
@@ -308,6 +325,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // Only with direct control: the logo is told about the lid through corebrightnessd.
         lidClosedItem.isHidden = !status.isSupported || !controller.canLightWithLidClosed
         lidClosedItem.state = controller.lightsWithLidClosed ? .on : .off
+        ditheringItem.state = dithering.isDisabled ? .on : .off
         updateSleepBlocker()
         launchAtLoginItem.state = isLaunchAtLoginEnabled ? .on : .off
         updateControl(state)
@@ -484,10 +502,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         button.alphaValue = button.alphaValue < 1 ? 1 : 0.99
     }
 
-    /// Returns the logo to normal before the app quits.
+    /// Returns the logo to normal before the app quits, and the displays to dithering.
     func prepareToQuit() {
         sleepBlocker.set(false)
         controller.restoreNormalLighting()
+        dithering.restore()
     }
 
     /// Effects pause while the display or the Mac sleeps, or the built-in display goes away (the lid
@@ -513,15 +532,34 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
             observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.scheduleWake() }
+                MainActor.assumeIsolated {
+                    self?.scheduleWake()
+                    self?.keepDitheringOff()
+                }
             })
         }
         wasBuiltInDisplayAwake = displayReader.isDisplayAwake()
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.screensDidChange() }
+            MainActor.assumeIsolated {
+                self?.screensDidChange()
+                self?.keepDitheringOff()
+            }
         })
+    }
+
+    /// The displays changed or woke. A display that's connected dithers again, so with Disable Dithering
+    /// on it's turned off again, a second after the last change, once the driver has set the display up
+    /// (as Stillcolor waits).
+    private func keepDitheringOff() {
+        guard dithering.isDisabled else { return }
+        ditheringTimer?.invalidate()
+        let timer = Timer(timeInterval: 1, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dithering.reapply() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        ditheringTimer = timer
     }
 
     /// A display was added, removed or changed. Only the built-in display going or coming back counts,
@@ -602,6 +640,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         controller.setLightsWithLidClosed(lights)
         UserDefaults.standard.set(lights, forKey: Self.lightsWithLidClosedDefaultsKey)
         updateMenu()
+    }
+
+    /// Saved only once the displays have taken it. If they don't, they're left dithering, and the item
+    /// unchecked, with an alert that says so.
+    @objc private func toggleDithering() {
+        let disable = !dithering.isDisabled
+        let isDone = dithering.setDisabled(disable)
+        if !isDone, disable { dithering.setDisabled(false) }
+        UserDefaults.standard.set(dithering.isDisabled, forKey: Self.disablesDitheringDefaultsKey)
+        updateMenu()
+        if !isDone { report(DitheringError.notApplied, title: "LogoLight couldn't change dithering") }
     }
 
     @objc private func toggleLaunchAtLogin() {

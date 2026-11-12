@@ -836,8 +836,8 @@ final class LogoSlider: NSView {
 ///   on clear, as the template the menu bar tints).
 /// - `LOGOLIGHT_RENDER_MENU`: also draws the whole menu with the logo on (`menu-dark.png`, `menu-light.png`):
 ///   the panel and, under it, the menu's own items (Disable Password and Launch at Login checked, Lit with Lid
-///   Closed with its second line, Quit LogoLight), in the menu's rounded shape on clear. An `NSMenu` can't be
-///   drawn offscreen, so the items are drawn here to look like its (`MenuPicture`).
+///   Closed with its second line, Disable Dithering, Quit LogoLight), in the menu's rounded shape on clear. An
+///   `NSMenu` can't be drawn offscreen, so the items are drawn here to look like its (`MenuPicture`).
 @MainActor
 enum PanelRenderer {
     private struct Options {
@@ -1051,6 +1051,7 @@ enum PanelRenderer {
             y = addSeparator(at: y)
             y = addItem("Disable Password", checked: true, at: y)
             y = addItem("Lit with Lid Closed", subtitle: "On power or a display", at: y)
+            y = addItem("Disable Dithering", at: y)
             y = addItem("Launch at Login", checked: true, at: y)
             y = addSeparator(at: y)
             y = addItem("Quit LogoLight", at: y)
