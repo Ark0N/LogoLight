@@ -2,6 +2,7 @@
 //
 //   pkill -x LogoLight     # it would fight this
 //   swiftc -O tools/probes/flatmapping.swift -o /tmp/flatmapping > /tmp/flatmapping-build.log 2>&1 && /tmp/flatmapping
+//   /tmp/flatmapping --nudge   # instead: does a change of the display's brightness too small to see apply it? (about 15 s)
 //
 // MacBook Pro with PROLED XDR Display only, about a minute. It steps the built-in display's brightness
 // (through DisplayServices) with the original mapping, then with a flat one (every display brightness
@@ -166,6 +167,63 @@ func fadeOutAndIn(display: Float) {
     print(String(format: "    fade out and in at display %.2f: steady duty %.4f (applied %.0f); rise peaked at duty %.4f at %.2f s (applied %.0f, factor %.3f, final %.1f); applied %.0f...%.0f during the rise; now duty %.4f",
                  display, steady, steadyApplied, peak.duty, peak.t, peak.applied, peak.factor, peak.final,
                  appliedRange.lo, appliedRange.hi, duty()))
+}
+
+// MARK: - --nudge: can a change of the display's brightness too small to see apply a mapping?
+
+/// Watches AppliedNits for 1.5 s and prints where it was at a few moments.
+func watch(_ label: String) {
+    var looks: [(t: Double, applied: Double)] = []
+    let t0 = Date()
+    while Date().timeIntervalSince(t0) < 1.5 {
+        looks.append((Date().timeIntervalSince(t0), state()["AppliedNits"] ?? -1))
+        Thread.sleep(forTimeInterval: 0.02)
+    }
+    print(line(label))
+    let path = [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 1.45].map { m in
+        String(format: "%.2fs %.0f", m, (looks.last { $0.t <= m } ?? looks[0]).applied)
+    }
+    print("    applied: " + path.joined(separator: "  "))
+}
+
+if CommandLine.arguments.contains("--nudge") {
+    // Low enough that the original mapping holds AppliedNits well under its maximum, so a flat mapping
+    // taking effect shows (PWMNitsPreRestriction goes to 1000).
+    let low: Float = 0.3
+    let flatMapping: [[NSNumber]] = [[0, 1000], [NSNumber(value: 3.402823e38), 1000]]
+    func isFlatInEffect() -> Bool { (state()["PWMNitsPreRestriction"] ?? 0) > 999 }
+    /// The smallest nudge first; each is tried only while the mapping hasn't taken effect.
+    func nudges(towardFlat: Bool) -> String {
+        let tries: [(String, () -> Void)] = [
+            ("the same brightness written again", { setDisplay(low) }),
+            ("+0.001 for 50 ms", { setDisplay(low + 0.001); Thread.sleep(forTimeInterval: 0.05); setDisplay(low) }),
+            ("+0.005 for 50 ms", { setDisplay(low + 0.005); Thread.sleep(forTimeInterval: 0.05); setDisplay(low) }),
+            ("+0.02 for 50 ms", { setDisplay(low + 0.02); Thread.sleep(forTimeInterval: 0.05); setDisplay(low) }),
+        ]
+        for (label, nudge) in tries where isFlatInEffect() != towardFlat {
+            nudge()
+            watch("nudge: \(label)")
+            if isFlatInEffect() == towardFlat { return label }
+        }
+        return "none of them"
+    }
+    print("display's brightness at the start: \(String(format: "%.3f", originalDisplay))")
+    setDisplay(low)
+    Thread.sleep(forTimeInterval: 2)
+    print(line("display 0.30, original mapping"))
+    print("flat written -> \(set(flatMapping, key))")
+    Thread.sleep(forTimeInterval: 1)
+    print(line("1 s later, nothing else done"))
+    print("== applied the flat mapping: \(nudges(towardFlat: true))\n")
+    print("original written back -> \(set(original, key))")
+    Thread.sleep(forTimeInterval: 1)
+    print(line("1 s later, nothing else done"))
+    print("== applied the original mapping: \(nudges(towardFlat: false))")
+    restore()
+    Thread.sleep(forTimeInterval: 1)
+    print("\n" + line("end (all put back)"))
+    print("mapping now: \(compact(get(key)))")
+    exit(0)
 }
 
 print("display's brightness at the start: \(String(format: "%.3f", originalDisplay))")

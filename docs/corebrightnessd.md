@@ -95,8 +95,27 @@ LEPWMLuxToMinNitsRestrictionMapping  [0,12.5] [190,150] [560,300] [1350,1000] [3
 ```
 
 Writing a scaled-down copy of any of them returns `YES` and reads back, but `AppliedNits`
-didn't change within 5 s. Maybe it would on the next lux or screen-brightness change; that
-wasn't pursued. The originals were written back. **LogoLight doesn't use these.**
+didn't change within 5 s. The originals were written back.
+
+**A mapping takes effect at the next change of the display's brightness.** Measured on 2026-11-16
+with `tools/probes/flatmapping` (5 lux, so `MaxNitsRestriction` 202, `MinNitsRestriction` 16), stepping
+the built-in display through DisplayServices with the logo at a `Factor` of 1:
+
+- With the original mapping, the display at 0.30 gave `DisplayNits` 15, `AppliedNits` 16 and a duty
+  of 0.026; at 0.60, 184 and 0.191; at 1.00, 202 and 0.208. **`AppliedNits` ramps** to a new value
+  over about 0.75 s (202 → 176 → 135 → 85 → 49 → 22 → 16 at 0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75 s).
+- A flat `LEPWMBrightnessNitsMapping`, `[[0,1000],[3.4e38,1000]]`, read back at once but changed
+  nothing in 2 s with the display left alone. The next display change applied it (with the same
+  ramp), and from then on `PWMNitsPreRestriction` was 1000 and `AppliedNits` the maximum, 202, at
+  display 1.00, 0.30, 0.10 and 0.60, with the duty at 0.2083 every time: **the logo no longer
+  followed the display at all**, only the ambient light (through the maximum). Meanwhile
+  `DisplayNits` read 600 whatever the display did; it moved again once the original was back.
+- The original written back likewise took effect at the next display change.
+- A fade out and back in (0.4 s, 0.6 s) with the display at 0.30 peaked at the steady duty, with
+  `AppliedNits` unchanged during the rise, so a rise from dark isn't brighter than the steady logo.
+
+So writing a flat mapping frees the logo's brightness from the display's, if something makes the
+display's brightness change. `flatmapping --nudge` tries changes too small to see.
 
 ## The keyboard backlight
 
