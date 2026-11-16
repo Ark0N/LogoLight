@@ -265,6 +265,26 @@ public final class LightEmitter {
         ((service.value(forKey: Key.pwmState) as? [String: Any])?["Factor"] as? NSNumber)?.doubleValue
     }
 
+    /// How many times brighter the logo would be with the display at full brightness than it is
+    /// allowed to be at the display's brightness now: 1 with the display at full, more as it's
+    /// turned down. `nil` if corebrightnessd doesn't say.
+    ///
+    /// The logo gives `AppliedNits × Factor` (times a fixed multiplier), and the fade's `Factor` is
+    /// all this app controls. `AppliedNits` is the display's brightness mapped to logo nits, kept
+    /// between a minimum and a maximum that come from the ambient light (`MaxNitsRestriction`), so
+    /// it's the maximum with the display at full (see docs/corebrightnessd.md, "`LEPWMState`").
+    /// Scaling a level by this makes the logo as bright as that level would be with the display at
+    /// full, whatever its brightness, while the logo still follows the ambient light. It can't go
+    /// past a `Factor` of 1, though: turned far down, the display still caps the logo.
+    public var displayHeadroom: Double? {
+        guard let state = service.value(forKey: Key.pwmState) as? [String: Any],
+              let applied = (state["AppliedNits"] as? NSNumber)?.doubleValue,
+              let maximum = (state["MaxNitsRestriction"] as? NSNumber)?.doubleValue,
+              applied > 0.1, maximum > 0.1
+        else { return nil }
+        return max(1, maximum / applied)
+    }
+
     /// How much longer than its `duration` a fade may take to reach a target that moved on
     /// (see `fade(following:over:sleep:)`) before it's started again instead.
     static let followSlack = 2.0
@@ -287,7 +307,9 @@ public final class LightEmitter {
     private static let speedPolls = 8
 
     /// Fades the logo to `level` (0 dark … 1 fully lit) over about `duration` seconds, and holds
-    /// it there until the next change. The logo still adapts to ambient light, scaled by the level.
+    /// it there until the next change. The logo still adapts to ambient light and to the display's
+    /// brightness, scaled by the level (`LogoAnimator` scales the level by `displayHeadroom` to
+    /// cancel the display's part).
     ///
     /// A level in between is eased onto at the end, which takes a little longer than `duration`
     /// (see `fade(following:over:sleep:)`).

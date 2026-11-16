@@ -163,7 +163,9 @@ public final class LogoController {
     /// already held at that brightness.
     private func didApply(_ target: LogoIllumination, atChosenLevel: Bool) {
         lastApplied = target
-        if target == .on, !atChosenLevel, isDisplayAwake { animator?.resume() }
+        guard target == .on, !atChosenLevel, isDisplayAwake else { return }
+        readHeadroom()
+        animator?.resume()
     }
 
     /// Flips the current setting.
@@ -386,7 +388,46 @@ public final class LogoController {
     private func apply(_ brightness: Double) {
         guard let animator else { return }
         animator.brightness = brightness
-        if !isSwitching, isLitAndAwake { animator.brightnessDidChange() }
+        guard !isSwitching, isLitAndAwake else { return }
+        readHeadroom()
+        animator.brightnessDidChange()
+    }
+
+    // MARK: - The display's brightness
+
+    /// How much the headroom (`LightEmitter.displayHeadroom`) has to change, as a share of it, before
+    /// the logo is faded to make up for it: about a twentieth of the light, which is hard to see. A
+    /// press of a brightness key changes it far more. Smaller changes, e.g. from the ambient light
+    /// sensor's noise, would only cost writes (every fade dims the keyboard a little).
+    static let headroomTolerance = 0.04
+
+    /// Reads how far the display's brightness holds the logo back (`LightEmitter.displayHeadroom`), so
+    /// the level makes up for it. At full brightness (the system's own) there's nothing to make up. A
+    /// change within `headroomTolerance` is left out, as `displayBrightnessMayHaveChanged()` leaves it:
+    /// this runs at every step of a slider drag, and the light sensor's noise would nudge the fade's
+    /// target back and forth.
+    private func readHeadroom() {
+        guard let animator else { return }
+        let headroom = currentBrightness < 1 ? emitter?.displayHeadroom ?? 1 : 1
+        if abs(headroom / animator.headroom - 1) > Self.headroomTolerance { animator.headroom = headroom }
+    }
+
+    /// Call now and then, e.g. a few times a second (the app does, 4 times): keeps the logo's brightness
+    /// where it was set when the display's brightness or the ambient light changes. corebrightnessd
+    /// scales the logo with the display's brightness (see `LightEmitter.displayHeadroom`); when that
+    /// has changed by more than `headroomTolerance`, the logo fades to the level that makes up for it.
+    /// A playing effect picks it up at its next step. It reads nothing while the logo is at full
+    /// brightness (the system's own), off, dark or lent, or being switched.
+    public func displayBrightnessMayHaveChanged() {
+        guard let animator, let emitter, !isSwitching, !isLent, knownSetting == .on, currentBrightness < 1,
+              isDisplayAwake, let headroom = emitter.displayHeadroom,
+              abs(headroom / animator.headroom - 1) > Self.headroomTolerance
+        else { return }
+        let before = animator.level
+        animator.headroom = headroom
+        // Effects and Morse code read the level at each step. A fade under way follows the new level.
+        guard activeEffect == .none, animator.morse == nil, abs(animator.level - before) >= 0.005 else { return }
+        animator.brightnessDidChange()
     }
 
     /// How brightly the logo is glowing at this moment, from 0 (dark) to 1 (fully lit), for a live
@@ -450,7 +491,10 @@ public final class LogoController {
             readCharging()
             updateStandIn()
         }
-        if !isSwitching, status().setting == .on { animator?.resume() }
+        guard !isSwitching, status().setting == .on else { return }
+        // And the display's brightness or the light around may have changed.
+        readHeadroom()
+        animator?.resume()
     }
 
     /// Returns the logo to normal (fully lit), e.g. before quitting or after an effect was
@@ -565,7 +609,9 @@ public final class LogoController {
         self.breathesWhileCharging = breathesWhileCharging
         if breathesWhileCharging { readCharging() }
         updateStandIn()
-        if isLitAndAwake, animator.level < 1 || activeEffect != .none {
+        let isLit = isLitAndAwake
+        if isLit { readHeadroom() }
+        if isLit, animator.level < 1 || activeEffect != .none {
             animator.resume()
         } else if !isLent {
             animator.reset()
@@ -668,6 +714,7 @@ public final class LogoController {
         knownSetting = .on // so the live view shows the fade in
         if fade > 0, isDisplayAwake {
             // An effect or a Morse loop takes over from dark, starting with a rising step.
+            readHeadroom()
             if activeEffect != .none || morse != nil { return .applied }
             let level = animator?.level ?? 1
             await switchFade(to: level, over: fade, emitter: emitter)

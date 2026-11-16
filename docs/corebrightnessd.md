@@ -228,6 +228,51 @@ were only exercised by calling them directly. If LogoLight crashes while holding
 huge duration stays in the daemon until LogoLight is reopened, which replaces it: with the
 automatic duration, or with a new hold at the saved level.
 
+## Keeping the brightness off the display's
+
+A held level is a share of whatever the daemon would light the logo with, and that follows the
+display's brightness: `FinalNits = AppliedNits × Factor × NitsMultiplier`, and `AppliedNits` is the
+display's nits mapped through `LEPWMBrightnessNitsMapping`, kept between the lux limits (see
+"`LEPWMState`"). So before 1.4.0, turning the display down dimmed a logo held at 50% too (issue #9,
+"Allow logo brightness to be adjusted independently from display brightness").
+
+From 600 display nits up, the mapping gives 1000, at least `MaxNitsRestriction`, so with the
+display that bright `AppliedNits` is the maximum for the light around. LogoLight now takes the
+brightness's level as a share of that maximum: it reads `AppliedNits` and `MaxNitsRestriction`
+and raises the level by their ratio, `headroom = MaxNitsRestriction / AppliedNits` (1 or more;
+`LightEmitter.displayHeadroom`). A brightness then gives the light it gives with the display at
+full (if its full brightness reaches 600 nits), whatever the display's brightness, and still
+follows the ambient light through the maximum. `Factor` can't go past 1, though, so where the
+display holds `AppliedNits` below that light, the logo is fully lit, as bright as macOS lets it
+be at that display brightness. Full brightness (100%) is still the system's own, which follows
+the display. Only the raised level is new; the fades, the easing on and the holds are as above.
+
+From the defaults on the MacBook Pro (under "Brightness mappings"): in a dark room (`Max` 180) the
+display needs about 170 nits for nothing to be capped. In a lit room (190 lux or more, `Max` 1000)
+with the display at about 300 nits (`AppliedNits` 300), the headroom is 3.3, so brightness above
+about 55% is all fully lit.
+
+There's no notification for the display's brightness or the light, so the app reads `LEPWMState`
+4 times a second while the logo is lit below full brightness and nothing else has it (nothing at
+100%, off, dark or lent), and fades to the new level when the headroom has moved by more than 4%
+(`LogoController.headroomTolerance`), which a press of a brightness key does many times over. The
+light sensor's noise moves it less and writes nothing. Effects and Morse code pick the new level up
+at their next step; a fade under way follows it.
+
+**Not measured yet** (`tools/livecheck --display` does, stepping the display through
+DisplayServices and reading the logo's PWM duty): whether `AppliedNits` follows the display at once
+or ramps (`CBLEPWMNitsRateLimiter` and `LEPWMFollowTau` suggest a ramp), so how far and for how long
+the logo's light strays before the app makes up for a change; whether the duty really stays put; and
+the keyboard's dip from those fades. The live view still shows `Factor` (the light as a share of the
+system's own brightness), so with the display turned down it shows the logo brighter than the
+slider's position.
+
+Lifting the cap would need `AppliedNits` itself off the display: a flat `LEPWMBrightnessNitsMapping`
+(e.g. `[[0,1000],[3.4e38,1000]]`) would make it the maximum at any display brightness. Writing a
+mapping was accepted but changed nothing within 5 s; whether it applies at the next display or lux
+change hasn't been tried (`tools/probes/setmapping`, then a brightness key). It would also outlive
+the app until corebrightnessd restarts, so it isn't used.
+
 ## Following the sound
 
 The Sound effect moves the logo after the music, with the fades above and as few writes as it

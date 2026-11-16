@@ -58,6 +58,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var batteryObserver: BatteryObserver?
     /// Lends the logo to Codeman while it blinks it, and takes it back after (see `CodemanLoan`).
     private let loanWatcher: LoanWatcher
+    /// Keeps the logo's brightness where it was set when the display's brightness changes (see
+    /// `LogoController.displayBrightnessMayHaveChanged()`).
+    private var displayBrightnessTimer: Timer?
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
@@ -118,6 +121,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         scheduleRefresh(every: 10)
         loanWatcher.onChange = { [weak self] in self?.refresh() }
         loanWatcher.start()
+        // There's no public notification for the built-in display's brightness, or for the ambient
+        // light, so the app looks 4 times a second. That reads nothing while the logo is at full
+        // brightness, off or dark, and otherwise one key from corebrightnessd.
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.controller.displayBrightnessMayHaveChanged() }
+        }
+        timer.tolerance = 0.05
+        RunLoop.main.add(timer, forMode: .common)
+        displayBrightnessTimer = timer
 
         // (A debug build run from .build has no bundle ID, and no control.)
         if let bundleID = Bundle.main.bundleIdentifier {

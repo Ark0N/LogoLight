@@ -189,6 +189,17 @@ final class FakeDaemon: LightEmitterService {
     private var isMoving = false
     /// The time-driven fade in progress: where it started, how long it takes, how long it has run.
     private var fade: (from: Double, length: Double, elapsed: Double)?
+    /// `LEPWMState.AppliedNits`: the display's brightness mapped to logo nits, kept between limits
+    /// that come from the ambient light, or `nil` for a macOS that doesn't say. Turning the display
+    /// down lowers it.
+    var appliedNits: Double?
+    /// `LEPWMState.MaxNitsRestriction`: the most `appliedNits` can be in this light, which it is with
+    /// the display at full brightness.
+    var maxNits: Double?
+    /// The light the logo gives, in nits (leaving out the daemon's fixed multiplier): `appliedNits`
+    /// scaled by the fade level.
+    var nits: Double { (appliedNits ?? 1) * level }
+
     /// When false, every change is rejected (as if the client API stopped working).
     var acceptsChanges = true
     /// When false, changes are accepted but have no effect.
@@ -282,7 +293,10 @@ final class FakeDaemon: LightEmitterService {
         case "CBClamshellState": return lidClosed.map { NSNumber(value: $0) }
         case "LEPWMState":
             advance(by: stepPerRead)
-            return ["Factor": NSNumber(value: level)]
+            var state: [String: Any] = ["Factor": NSNumber(value: level)]
+            if let appliedNits { state["AppliedNits"] = NSNumber(value: appliedNits) }
+            if let maxNits { state["MaxNitsRestriction"] = NSNumber(value: maxNits) }
+            return state
         default: return nil
         }
     }
