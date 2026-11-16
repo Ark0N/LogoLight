@@ -621,6 +621,12 @@ struct DisplayBrightness {
 /// light strayed while the display changed, and for how long, and the keyboard's lowest duty. Then
 /// Pulse with the display at 0.4 should peak at the same light. The display's brightness is put back.
 @MainActor func displayCheck() async {
+    let pgrep = Process()
+    pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    pgrep.arguments = ["-x", "LogoLight"]
+    pgrep.standardOutput = FileHandle.nullDevice
+    try? pgrep.run(); pgrep.waitUntilExit()
+    guard pgrep.terminationStatus != 0 else { print("Quit LogoLight first: it would fight this test."); exit(1) }
     guard let screen = DisplayBrightness(), let original = screen.value else {
         print("can't read or set the built-in display's brightness (DisplayServices): check by hand with the keys")
         return
