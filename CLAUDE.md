@@ -520,27 +520,31 @@ whether the menu should say that Codeman has the logo (the live view already sho
 
 **The display's brightness** (2026-11-16, issue #9 from transkatgirl, "Allow logo brightness to be
 adjusted independently from display brightness"; the user: "take care of that nd make a new
-relase"; branch `display-brightness`, draft PR #10): corebrightnessd lights the logo with `AppliedNits × Factor`,
-and `AppliedNits` follows the display's brightness, so a level below 100% dimmed with the display.
-The level is now raised by `MaxNitsRestriction / AppliedNits` (`LightEmitter.displayHeadroom`,
-`LogoAnimator.headroom`), so a brightness gives the light it gives with the display at full, up to
-fully lit; 100% is still the system's own (docs/corebrightnessd.md, "Keeping the brightness off the
-display's"). Asked how to offer it, the user chose **for everyone, with no new switch**, over a
-switch in the brightness card (a taller panel and every picture redrawn) or a menu item, so the
-menu and the pictures are unchanged. The app looks 4 times a second (`displayBrightnessMayHaveChanged()`,
-a timer in `StatusItemController`; nothing is read at 100%, off, dark or lent) and fades when the
-headroom has moved by more than 4%. The question said the top of the slider is capped "with the
-display turned far down"; it's sooner than that in a lit room (`Max` 1000): with the display at
-about 300 nits, everything above about 55% is fully lit (the user was told after). After updating,
-a logo below 100% is brighter whenever the display isn't at full; the release notes should say to
-move the slider down if it looks too bright. The live view still shows `Factor`. 283 tests pass on
-the Mac mini (12 new; six fail with the headroom left at 1). **Not checked on the MacBook**:
-`tools/livecheck --display` (new: steps the built-in display's brightness through DisplayServices
-from full to 0.08 and back, compares the logo's PWM duty with its duty at full, prints how far and
-how long it strayed and the keyboard's dip, checks Pulse's peak at display 0.4, and puts the
-display's brightness back, also on Ctrl-C) and the full run, whose expectations now include the
-headroom and which runs the app's 4-per-second look. At the user's choice, **1.4.0 waits for that
-check**, then ships from the MacBook as usual.
+relase"; branch `display-brightness`, draft PR #10): corebrightnessd lights the logo with
+`AppliedNits × Factor`, and `AppliedNits` is the display's nits through `LEPWMBrightnessNitsMapping`,
+so a level below 100% dimmed with the display. The first version only raised the level by
+`MaxNitsRestriction / AppliedNits` (`LightEmitter.displayHeadroom`); on the MacBook
+(`tools/livecheck --display`, a 5 lux room) it held the light where it could, but was fully lit and
+still too dim at display 0.40 and below, and strayed on each display change (0.08 → 0.60 lit it to
+3 times its light for 1.1 s), since `AppliedNits` ramps over about 0.75 s. The user: "its not 100
+working like this". `tools/probes/flatmapping` then showed that a flat mapping, taken at the next
+change of the display's nits (even of one; auto-brightness, which is on there, makes them), keeps
+`AppliedNits` at the room's maximum at any display brightness: the logo's duty was the same at
+display 1.00, 0.30, 0.10 and 0.60 (docs/corebrightnessd.md, "Brightness mappings"). So now the app
+writes the flat mapping at launch (`LogoController.untieBrightnessFromDisplay()`), saves the
+display's own in its preferences (`DisplayBrightnessMapping`, `DefaultsMappingStore`), writes it back
+when it quits (`restoreNormalLighting()`), and writes the flat one again if it's lost (every 40 looks,
+about 10 s, and at a wake). The headroom stays as the bridge until the mapping takes. The user
+chose (a): 100% is as bright as macOS makes it with the display at full, so anyone at 100% gets a
+brighter logo than before when the display isn't at full (also those who only switch it on and
+off), over (b), 100% as the system's own (with the display down, 99% would be far brighter than
+100%). Asked first, the user had chosen it "for everyone, with no new switch", so the menu and the
+pictures are unchanged. 291 tests pass on the Mac mini. **Not yet checked on the MacBook**: the app
+with the flat mapping (`tools/livecheck --display`, reworked for it, and the full run), and whether a
+nudge of the display's brightness too small to see applies a mapping (`flatmapping --nudge`; its first
+run had the mapping applied by itself by the settling display). The release notes for 1.4.0 should
+say the logo no longer dims with the display, and to lower the slider if it's now too bright.
+**1.4.0 waits for the check**, then ships from the MacBook.
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only

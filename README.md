@@ -36,7 +36,7 @@
       Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.
       <br><br>
       <b>Brightness</b><br>
-      A slider that eases the logo onto each level, and holds it there when you change your display's brightness, up to the brightest macOS allows. It still adapts to the light around you.
+      A slider that eases the logo onto each level. Your display's brightness no longer changes it; it still adapts to the light around you.
       <br><br>
       <b>Effects</b><br>
       Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.
@@ -160,12 +160,13 @@ running fade follows it rather than starting again at every step. Quitting LogoL
 the logo to normal brightness.
 
 `corebrightnessd` also dims the logo with the display: the logo's light is `AppliedNits ×
-Factor`, and `AppliedNits` follows the display's brightness, within limits set by the light
-around. So LogoLight reads `LEPWMState` a few times a second and raises the level by as much as
-the display holds `AppliedNits` below its most for that light. A level then gives the light it
-gives with the display at full, whatever the display's brightness. It can't go past fully lit,
-though, so with the display turned well down, the top of the slider is as bright as macOS lets
-the logo be. 100% is the system's own brightness, which follows the display.
+Factor`, and `AppliedNits` is the display's nits mapped through `LEPWMBrightnessNitsMapping`,
+within limits set by the light around. While it runs, LogoLight writes a flat mapping, so
+`AppliedNits` is the most the light around allows at any display brightness, and the slider alone
+sets the logo's brightness (100% is as bright as macOS makes it with the display at full).
+`corebrightnessd` takes the mapping at the next change of the display's brightness; until then,
+LogoLight raises the level to make up for the display. When LogoLight quits, it puts the
+display's own mapping back.
 
 The Sound effect hears what the Mac plays through a Core Audio process tap on every app's
 output (macOS 14.2 or later, with your permission under System Audio Recording Only), reduces
