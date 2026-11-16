@@ -11,6 +11,9 @@
 //   .build/debug/LogoLightLiveTest --morse      # only the Morse code check (about 15 s)
 //   .build/debug/LogoLightLiveTest --sound      # only the Sound effect, with a stand-in for the sound (about 20 s)
 //   .build/debug/LogoLightLiveTest --charging   # only the charging light check (about 30 s)
+//   .build/debug/LogoLightLiveTest --display    # only the display's brightness (about 40 s): steps the built-in
+//                                               # display's brightness down and up, and checks the logo's light
+//                                               # stays put; the display's brightness is put back at the end
 //   .build/debug/LogoLightLiveTest --hear       # only listens: prints the loudness of what the Mac plays for 8 s,
 //                                               # playing a system sound meanwhile (asks for System Audio
 //                                               # Recording Only the first time; the logo isn't touched)
@@ -20,12 +23,23 @@
 // lid to be closed (a `!` command in Claude Code shows its output only at the end), runs for
 // about a minute with it closed, then asks for it to be opened. Ctrl-C restores normal lighting.
 
+import CoreGraphics
 import Foundation
 import IOKit
 import LogoLightCore
 
 var controller = LogoController.live()
-let emitter = LightEmitter(service: CoreBrightnessService()!, clock: LightEmitter.uptime)
+let brightnessService = CoreBrightnessService()!
+let emitter = LightEmitter(service: brightnessService, clock: LightEmitter.uptime)
+
+// As the app does, 4 times a second: keeps the logo's brightness off the display's (the display's
+// brightness and the ambient light can change during any check).
+let displayPoll = Task { @MainActor in
+    while !Task.isCancelled {
+        controller.displayBrightnessMayHaveChanged()
+        try? await Task.sleep(for: .milliseconds(250))
+    }
+}
 @MainActor func factor() -> Double { emitter.fadeLevel ?? -1 }
 func wait(_ s: Double) async { try? await Task.sleep(for: .seconds(s)) }
 
@@ -91,7 +105,7 @@ func ledDuty(_ name: String) -> Double {
     let peak = samples.filter { $0.t >= 0.035 }.map { abs($0.f - level(at: $0.t - 0.035)) / 0.035 }.max() ?? 0
     let atStop = abs(level(at: lastChange) - level(at: lastChange - 0.06)) / 0.06
     let share = peak > 0 ? atStop / peak : 0
-    let expected = LogoAnimator.level(forBrightness: brightness)
+    let expected = LogoAnimator.level(forBrightness: brightness, headroom: controller.animator?.headroom ?? 1)
     let up = expected > samples[0].f
     let back = zip(samples, samples.dropFirst()).map { up ? $0.f - $1.f : $1.f - $0.f }.filter { $0 > 0 }.reduce(0, +)
     print(String(format: "%-46@ factor=%.3f expected=%.3f %@  took %.2fs, last 60 ms at %.0f%% of %.2f/s %@  back %.3f %@  keyboard min %.3f (before %.3f)",
@@ -99,7 +113,11 @@ func ledDuty(_ name: String) -> Double {
                  100 * share, peak, share < 0.25 ? "ok" : "ABRUPT", back, back <= 0.005 ? "ok" : "BOUNCE",
                  keyboardLo, resting))
 }
-let level = LogoAnimator.level(forBrightness:)
+/// The fade level for a brightness, raised to make up for the display's brightness as the controller
+/// last read it (1 with the display at full).
+@MainActor func level(_ brightness: Double) -> Double {
+    LogoAnimator.level(forBrightness: brightness, headroom: controller.animator?.headroom ?? 1)
+}
 
 // MARK: - Morse code (also alone, with --morse)
 
@@ -549,6 +567,135 @@ if CommandLine.arguments.contains("--hear") {
 }
 if CommandLine.arguments.contains("--sound") {
     await soundCheck()
+    controller.restoreNormalLighting(); await wait(0.8)
+    report("restoreNormalLighting", expected: 1)
+    exit(0)
+}
+
+// MARK: - The display's brightness (--display)
+
+/// The built-in display's brightness, through DisplayServices (private), as its brightness keys set it.
+@MainActor
+struct DisplayBrightness {
+    private typealias GetFunction = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
+    private typealias SetFunction = @convention(c) (UInt32, Float) -> Int32
+    private let getFunction: GetFunction
+    private let setFunction: SetFunction
+    private let display: CGDirectDisplayID
+
+    init?() {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_LAZY),
+              let get = dlsym(handle, "DisplayServicesGetBrightness"),
+              let set = dlsym(handle, "DisplayServicesSetBrightness")
+        else { return nil }
+        getFunction = unsafeBitCast(get, to: GetFunction.self)
+        setFunction = unsafeBitCast(set, to: SetFunction.self)
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(16, &ids, &count) == .success,
+              let builtIn = ids.prefix(Int(count)).first(where: { CGDisplayIsBuiltin($0) != 0 })
+        else { return nil }
+        display = builtIn
+    }
+
+    /// From 0 to 1, as the brightness slider in Control Center shows it.
+    var value: Float? {
+        var value: Float = 0
+        return getFunction(display, &value) == 0 ? value : nil
+    }
+
+    @discardableResult
+    func set(_ value: Float) -> Bool { setFunction(display, value) == 0 }
+}
+
+/// `LEPWMState`'s numbers.
+@MainActor func pwmState() -> [String: Double] {
+    let state = brightnessService.value(forKey: "LEPWMState") as? [String: Any] ?? [:]
+    return state.compactMapValues { ($0 as? NSNumber)?.doubleValue }
+}
+
+/// With the logo at brightness 0.5, steps the display's brightness from full down to almost dark and
+/// back, and checks the logo's light (its PWM duty, the LED's real output) against its light with the
+/// display at full. Where the display holds it below that even fully lit (`AppliedNits` under the
+/// level's share of `MaxNitsRestriction`), the logo should be fully lit instead. It prints how far the
+/// light strayed while the display changed, and for how long, and the keyboard's lowest duty. Then
+/// Pulse with the display at 0.4 should peak at the same light. The display's brightness is put back.
+@MainActor func displayCheck() async {
+    guard let screen = DisplayBrightness(), let original = screen.value else {
+        print("can't read or set the built-in display's brightness (DisplayServices): check by hand with the keys")
+        return
+    }
+    guard pwmState()["AppliedNits"] != nil, pwmState()["MaxNitsRestriction"] != nil else {
+        print("LEPWMState has no AppliedNits or MaxNitsRestriction: the logo follows the display as before")
+        return
+    }
+    // Ctrl-C: the display's brightness and the logo back to normal.
+    signal(SIGINT, SIG_IGN)
+    let interrupt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+    interrupt.setEventHandler {
+        MainActor.assumeIsolated {
+            screen.set(original)
+            controller.restoreNormalLighting()
+        }
+        print("Interrupted; the display's brightness and normal lighting restored.")
+        exit(130)
+    }
+    interrupt.resume()
+    defer { interrupt.cancel(); signal(SIGINT, SIG_DFL) }
+
+    func line(_ label: String, display: Float) -> String {
+        let state = pwmState()
+        return String(format: "%-34@ display=%.2f applied=%4.0f max=%4.0f lux=%4.0f headroom=%.2f factor=%.3f final=%5.1f duty=%.4f",
+                      label as NSString, display, state["AppliedNits"] ?? -1, state["MaxNitsRestriction"] ?? -1,
+                      state["Lux"] ?? -1, controller.animator?.headroom ?? -1, state["Factor"] ?? -1,
+                      state["FinalNits"] ?? -1, logoDuty())
+    }
+    print(String(format: "display's brightness at the start: %.3f", original))
+    screen.set(1); await wait(2.5)
+    controller.setBrightness(0.5); await wait(2)
+    let reference = logoDuty()
+    print(line("reference: brightness 0.5", display: 1))
+    guard reference > 0 else { print("the logo gives no light: is it on?"); screen.set(original); return }
+
+    for display: Float in [0.7, 0.4, 0.2, 0.08, 0.6, 1] {
+        let keyboardBefore = keyboardDuty()
+        var keyboardLo = keyboardBefore, worst = 0.0, strayedUntil = 0.0
+        let t0 = Date()
+        screen.set(display)
+        while Date().timeIntervalSince(t0) < 3 {
+            let off = abs(logoDuty() / reference - 1)
+            worst = max(worst, off)
+            if off > 0.06 { strayedUntil = Date().timeIntervalSince(t0) }
+            keyboardLo = min(keyboardLo, keyboardDuty())
+            await wait(0.01)
+        }
+        let state = pwmState()
+        // Fully lit can't give the reference's light: then it should be fully lit.
+        let capped = 0.265 * (state["MaxNitsRestriction"] ?? 0) > (state["AppliedNits"] ?? 0)
+        let ok = capped ? (state["Factor"] ?? 0) >= 0.99 : abs(logoDuty() / reference - 1) <= 0.06
+        print(line("display -> \(String(format: "%.2f", display))", display: display) + (capped ? " capped" : "")
+              + (ok ? " ok" : " OFF"))
+        print(String(format: "  light strayed up to %.0f%% from the reference, back within 6%% after %.2f s; keyboard min %.3f (before %.3f)",
+                     100 * worst, strayedUntil, keyboardLo, keyboardBefore))
+    }
+
+    screen.set(0.4); await wait(2.5)
+    controller.setEffect(.pulse)
+    var peak = 0.0
+    let t0 = Date()
+    while Date().timeIntervalSince(t0) < 5 { peak = max(peak, logoDuty()); await wait(0.005) }
+    controller.setEffect(.none); await wait(1.2)
+    print(String(format: "%-34@ peak duty %.4f against %.4f %@", "pulse at 0.5, display 0.40" as NSString, peak,
+                 reference, abs(peak / reference - 1) <= 0.08 ? "ok" : "OFF"))
+
+    screen.set(original); await wait(1.5)
+    print(line("display's brightness put back", display: original))
+}
+
+if CommandLine.arguments.contains("--display") {
+    controller.restoreNormalLighting(); await wait(0.6)
+    await displayCheck()
+    controller.setBrightness(1); await wait(0.7)
     controller.restoreNormalLighting(); await wait(0.8)
     report("restoreNormalLighting", expected: 1)
     exit(0)
