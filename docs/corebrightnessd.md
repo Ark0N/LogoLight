@@ -114,8 +114,10 @@ the built-in display through DisplayServices with the logo at a `Factor` of 1:
 - A fade out and back in (0.4 s, 0.6 s) with the display at 0.30 peaked at the steady duty, with
   `AppliedNits` unchanged during the rise, so a rise from dark isn't brighter than the steady logo.
 
-So writing a flat mapping frees the logo's brightness from the display's, if something makes the
-display's brightness change. `flatmapping --nudge` tries changes too small to see.
+A second run (`--nudge`) wrote the flat mapping 2 s after setting the display to 0.30, while its
+nits were still moving (15 → 14, with auto-brightness on): it took effect by itself within 1 s, and
+so did the original written back. So any change of the display's nits applies a mapping, even one
+of a nit. With nothing moving the display, `flatmapping --nudge` tries changes too small to see.
 
 ## The keyboard backlight
 

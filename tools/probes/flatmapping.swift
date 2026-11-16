@@ -194,6 +194,16 @@ if CommandLine.arguments.contains("--nudge") {
     func isFlatInEffect() -> Bool { (state()["PWMNitsPreRestriction"] ?? 0) > 999 }
     /// The smallest nudge first; each is tried only while the mapping hasn't taken effect.
     func nudges(towardFlat: Bool) -> String {
+        // macOS applies a mapping when the display's nits next change, even by a nit, which a display
+        // still settling (or auto-brightness) does by itself: wait 3 s for that first.
+        let t0 = Date()
+        while Date().timeIntervalSince(t0) < 3 {
+            if isFlatInEffect() == towardFlat {
+                return String(format: "by itself, %.2f s after it was written (the display's nits moved)", Date().timeIntervalSince(t0) + 1)
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        print(line("3 s later, still not in effect"))
         let tries: [(String, () -> Void)] = [
             ("the same brightness written again", { setDisplay(low) }),
             ("+0.001 for 50 ms", { setDisplay(low + 0.001); Thread.sleep(forTimeInterval: 0.05); setDisplay(low) }),
@@ -205,16 +215,29 @@ if CommandLine.arguments.contains("--nudge") {
             watch("nudge: \(label)")
             if isFlatInEffect() == towardFlat { return label }
         }
-        return "none of them"
+        return "NONE of them"
+    }
+    /// Waits for the display's nits to stay put for 3 s (for up to 15 s), so a mapping isn't applied
+    /// by the display settling.
+    func settle() {
+        var last = state()["DisplayNits"] ?? -1, since = Date()
+        let t0 = Date()
+        while Date().timeIntervalSince(since) < 3, Date().timeIntervalSince(t0) < 15 {
+            Thread.sleep(forTimeInterval: 0.1)
+            let now = state()["DisplayNits"] ?? -1
+            if abs(now - last) > 0.01 { last = now; since = Date() }
+        }
+        print(String(format: "display's nits settled at %.2f after %.1f s", last, Date().timeIntervalSince(t0)))
     }
     print("display's brightness at the start: \(String(format: "%.3f", originalDisplay))")
     setDisplay(low)
-    Thread.sleep(forTimeInterval: 2)
+    settle()
     print(line("display 0.30, original mapping"))
     print("flat written -> \(set(flatMapping, key))")
     Thread.sleep(forTimeInterval: 1)
     print(line("1 s later, nothing else done"))
     print("== applied the flat mapping: \(nudges(towardFlat: true))\n")
+    settle()
     print("original written back -> \(set(original, key))")
     Thread.sleep(forTimeInterval: 1)
     print(line("1 s later, nothing else done"))
