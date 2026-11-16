@@ -520,7 +520,7 @@ whether the menu should say that Codeman has the logo (the live view already sho
 
 **The display's brightness** (2026-11-16, issue #9 from transkatgirl, "Allow logo brightness to be
 adjusted independently from display brightness"; the user: "take care of that nd make a new
-relase"; branch `display-brightness`): corebrightnessd lights the logo with `AppliedNits × Factor`,
+relase"; branch `display-brightness`, draft PR #10): corebrightnessd lights the logo with `AppliedNits × Factor`,
 and `AppliedNits` follows the display's brightness, so a level below 100% dimmed with the display.
 The level is now raised by `MaxNitsRestriction / AppliedNits` (`LightEmitter.displayHeadroom`,
 `LogoAnimator.headroom`), so a brightness gives the light it gives with the display at full, up to
