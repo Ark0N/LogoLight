@@ -37,7 +37,10 @@ make install   # copy to /Applications, (re)launch
 
 Only the **MacBook Pro with PROLED XDR Display** has the logo. On any other Mac (e.g. the
 Mac mini) everything builds, the tests pass (the one live-hardware test skips), and the app
-runs but says the logo isn't available. So:
+runs but says the logo isn't available. (The Mac mini's Xcode is 26.6, and `make app` stops at
+the Control Center control there with `unknown argument: '-const-gather-protocols-list'`, also on
+a clean `main`; `swift build`, `make test` and livecheck's build work. It also has the Developer ID
+certificate but no `logolight` notarytool profile. So releases are made on the MacBook.) So:
 
 - Logic changes can be made and tested anywhere. The fakes in
   `Sources/LogoLightTests/ControllerTests.swift` (`SimulatedMac`, `FakeDaemon`, which logs every
@@ -514,6 +517,30 @@ first moves the logo. Tests: `LoanTests.swift` (244 passed on the Mac mini; four
 lending doesn't pause or gate the writes). **Not checked on the MacBook**: no `tools/livecheck` run,
 and the handover with a real Codeman needs the Codeman side, which isn't released yet. Not decided:
 whether the menu should say that Codeman has the logo (the live view already shows its blinking).
+
+**The display's brightness** (2026-11-16, issue #9 from transkatgirl, "Allow logo brightness to be
+adjusted independently from display brightness"; the user: "take care of that nd make a new
+relase"; branch `display-brightness`): corebrightnessd lights the logo with `AppliedNits × Factor`,
+and `AppliedNits` follows the display's brightness, so a level below 100% dimmed with the display.
+The level is now raised by `MaxNitsRestriction / AppliedNits` (`LightEmitter.displayHeadroom`,
+`LogoAnimator.headroom`), so a brightness gives the light it gives with the display at full, up to
+fully lit; 100% is still the system's own (docs/corebrightnessd.md, "Keeping the brightness off the
+display's"). Asked how to offer it, the user chose **for everyone, with no new switch**, over a
+switch in the brightness card (a taller panel and every picture redrawn) or a menu item, so the
+menu and the pictures are unchanged. The app looks 4 times a second (`displayBrightnessMayHaveChanged()`,
+a timer in `StatusItemController`; nothing is read at 100%, off, dark or lent) and fades when the
+headroom has moved by more than 4%. The question said the top of the slider is capped "with the
+display turned far down"; it's sooner than that in a lit room (`Max` 1000): with the display at
+about 300 nits, everything above about 55% is fully lit (the user was told after). After updating,
+a logo below 100% is brighter whenever the display isn't at full; the release notes should say to
+move the slider down if it looks too bright. The live view still shows `Factor`. 283 tests pass on
+the Mac mini (12 new; six fail with the headroom left at 1). **Not checked on the MacBook**:
+`tools/livecheck --display` (new: steps the built-in display's brightness through DisplayServices
+from full to 0.08 and back, compares the logo's PWM duty with its duty at full, prints how far and
+how long it strayed and the keyboard's dip, checks Pulse's peak at display 0.4, and puts the
+display's brightness back, also on Ctrl-C) and the full run, whose expectations now include the
+headroom and which runs the app's 4-per-second look. At the user's choice, **1.4.0 waits for that
+check**, then ships from the MacBook as usual.
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
