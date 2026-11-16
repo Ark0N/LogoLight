@@ -36,7 +36,7 @@
       Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.
       <br><br>
       <b>Brightness</b><br>
-      A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.
+      A slider that eases the logo onto each level, and holds it there when you change your display's brightness, up to the brightest macOS allows. It still adapts to the light around you.
       <br><br>
       <b>Effects</b><br>
       Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.
@@ -158,6 +158,14 @@ to a stop instead of halting at speed. Then it starts a fade the other way that'
 never visibly moves. The level lasts until the next change. While the slider is dragged, the
 running fade follows it rather than starting again at every step. Quitting LogoLight returns
 the logo to normal brightness.
+
+`corebrightnessd` also dims the logo with the display: the logo's light is `AppliedNits ×
+Factor`, and `AppliedNits` follows the display's brightness, within limits set by the light
+around. So LogoLight reads `LEPWMState` a few times a second and raises the level by as much as
+the display holds `AppliedNits` below its most for that light. A level then gives the light it
+gives with the display at full, whatever the display's brightness. It can't go past fully lit,
+though, so with the display turned well down, the top of the slider is as bright as macOS lets
+the logo be. 100% is the system's own brightness, which follows the display.
 
 The Sound effect hears what the Mac plays through a Core Audio process tap on every app's
 output (macOS 14.2 or later, with your permission under System Audio Recording Only), reduces

@@ -11,7 +11,7 @@
 ## Features
 
 - LogoLight switch at the top of the menu: the logo fades out or back in smoothly, usually with no password. Option-click the menu bar icon to toggle it without opening the menu.
-- Brightness slider: the logo eases onto the level and holds it, and still adapts to the light around it, scaled to the setting. macOS itself only offers on and off.
+- Brightness slider: the logo eases onto the level and holds it, whatever the display's brightness (macOS dims the logo with the display), up to the brightest macOS allows at it, and still adapts to the light around it. macOS itself only offers on and off.
 - Effects: Breathe (slow and soft, like an old Mac's sleep light), Pulse (a steady, quicker rise and fall) and Heartbeat (two quick beats, then a rest). Each peaks at the brightness set, and pauses while the logo is off or the display sleeps.
 - Battery indicator: with the Battery switch on, the logo's brightness follows the battery's charge, full when it's full and dimming as it runs down.
 - Charging light: with the Charging switch on, the logo breathes like an old Mac's sleep light while the battery charges, from the moment the Mac is plugged in, then goes back to the chosen effect. It stops when the battery is full or held at a charge limit.
