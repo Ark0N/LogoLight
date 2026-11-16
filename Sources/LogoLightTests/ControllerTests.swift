@@ -196,9 +196,30 @@ final class FakeDaemon: LightEmitterService {
     /// `LEPWMState.MaxNitsRestriction`: the most `appliedNits` can be in this light, which it is with
     /// the display at full brightness.
     var maxNits: Double?
-    /// The light the logo gives, in nits (leaving out the daemon's fixed multiplier): `appliedNits`
+    /// The light the logo gives, in nits (leaving out the daemon's fixed multiplier): the applied nits
     /// scaled by the fade level.
-    var nits: Double { (appliedNits ?? 1) * level }
+    var nits: Double { (effectiveAppliedNits ?? 1) * level }
+
+    /// `LEPWMBrightnessNitsMapping` as last written, or `nil` for a macOS without the key.
+    private(set) var mapping: [[Double]]?
+    /// Every mapping written, in order.
+    private(set) var mappingWrites: [[[Double]]] = []
+    /// Whether the mapping in effect is a flat one. Like the real daemon, a mapping written takes effect
+    /// only at the next change of the display's nits (`displayNitsChanged()`).
+    private(set) var isFlatInEffect = false
+    /// `AppliedNits`: `appliedNits`, or with a flat mapping in effect, the most the light allows.
+    var effectiveAppliedNits: Double? { isFlatInEffect ? maxNits ?? appliedNits : appliedNits }
+
+    /// Starts the daemon with a mapping already in effect (its own, or a flat one a run left).
+    func setMapping(_ mapping: [[Double]]?) {
+        self.mapping = mapping
+        isFlatInEffect = mapping.map(LightEmitter.isFlat) ?? false
+    }
+
+    /// The display's nits changed: the mapping last written takes effect.
+    func displayNitsChanged() {
+        isFlatInEffect = mapping.map(LightEmitter.isFlat) ?? false
+    }
 
     /// When false, every change is rejected (as if the client API stopped working).
     var acceptsChanges = true
@@ -291,10 +312,11 @@ final class FakeDaemon: LightEmitterService {
         case "LEBacklightMode": return NSNumber(value: mode)
         case "DisplayLogicalState": return NSNumber(value: lastStateSent)
         case "CBClamshellState": return lidClosed.map { NSNumber(value: $0) }
+        case "LEPWMBrightnessNitsMapping": return mapping.map { $0.map { $0.map { NSNumber(value: $0) } } }
         case "LEPWMState":
             advance(by: stepPerRead)
             var state: [String: Any] = ["Factor": NSNumber(value: level)]
-            if let appliedNits { state["AppliedNits"] = NSNumber(value: appliedNits) }
+            if let applied = effectiveAppliedNits { state["AppliedNits"] = NSNumber(value: applied) }
             if let maxNits { state["MaxNitsRestriction"] = NSNumber(value: maxNits) }
             return state
         default: return nil
@@ -341,6 +363,15 @@ final class FakeDaemon: LightEmitterService {
             keyboardToldLidClosed = value.boolValue
         default: break
         }
+    }
+
+    func setObject(_ value: AnyObject, forKey key: String) -> Bool {
+        guard key == "LEPWMBrightnessNitsMapping", mapping != nil, acceptsChanges,
+              let pairs = value as? [[NSNumber]]
+        else { return false }
+        mapping = pairs.map { $0.map(\.doubleValue) }
+        mappingWrites.append(mapping!)
+        return true
     }
 
     func setDisplaysValue(_ value: NSNumber, forKey key: String) {
@@ -427,6 +458,12 @@ final class FakeBattery {
     var chargingReads = 0
 }
 
+/// Keeps the display's own brightness mapping in memory, so tests never touch the app's preferences.
+@MainActor
+final class MemoryMappingStore: MappingStore {
+    var mapping: [[Double]]?
+}
+
 /// Holds the controller's waits that aren't animation (for charging to start after a plug-in) until
 /// `fire()`, so they neither return at once nor move the fake clock, as `FakeClock`'s sleeps do.
 @MainActor
@@ -460,6 +497,7 @@ struct Fixture {
     let battery = FakeBattery()
     let sound = FakeSound()
     let timer = FakeTimer()
+    let mappings = MemoryMappingStore()
     let controller: LogoController
 
     /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
@@ -500,7 +538,8 @@ struct Fixture {
                                           isFull: (battery.charge ?? 0) >= 1)
             },
             wait: { [timer] in try await timer.sleep($0) },
-            soundSource: sound
+            soundSource: sound,
+            mappingStore: mappings
         )
     }
 }
