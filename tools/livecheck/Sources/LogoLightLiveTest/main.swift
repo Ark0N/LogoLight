@@ -635,9 +635,10 @@ struct Look {
 /// and back, and checks the logo's light (its PWM duty, the LED's real output) against its light with
 /// the display at full: it should stay put at every step, with no cap, once the mapping is in effect.
 /// For each step it prints how far the light strayed and for how long, `AppliedNits` over the first
-/// second, and the keyboard's lowest duty. Then Pulse with the display at 0.30 should peak at the same
-/// light, and 100% should give the same light at display 0.30 as at full. Last, the display's own
-/// mapping should be back once LogoLight quits (`restoreNormalLighting()`) and the display moves.
+/// second, and the keyboard's lowest duty. Then Pulse with the display at 0.30 should peak where it
+/// does with the display at full, and 100% should give the same light at display 0.30 as at full.
+/// Last, the display's own mapping should be back once LogoLight quits (`restoreNormalLighting()`)
+/// and the display moves.
 /// The display's brightness is put back.
 @MainActor func displayCheck() async {
     let pgrep = Process()
@@ -708,14 +709,30 @@ struct Look {
                      100 * worst, strayedUntil, keyboardLo, keyboardBefore) + path.joined(separator: "  "))
     }
 
-    screen.set(0.3); await wait(2.5)
-    controller.setEffect(.pulse)
-    var peak = 0.0
-    let t0 = Date()
-    while Date().timeIntervalSince(t0) < 5 { peak = max(peak, logoDuty()); await wait(0.005) }
-    controller.setEffect(.none); await wait(1.2)
-    print(String(format: "%-30@ peak duty %.4f against %.4f %@", "pulse at 0.5, display 0.30" as NSString, peak,
-                 reference, abs(peak / reference - 1) <= 0.08 ? "ok" : "OFF"))
+    // Pulse's own peak can sit a little off the held level, so it's checked against Pulse at full.
+    func pulsePeak(display: Float) async -> Double {
+        screen.set(display); await wait(2.5)
+        controller.setEffect(.pulse)
+        var peak = 0.0, factorPeak = 0.0, headroomPeak = 1.0, luxLo = 1e9, luxHi = 0.0
+        let t0 = Date()
+        while Date().timeIntervalSince(t0) < 5 {
+            let state = pwmState()
+            peak = max(peak, logoDuty())
+            factorPeak = max(factorPeak, state["Factor"] ?? 0)
+            headroomPeak = max(headroomPeak, controller.animator?.headroom ?? 1)
+            luxLo = min(luxLo, state["Lux"] ?? 0); luxHi = max(luxHi, state["Lux"] ?? 0)
+            await wait(0.005)
+        }
+        controller.setEffect(.none); await wait(1.2)
+        print(String(format: "%-30@ peak duty %.4f, factor %.3f (level %.3f), headroom up to %.3f, lux %.0f-%.0f",
+                     "pulse at 0.5, display \(String(format: "%.2f", display))" as NSString, peak, factorPeak,
+                     LogoAnimator.level(forBrightness: 0.5), headroomPeak, luxLo, luxHi))
+        return peak
+    }
+    let pulseFull = await pulsePeak(display: 1)
+    let pulseDim = await pulsePeak(display: 0.3)
+    print(String(format: "%-30@ %.4f against %.4f at full %@", "  pulse's peak at display 0.30" as NSString, pulseDim,
+                 pulseFull, abs(pulseDim / pulseFull - 1) <= 0.06 ? "ok" : "OFF"))
 
     screen.set(1); await wait(2)
     controller.setBrightness(1); await wait(1.5)

@@ -229,6 +229,28 @@ func displayBrightnessTests(_ t: TestHarness) async {
         }
     }
 
+    await t.test("with the flat mapping in effect, a room getting brighter isn't taken for the display") {
+        let f = fixture(display: 0.3, mapping: LightEmitter.flatMapping)
+        f.daemon.maxNits = 300
+        f.controller.start(brightness: 0.5, effect: .none)
+        await finish(f)
+        f.daemon.log.removeAll()
+        // The room's maximum goes up at once; AppliedNits follows over about 0.75 s.
+        f.daemon.maxNits = 400
+        for nits in [300.0, 330, 360, 390] {
+            f.daemon.rampingNits = nits
+            f.controller.displayBrightnessMayHaveChanged()
+            await finish(f)
+            t.expectEqual(f.controller.animator?.headroom, 1)
+        }
+        f.daemon.rampingNits = nil
+        f.controller.displayBrightnessMayHaveChanged()
+        await finish(f)
+        t.expectEqual(f.daemon.log, [])
+        t.expect(abs(f.daemon.level - LogoAnimator.level(forBrightness: 0.5)) <= 0.001,
+                 "the level should be the brightness's own, at \(f.daemon.level)")
+    }
+
     await t.test("at 100%, the logo is as bright as the light around allows, whatever the display") {
         let f = fixture(display: 0.2, mapping: LightEmitter.defaultMapping)
         f.controller.start(brightness: 1, effect: .none)

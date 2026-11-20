@@ -207,8 +207,18 @@ final class FakeDaemon: LightEmitterService {
     /// Whether the mapping in effect is a flat one. Like the real daemon, a mapping written takes effect
     /// only at the next change of the display's nits (`displayNitsChanged()`).
     private(set) var isFlatInEffect = false
-    /// `AppliedNits`: `appliedNits`, or with a flat mapping in effect, the most the light allows.
-    var effectiveAppliedNits: Double? { isFlatInEffect ? maxNits ?? appliedNits : appliedNits }
+    /// `AppliedNits` on its way to a new `maxNits` after the room got brighter, as the real one ramps
+    /// over about 0.75 s, or `nil` once it's there.
+    var rampingNits: Double?
+    /// `AppliedNits`: `appliedNits`, or with a flat mapping in effect, the most the light allows
+    /// (`rampingNits` while it's on its way there).
+    var effectiveAppliedNits: Double? {
+        if let rampingNits { return rampingNits }
+        return isFlatInEffect ? maxNits ?? appliedNits : appliedNits
+    }
+    /// `PWMNitsPreRestriction`: the display's nits through the mapping in effect, before the ambient
+    /// light's limits (the flat mapping's 1000, or `appliedNits`, taken as within the limits).
+    var preRestrictionNits: Double? { isFlatInEffect ? 1000 : appliedNits }
 
     /// Starts the daemon with a mapping already in effect (its own, or a flat one a run left).
     func setMapping(_ mapping: [[Double]]?) {
@@ -318,6 +328,7 @@ final class FakeDaemon: LightEmitterService {
             var state: [String: Any] = ["Factor": NSNumber(value: level)]
             if let applied = effectiveAppliedNits { state["AppliedNits"] = NSNumber(value: applied) }
             if let maxNits { state["MaxNitsRestriction"] = NSNumber(value: maxNits) }
+            if let preRestrictionNits { state["PWMNitsPreRestriction"] = NSNumber(value: preRestrictionNits) }
             return state
         default: return nil
         }

@@ -291,12 +291,19 @@ public final class LightEmitter {
     /// Scaling a level by this makes the logo as bright as that level would be with the display at
     /// full, whatever its brightness, while the logo still follows the ambient light. It can't go
     /// past a `Factor` of 1, though: turned far down, the display still caps the logo.
+    ///
+    /// When the display's nits map to the maximum or more (`PWMNitsPreRestriction`: the display at
+    /// full, or the flat mapping in effect), it's 1 too. `AppliedNits` can then still be below the
+    /// maximum for a moment after the room gets brighter, as the daemon ramps it over about 0.75 s,
+    /// but that's the logo following the room's light, not the display; made up for, the logo
+    /// overshot its level (Pulse peaked 8% high on the MacBook).
     public var displayHeadroom: Double? {
         guard let state = service.value(forKey: Key.pwmState) as? [String: Any],
               let applied = (state["AppliedNits"] as? NSNumber)?.doubleValue,
               let maximum = (state["MaxNitsRestriction"] as? NSNumber)?.doubleValue,
               applied > 0.1, maximum > 0.1
         else { return nil }
+        if let mapped = (state["PWMNitsPreRestriction"] as? NSNumber)?.doubleValue, mapped >= maximum { return 1 }
         return max(1, maximum / applied)
     }
 
