@@ -16,25 +16,23 @@ private func finish(_ f: Fixture) async {
 }
 
 /// A fixture whose display is at `display` of full brightness, in a light where the logo's nits can go up
-/// to 1000 (`MaxNitsRestriction`): its `AppliedNits` are then 1000 × `display`. With `mapping`, the daemon
-/// has that brightness mapping in effect; without, it has none it can say (the factor alone makes up for
-/// the display, as until corebrightnessd takes LogoLight's flat mapping).
+/// to 1000 (`MaxNitsRestriction`): with the display's own mapping in effect, its `AppliedNits` are then
+/// 1000 × `display`. With `mapping`, the daemon has that brightness mapping in effect; without, it has
+/// none it can say (another macOS).
 @MainActor
-private func fixture(display: Double, backlightMode: Int? = nil, mapping: [[Double]]? = nil) -> Fixture {
-    let f = Fixture(backlightMode: backlightMode, direct: true, timeDriven: true)
+private func fixture(display: Double, mapping: [[Double]]? = nil) -> Fixture {
+    let f = Fixture(direct: true, timeDriven: true)
     f.daemon.maxNits = 1000
     f.daemon.appliedNits = 1000 * display
     f.daemon.setMapping(mapping)
     return f
 }
 
-/// Turns the display's brightness to `display` of full, which applies the mapping last written, as the
-/// app sees it on its next look.
+/// Turns the display's brightness to `display` of full, which applies the mapping last written.
 @MainActor
 private func turnDisplay(_ f: Fixture, to display: Double) {
     f.daemon.appliedNits = 1000 * display
     f.daemon.displayNitsChanged()
-    f.controller.displayBrightnessMayHaveChanged()
 }
 
 /// Whether the logo is held giving the light `brightness` gives with the display at full: that light
@@ -52,167 +50,16 @@ private func expectLight(_ t: TestHarness, _ f: Fixture, ofBrightness brightness
 func displayBrightnessTests(_ t: TestHarness) async {
     print("\nThe display's brightness")
 
-    t.test("raises the level by the headroom, up to fully lit") {
-        t.expectEqual((LogoAnimator.level(forBrightness: 0.5, headroom: 2) * 1000).rounded() / 1000, 0.53)
-        t.expectEqual(LogoAnimator.level(forBrightness: 0.5, headroom: 5), 1)
-        t.expectEqual(LogoAnimator.level(forBrightness: 1, headroom: 3), 1)
-        // Below 1 there's nothing to make up: the display can't make the logo brighter than at full.
-        t.expectEqual(LogoAnimator.level(forBrightness: 0.5, headroom: 0.5), LogoAnimator.level(forBrightness: 0.5))
-    }
-
-    await t.test("keeps the logo's light when the display is turned down, then up again") {
-        let f = fixture(display: 1)
-        f.controller.setBrightness(0.5)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.5)
-        turnDisplay(f, to: 0.4)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.5)
-        t.expect(f.daemon.level > 0.6, "should make up for the display: at \(f.daemon.level)")
-        turnDisplay(f, to: 0.8)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.5)
-    }
-
-    await t.test("with the display turned far down, it's as bright as it can be, and comes back down after") {
-        let f = fixture(display: 1)
-        f.controller.setBrightness(0.5)
-        await finish(f)
-        turnDisplay(f, to: 0.1)
-        await finish(f)
-        t.expect(f.daemon.lit, "should be fully lit, at \(f.daemon.level)")
-        turnDisplay(f, to: 1)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.5)
-    }
-
-    await t.test("a brightness chosen with the display turned down gives the light it gives at full") {
-        let f = fixture(display: 0.5)
-        f.controller.start(brightness: 1, effect: .none)
-        await finish(f)
-        f.controller.setBrightness(0.3)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.3)
-        // Straight there, without the display's dimmer level on the way.
-        t.expect(f.daemon.level >= LogoAnimator.level(forBrightness: 0.3, headroom: 2) - 0.02,
-                 "went down to \(f.daemon.level)")
-    }
-
-    await t.test("launching, waking and turning the logo on go to the level that makes up for the display") {
-        let f = fixture(display: 0.5)
-        f.controller.start(brightness: 0.4, effect: .none)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.4)
-
-        f.mac.displayAwake = false
-        f.controller.displayDidSleep()
-        f.daemon.appliedNits = 250 // turned down further while asleep
-        f.mac.displayAwake = true
-        f.controller.displayDidWake()
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.4)
-
-        try await f.controller.set(.off)
-        f.daemon.appliedNits = 600
-        try await f.controller.set(.on)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.4)
-    }
-
-    await t.test("the battery indicator's level makes up for the display too") {
-        let f = fixture(display: 0.5)
-        f.battery.charge = 0.6
-        f.controller.setFollowsBattery(true)
-        await finish(f)
-        expectLight(t, f, ofBrightness: 0.6)
-    }
-
-    await t.test("effects peak at the light the brightness gives with the display at full") {
-        let f = fixture(display: 0.5)
-        f.controller.setBrightness(0.5)
-        await finish(f)
-        f.controller.setEffect(.pulse)
-        f.daemon.peak = 0
-        let end = f.clock.now + 5
-        while f.clock.now < end { await Task.yield() }
-        let level = LogoAnimator.level(forBrightness: 0.5, headroom: 2)
-        t.expect(abs(f.daemon.peak - level) <= 0.03, "peaked at \(f.daemon.peak), not \(level)")
-
-        // Turned up during the effect: later peaks follow, with no fade of its own breaking the rhythm.
-        turnDisplay(f, to: 1)
-        t.expect(f.controller.animator?.isPlaying == true, "Pulse should carry on")
-        let later = f.clock.now + 3 // the next peak, picking up the new level
-        while f.clock.now < later { await Task.yield() }
-        f.daemon.peak = 0
-        let last = f.clock.now + 5
-        while f.clock.now < last { await Task.yield() }
-        f.controller.animator?.pause()
-        let full = LogoAnimator.level(forBrightness: 0.5)
-        t.expect(abs(f.daemon.peak - full) <= 0.03, "peaked at \(f.daemon.peak), not \(full)")
-    }
-
-    await t.test("small changes, such as the light sensor's noise, write nothing") {
-        let f = fixture(display: 0.5)
-        f.controller.setBrightness(0.5)
-        await finish(f)
-        f.daemon.log.removeAll()
-        for nits in [510.0, 495, 505, 490] {
-            f.daemon.appliedNits = nits
-            f.controller.displayBrightnessMayHaveChanged()
-            await finish(f)
-        }
-        t.expectEqual(f.daemon.log, [])
-    }
-
-    await t.test("reads nothing at full brightness, with the logo off, or while lent") {
-        let f = fixture(display: 0.5)
-        f.controller.start(brightness: 1, effect: .none)
-        await finish(f)
-        f.daemon.keysRead.removeAll()
-        f.daemon.log.removeAll()
-        turnDisplay(f, to: 0.2)
-        await finish(f)
-        t.expectEqual(f.daemon.keysRead, [])
-
-        f.controller.setBrightness(0.5)
-        await finish(f)
-        try await f.controller.set(.off)
-        f.daemon.keysRead.removeAll()
-        f.daemon.log.removeAll()
-        turnDisplay(f, to: 0.8)
-        await finish(f)
-        t.expectEqual(f.daemon.keysRead, [])
-        t.expectEqual(f.daemon.log, [])
-
-        try await f.controller.set(.on)
-        await finish(f)
-        f.controller.lend()
-        f.daemon.keysRead.removeAll()
-        f.daemon.log.removeAll()
-        turnDisplay(f, to: 0.3)
-        await finish(f)
-        t.expectEqual(f.daemon.keysRead, [])
-        t.expectEqual(f.daemon.log, [])
-    }
-
-    await t.test("without the nits (another macOS), the level is the brightness's own") {
-        let f = Fixture(direct: true, timeDriven: true)
-        f.controller.setBrightness(0.5)
-        await finish(f)
-        t.expect(abs(f.daemon.level - LogoAnimator.level(forBrightness: 0.5)) <= 0.02, "held at \(f.daemon.level)")
-        f.controller.displayBrightnessMayHaveChanged()
-        await finish(f)
-        t.expect(abs(f.daemon.level - LogoAnimator.level(forBrightness: 0.5)) <= 0.02, "held at \(f.daemon.level)")
-    }
-
-    await t.test("at launch, unties the logo from the display: writes a flat mapping and keeps the display's own") {
+    await t.test("at launch, unties the logo from the display at once: a flat mapping, taken straight away") {
         let f = fixture(display: 0.5, mapping: LightEmitter.defaultMapping)
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
         t.expectEqual(f.daemon.mappingWrites, [LightEmitter.flatMapping])
         t.expectEqual(f.mappings.mapping, LightEmitter.defaultMapping)
         t.expect(f.controller.isUntiedFromDisplay)
-        // Until the display's nits change, the level makes up for the display.
+        // Written back as it is, the display's brightness makes corebrightnessd take the mapping.
+        t.expectEqual(f.daemon.displayRewrites, 1)
+        t.expect(f.daemon.isFlatInEffect, "the flat mapping should be in effect")
         expectLight(t, f, ofBrightness: 0.5)
     }
 
@@ -220,54 +67,53 @@ func displayBrightnessTests(_ t: TestHarness) async {
         let f = fixture(display: 1, mapping: LightEmitter.defaultMapping)
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
+        f.daemon.log.removeAll()
         for display in [0.1, 0.02, 0.6, 0.3] {
             turnDisplay(f, to: display)
             await finish(f)
             expectLight(t, f, ofBrightness: 0.5)
-            t.expect(abs(f.daemon.level - LogoAnimator.level(forBrightness: 0.5)) <= 0.02,
-                     "display \(display): the level should be the brightness's own, at \(f.daemon.level)")
         }
+        t.expectEqual(f.daemon.log, [])
     }
 
-    await t.test("with the flat mapping in effect, a room getting brighter isn't taken for the display") {
-        let f = fixture(display: 0.3, mapping: LightEmitter.flatMapping)
-        f.daemon.maxNits = 300
+    await t.test("until the mapping is taken, the logo dims with the display; the level isn't raised for it") {
+        // Raised, it flashed when corebrightnessd took the mapping: AppliedNits went up at once.
+        let f = fixture(display: 0.4, mapping: LightEmitter.defaultMapping)
+        f.daemon.rewriteAppliesMapping = false
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
+        let level = LogoAnimator.level(forBrightness: 0.5)
+        t.expect(!f.daemon.isFlatInEffect, "the flat mapping shouldn't be in effect yet")
+        t.expect(abs(f.daemon.level - level) <= 0.01, "held at \(f.daemon.level), not \(level)")
+        f.daemon.peak = 0
         f.daemon.log.removeAll()
-        // The room's maximum goes up at once; AppliedNits follows over about 0.75 s.
-        f.daemon.maxNits = 400
-        for nits in [300.0, 330, 360, 390] {
-            f.daemon.rampingNits = nits
-            f.controller.displayBrightnessMayHaveChanged()
-            await finish(f)
-            t.expectEqual(f.controller.animator?.headroom, 1)
-        }
-        f.daemon.rampingNits = nil
-        f.controller.displayBrightnessMayHaveChanged()
+        turnDisplay(f, to: 0.38)
         await finish(f)
+        expectLight(t, f, ofBrightness: 0.5)
+        t.expect(f.daemon.peak <= level + 0.01, "went up to \(f.daemon.peak)")
         t.expectEqual(f.daemon.log, [])
-        t.expect(abs(f.daemon.level - LogoAnimator.level(forBrightness: 0.5)) <= 0.001,
-                 "the level should be the brightness's own, at \(f.daemon.level)")
     }
 
     await t.test("at 100%, the logo is as bright as the light around allows, whatever the display") {
         let f = fixture(display: 0.2, mapping: LightEmitter.defaultMapping)
         f.controller.start(brightness: 1, effect: .none)
         await finish(f)
+        t.expect(f.daemon.lit, "should be fully lit, at \(f.daemon.level)")
+        t.expect(abs(f.daemon.nits - 1000) <= 1, "gives \(f.daemon.nits) nits, not 1000")
         turnDisplay(f, to: 0.15)
         await finish(f)
-        t.expect(f.daemon.lit, "should be fully lit, at \(f.daemon.level)")
         t.expect(abs(f.daemon.nits - 1000) <= 1, "gives \(f.daemon.nits) nits, not 1000")
     }
 
-    await t.test("quitting ties the logo to the display again, with the display's own mapping") {
+    await t.test("quitting ties the logo to the display again, with the display's own mapping, taken at once") {
         let f = fixture(display: 0.5, mapping: LightEmitter.defaultMapping)
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
         f.controller.restoreNormalLighting()
         t.expectEqual(f.daemon.mapping, LightEmitter.defaultMapping)
         t.expect(!f.controller.isUntiedFromDisplay)
+        t.expectEqual(f.daemon.displayRewrites, 2)
+        t.expect(!f.daemon.isFlatInEffect, "the display's own mapping should be in effect")
     }
 
     await t.test("after a run that didn't quit cleanly, the flat mapping isn't kept as the display's own") {
@@ -277,6 +123,7 @@ func displayBrightnessTests(_ t: TestHarness) async {
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
         t.expectEqual(f.daemon.mappingWrites, [])
+        t.expectEqual(f.daemon.displayRewrites, 0)
         t.expectEqual(f.mappings.mapping, theirs)
         f.controller.restoreNormalLighting()
         t.expectEqual(f.daemon.mapping, theirs)
@@ -297,17 +144,21 @@ func displayBrightnessTests(_ t: TestHarness) async {
         _ = f.daemon.setObject(other.map { $0.map { NSNumber(value: $0) } } as NSArray, forKey: "LEPWMBrightnessNitsMapping")
         f.controller.restoreNormalLighting()
         t.expectEqual(f.daemon.mapping, other)
+        t.expectEqual(f.daemon.displayRewrites, 1)
     }
 
-    await t.test("writes the flat mapping again when corebrightnessd loses it, within 40 looks or at a wake") {
+    await t.test("writes the flat mapping again when corebrightnessd loses it, when asked or at a wake") {
         let f = fixture(display: 0.5, mapping: LightEmitter.defaultMapping)
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
+        f.controller.keepBrightnessUntied()
+        t.expectEqual(f.daemon.mappingWrites.count, 1) // still flat: nothing to do
+
         f.daemon.setMapping(LightEmitter.defaultMapping) // corebrightnessd restarted
-        for _ in 0..<(LogoController.mappingCheckInterval - 1) { f.controller.displayBrightnessMayHaveChanged() }
-        t.expectEqual(f.daemon.mapping, LightEmitter.defaultMapping)
-        f.controller.displayBrightnessMayHaveChanged()
+        f.controller.keepBrightnessUntied()
         t.expectEqual(f.daemon.mapping, LightEmitter.flatMapping)
+        t.expect(f.daemon.isFlatInEffect, "the flat mapping should be in effect again")
+        t.expectEqual(f.daemon.displayRewrites, 2)
 
         f.daemon.setMapping(LightEmitter.defaultMapping)
         f.mac.displayAwake = false
@@ -316,14 +167,38 @@ func displayBrightnessTests(_ t: TestHarness) async {
         f.controller.displayDidWake()
         await finish(f)
         t.expectEqual(f.daemon.mapping, LightEmitter.flatMapping)
+        t.expect(f.daemon.isFlatInEffect, "the flat mapping should be in effect after the wake")
+        expectLight(t, f, ofBrightness: 0.5)
+    }
+
+    await t.test("with the display asleep or the logo lent, the display's brightness isn't written") {
+        let f = fixture(display: 0.5, mapping: LightEmitter.defaultMapping)
+        f.controller.start(brightness: 0.5, effect: .none)
+        await finish(f)
+        f.daemon.setMapping(LightEmitter.defaultMapping)
+        f.mac.displayAwake = false
+        f.controller.displayDidSleep()
+        f.controller.keepBrightnessUntied()
+        t.expectEqual(f.daemon.mapping, LightEmitter.flatMapping)
+        t.expectEqual(f.daemon.displayRewrites, 1) // only the launch's
+        f.mac.displayAwake = true
+        f.controller.displayDidWake()
+        await finish(f)
+
+        f.controller.lend()
+        f.controller.restoreNormalLighting()
+        t.expectEqual(f.daemon.mapping, LightEmitter.defaultMapping)
+        t.expectEqual(f.daemon.displayRewrites, 1)
     }
 
     await t.test("without the mapping (another macOS), nothing is written") {
         let f = fixture(display: 0.5)
         f.controller.start(brightness: 0.5, effect: .none)
         await finish(f)
+        f.controller.keepBrightnessUntied()
         f.controller.restoreNormalLighting()
         t.expectEqual(f.daemon.mappingWrites, [])
+        t.expectEqual(f.daemon.displayRewrites, 0)
     }
 
     await t.test("the live view shows the fade level, as the system's own brightness is shown") {

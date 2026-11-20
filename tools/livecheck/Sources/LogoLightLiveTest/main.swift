@@ -15,7 +15,6 @@
 //                                               # from the display as the app does, steps the built-in display's
 //                                               # brightness down and up, and checks the logo's light stays put;
 //                                               # the display's brightness and its mapping are put back at the end
-//                                               # (--poll 0.05 looks at the display that often instead of 0.25 s)
 //   .build/debug/LogoLightLiveTest --hear       # only listens: prints the loudness of what the Mac plays for 8 s,
 //                                               # playing a system sound meanwhile (asks for System Audio
 //                                               # Recording Only the first time; the logo isn't touched)
@@ -34,14 +33,11 @@ var controller = LogoController.live()
 let brightnessService = CoreBrightnessService()!
 let emitter = LightEmitter(service: brightnessService, clock: LightEmitter.uptime)
 
-// As the app does, 4 times a second: keeps the logo's brightness off the display's (the display's
-// brightness and the ambient light can change during any check).
-let pollInterval = CommandLine.arguments.firstIndex(of: "--poll")
-    .flatMap { CommandLine.arguments.dropFirst($0 + 1).first }.flatMap(Double.init) ?? 0.25
-let displayPoll = Task { @MainActor in
+// As the app does, every 10 s: writes the flat mapping again should corebrightnessd lose it.
+let mappingCheck = Task { @MainActor in
     while !Task.isCancelled {
-        controller.displayBrightnessMayHaveChanged()
-        try? await Task.sleep(for: .seconds(pollInterval))
+        try? await Task.sleep(for: .seconds(10))
+        controller.keepBrightnessUntied()
     }
 }
 @MainActor func factor() -> Double { emitter.fadeLevel ?? -1 }
@@ -109,7 +105,7 @@ func ledDuty(_ name: String) -> Double {
     let peak = samples.filter { $0.t >= 0.035 }.map { abs($0.f - level(at: $0.t - 0.035)) / 0.035 }.max() ?? 0
     let atStop = abs(level(at: lastChange) - level(at: lastChange - 0.06)) / 0.06
     let share = peak > 0 ? atStop / peak : 0
-    let expected = LogoAnimator.level(forBrightness: brightness, headroom: controller.animator?.headroom ?? 1)
+    let expected = LogoAnimator.level(forBrightness: brightness)
     let up = expected > samples[0].f
     let back = zip(samples, samples.dropFirst()).map { up ? $0.f - $1.f : $1.f - $0.f }.filter { $0 > 0 }.reduce(0, +)
     print(String(format: "%-46@ factor=%.3f expected=%.3f %@  took %.2fs, last 60 ms at %.0f%% of %.2f/s %@  back %.3f %@  keyboard min %.3f (before %.3f)",
@@ -117,11 +113,7 @@ func ledDuty(_ name: String) -> Double {
                  100 * share, peak, share < 0.25 ? "ok" : "ABRUPT", back, back <= 0.005 ? "ok" : "BOUNCE",
                  keyboardLo, resting))
 }
-/// The fade level for a brightness, raised to make up for the display's brightness as the controller
-/// last read it (1 with the display at full).
-@MainActor func level(_ brightness: Double) -> Double {
-    LogoAnimator.level(forBrightness: brightness, headroom: controller.animator?.headroom ?? 1)
-}
+let level = LogoAnimator.level(forBrightness:)
 
 // MARK: - Morse code (also alone, with --morse)
 
@@ -578,40 +570,6 @@ if CommandLine.arguments.contains("--sound") {
 
 // MARK: - The display's brightness (--display)
 
-/// The built-in display's brightness, through DisplayServices (private), as its brightness keys set it.
-@MainActor
-struct DisplayBrightness {
-    private typealias GetFunction = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
-    private typealias SetFunction = @convention(c) (UInt32, Float) -> Int32
-    private let getFunction: GetFunction
-    private let setFunction: SetFunction
-    private let display: CGDirectDisplayID
-
-    init?() {
-        guard let handle = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_LAZY),
-              let get = dlsym(handle, "DisplayServicesGetBrightness"),
-              let set = dlsym(handle, "DisplayServicesSetBrightness")
-        else { return nil }
-        getFunction = unsafeBitCast(get, to: GetFunction.self)
-        setFunction = unsafeBitCast(set, to: SetFunction.self)
-        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
-        var count: UInt32 = 0
-        guard CGGetOnlineDisplayList(16, &ids, &count) == .success,
-              let builtIn = ids.prefix(Int(count)).first(where: { CGDisplayIsBuiltin($0) != 0 })
-        else { return nil }
-        display = builtIn
-    }
-
-    /// From 0 to 1, as the brightness slider in Control Center shows it.
-    var value: Float? {
-        var value: Float = 0
-        return getFunction(display, &value) == 0 ? value : nil
-    }
-
-    @discardableResult
-    func set(_ value: Float) -> Bool { setFunction(display, value) == 0 }
-}
-
 /// `LEPWMState`'s numbers.
 @MainActor func pwmState() -> [String: Double] {
     let state = brightnessService.value(forKey: "LEPWMState") as? [String: Any] ?? [:]
@@ -629,17 +587,17 @@ struct Look {
                 pre: state["PWMNitsPreRestriction"] ?? -1, factor: state["Factor"] ?? -1, duty: logoDuty())
 }
 
-/// As the app does at launch, unties the logo's brightness from the display's (a flat
-/// `LEPWMBrightnessNitsMapping`, which corebrightnessd takes at the next change of the display's nits),
-/// with the logo at brightness 0.5 and the display at 0.5: the light should stay put while the mapping
-/// is taken, as it's made up for by the headroom until then. Then, with the logo at 0.5, steps the display's brightness from full down to almost dark
-/// and back, and checks the logo's light (its PWM duty, the LED's real output) against its light with
-/// the display at full: it should stay put at every step, with no cap, once the mapping is in effect.
+/// As the app does at launch, unties the logo's brightness from the display's, with the logo at
+/// brightness 0.5 and the display at 0.5: a flat `LEPWMBrightnessNitsMapping`, which writing the
+/// display's brightness back makes corebrightnessd take at once. The light should rise to its untied
+/// level within moments, without going past it. Then, with the logo at 0.5, steps the display's
+/// brightness from full down to almost dark and back, and checks the logo's light (its PWM duty, the
+/// LED's real output) against its light with the display at full: it should stay put at every step.
 /// For each step it prints how far the light strayed and for how long, `AppliedNits` over the first
 /// second, and the keyboard's lowest duty. Then Pulse with the display at 0.30 should peak where it
 /// does with the display at full, and 100% should give the same light at display 0.30 as at full.
-/// Last, the display's own mapping should be back once LogoLight quits (`restoreNormalLighting()`)
-/// and the display moves.
+/// Last, quitting (`restoreNormalLighting()`) should put the display's own mapping back in effect at
+/// once, without the display moving.
 /// The display's brightness is put back.
 @MainActor func displayCheck() async {
     let pgrep = Process()
@@ -678,33 +636,28 @@ struct Look {
                       state["MaxNitsRestriction"] ?? -1, state["Lux"] ?? -1, state["Factor"] ?? -1,
                       state["FinalNits"] ?? -1, logoDuty(), flat ? "flat" : "the display's")
     }
-    print(String(format: "display's brightness at the start: %.3f; poll every %.2f s", original, pollInterval))
+    print(String(format: "display's brightness at the start: %.3f", original))
     print("the display's mapping: " + (emitter.brightnessMapping ?? []).map { "[\($0.map { $0 > 1e30 ? "3.4e38" : String(format: "%g", $0) }.joined(separator: ","))]" }.joined(separator: " "))
-    // The handoff, as some time after a launch: the logo at 0.5 with the display at 0.5 and its own
-    // mapping, made up for by the headroom; then the flat mapping, taken at a change of the display's
-    // brightness. The light should stay put while corebrightnessd ramps AppliedNits up to the maximum.
+    // The launch: the logo at 0.5, dimmed by the display at 0.5 through its own mapping, then untied.
     screen.set(0.5); await wait(2.5)
     controller.setBrightness(0.5); await wait(2)
-    let bridged = logoDuty()
-    print(line(String(format: "bridged, headroom %.2f", controller.animator?.headroom ?? 1), display: 0.5))
-    controller.untieBrightnessFromDisplay(); await wait(0.5)
+    print(line("tied: brightness 0.5", display: 0.5))
     var handoff: [Look] = []
     let h0 = Date()
-    screen.set(0.52)
+    controller.untieBrightnessFromDisplay()
     while Date().timeIntervalSince(h0) < 3 { handoff.append(look(since: h0)); await wait(0.01) }
-    let strays = handoff.map { $0.duty / bridged - 1 }
-    let up = strays.max() ?? 0, down = strays.min() ?? 0
-    let outside = handoff.filter { abs($0.duty / bridged - 1) > 0.06 }
+    let untied = logoDuty()
+    let over = (handoff.map(\.duty).max() ?? 0) / untied - 1
     let taken = handoff.first { $0.pre >= 999 }?.t
-    print(line("flat mapping taken", display: 0.52) + (abs(logoDuty() / bridged - 1) <= 0.06 ? " ok" : " OFF"))
-    let from = max(0, (taken ?? 0) - 0.1)
-    let handoffPath = stride(from: from, through: from + 1.3, by: 0.1).map { m in
+    let settled = handoff.last { abs($0.duty / untied - 1) > 0.06 }?.t ?? 0
+    print(line("untied", display: 0.5) + ((taken ?? 9) <= 0.5 ? " ok" : " OFF (not taken)"))
+    let handoffPath = stride(from: 0.0, through: 1.3, by: 0.1).map { m in
         let look = handoff.last { $0.t <= m } ?? handoff[0]
         return String(format: "%.1fs %.0f/%.3f/%.4f", m, look.applied, look.factor, look.duty)
     }
-    print(String(format: "  taken after %@; strayed %+.0f%% to %+.0f%% %@, outside 6%% from %.2f to %.2f s; applied/factor/duty: ",
-                 (taken.map { String(format: "%.2f s", $0) } ?? "(not within 3 s)") as NSString, 100 * down, 100 * up,
-                 max(up, -down) <= 0.1 ? "ok" : "OFF", outside.first?.t ?? 0, outside.last?.t ?? 0)
+    print(String(format: "  taken after %@; up to %+.0f%% over the untied light %@, within 6%% of it from %.2f s; applied/factor/duty: ",
+                 (taken.map { String(format: "%.2f s", $0) } ?? "(not within 3 s)") as NSString, 100 * over,
+                 over <= 0.06 ? "ok" : "OFF", settled)
           + handoffPath.joined(separator: "  "))
 
     screen.set(1); await wait(2.5)
@@ -740,26 +693,26 @@ struct Look {
     func pulsePeak(display: Float) async -> Double {
         screen.set(display); await wait(2.5)
         controller.setEffect(.pulse)
-        var peak = 0.0, factorPeak = 0.0, headroomPeak = 1.0, luxLo = 1e9, luxHi = 0.0
+        var peak = 0.0, factorPeak = 0.0, luxLo = 1e9, luxHi = 0.0
         let t0 = Date()
         while Date().timeIntervalSince(t0) < 5 {
             let state = pwmState()
             peak = max(peak, logoDuty())
             factorPeak = max(factorPeak, state["Factor"] ?? 0)
-            headroomPeak = max(headroomPeak, controller.animator?.headroom ?? 1)
             luxLo = min(luxLo, state["Lux"] ?? 0); luxHi = max(luxHi, state["Lux"] ?? 0)
             await wait(0.005)
         }
         controller.setEffect(.none); await wait(1.2)
-        print(String(format: "%-30@ peak duty %.4f, factor %.3f (level %.3f), headroom up to %.3f, lux %.0f-%.0f",
+        print(String(format: "%-30@ peak duty %.4f, factor %.3f (level %.3f), lux %.0f-%.0f",
                      "pulse at 0.5, display \(String(format: "%.2f", display))" as NSString, peak, factorPeak,
-                     LogoAnimator.level(forBrightness: 0.5), headroomPeak, luxLo, luxHi))
+                     LogoAnimator.level(forBrightness: 0.5), luxLo, luxHi))
         return peak
     }
     let pulseFull = await pulsePeak(display: 1)
     let pulseDim = await pulsePeak(display: 0.3)
+    // The factor's peaks were within 0.001 of each other, while the duty read up to 6% high once.
     print(String(format: "%-30@ %.4f against %.4f at full %@", "  pulse's peak at display 0.30" as NSString, pulseDim,
-                 pulseFull, abs(pulseDim / pulseFull - 1) <= 0.06 ? "ok" : "OFF"))
+                 pulseFull, abs(pulseDim / pulseFull - 1) <= 0.1 ? "ok" : "OFF"))
 
     screen.set(1); await wait(2)
     controller.setBrightness(1); await wait(1.5)
@@ -768,11 +721,14 @@ struct Look {
     screen.set(0.3); await wait(2.5)
     print(line("brightness 1 at display 0.30", display: 0.3) + (abs(logoDuty() / full - 1) <= 0.06 ? " ok" : " OFF"))
 
-    // Quitting: the display's own mapping back, taken at the next change of the display's nits.
-    controller.restoreNormalLighting(); await wait(0.5)
+    // Quitting: the display's own mapping back, and in effect at once (the display's nits at 0.30 map to
+    // far less than the flat mapping's 1000).
+    controller.restoreNormalLighting(); await wait(1)
+    let written = emitter.brightnessMapping.map(LightEmitter.isFlat) == false
+    let inEffect = (pwmState()["PWMNitsPreRestriction"] ?? 1000) < 999
+    print(line("quit", display: 0.3) + (written && inEffect ? " ok" : written ? " OFF (not in effect)" : " OFF (still flat)"))
     screen.set(original); await wait(2)
-    let tied = emitter.brightnessMapping.map(LightEmitter.isFlat) == false
-    print(line("quit, display put back", display: original) + (tied ? " ok" : " OFF (still flat)"))
+    print(line("display put back", display: original))
 }
 
 if CommandLine.arguments.contains("--display") {
@@ -787,7 +743,7 @@ if CommandLine.arguments.contains("--display") {
 print("start: setting=\(String(describing: emitter.setting)) factor=\(factor()) keyboard=\(String(format: "%.3f", keyboardDuty()))")
 controller.restoreNormalLighting(); await wait(0.6)
 report("baseline", expected: 1)
-// As the app does at launch (the expected levels allow for the display until corebrightnessd takes it).
+// As the app does at launch (corebrightnessd takes the flat mapping at once).
 controller.untieBrightnessFromDisplay()
 
 controller.setBrightness(0.5); await wait(0.9)

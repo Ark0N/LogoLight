@@ -279,34 +279,6 @@ public final class LightEmitter {
 
     // MARK: - The display's brightness
 
-    /// How many times brighter the logo would be with the display at full brightness than it is
-    /// allowed to be at the display's brightness now: 1 with the display at full, more as it's
-    /// turned down. `nil` if corebrightnessd doesn't say. Once `flatMapping` is in effect, it's 1
-    /// whatever the display's brightness.
-    ///
-    /// The logo gives `AppliedNits × Factor` (times a fixed multiplier), and the fade's `Factor` is
-    /// all this app controls. `AppliedNits` is the display's brightness mapped to logo nits, kept
-    /// between a minimum and a maximum that come from the ambient light (`MaxNitsRestriction`), so
-    /// it's the maximum with the display at full (see docs/corebrightnessd.md, "`LEPWMState`").
-    /// Scaling a level by this makes the logo as bright as that level would be with the display at
-    /// full, whatever its brightness, while the logo still follows the ambient light. It can't go
-    /// past a `Factor` of 1, though: turned far down, the display still caps the logo.
-    ///
-    /// When the display's nits map to the maximum or more (`PWMNitsPreRestriction`: the display at
-    /// full, or the flat mapping in effect), it's 1 too. `AppliedNits` can then still be below the
-    /// maximum for a moment after the room gets brighter, as the daemon ramps it over about 0.75 s,
-    /// but that's the logo following the room's light, not the display; made up for, the logo
-    /// overshot its level (Pulse peaked 8% high on the MacBook).
-    public var displayHeadroom: Double? {
-        guard let state = service.value(forKey: Key.pwmState) as? [String: Any],
-              let applied = (state["AppliedNits"] as? NSNumber)?.doubleValue,
-              let maximum = (state["MaxNitsRestriction"] as? NSNumber)?.doubleValue,
-              applied > 0.1, maximum > 0.1
-        else { return nil }
-        if let mapped = (state["PWMNitsPreRestriction"] as? NSNumber)?.doubleValue, mapped >= maximum { return 1 }
-        return max(1, maximum / applied)
-    }
-
     /// A mapping of every display brightness to 1000 logo nits: with it, `AppliedNits` is the most the
     /// ambient light allows (`MaxNitsRestriction`), whatever the display's brightness.
     public static let flatMapping: [[Double]] = [[0, 1000], [3.402823e38, 1000]]
@@ -333,8 +305,9 @@ public final class LightEmitter {
     }
 
     /// Replaces the mapping of the display's nits to the logo's. corebrightnessd takes it at the next
-    /// change of the display's nits, even of one, which auto-brightness makes often; until then the
-    /// old one holds (see docs/corebrightnessd.md, "Brightness mappings").
+    /// change of the display's nits, even of one, or when the display's brightness is written again
+    /// as it is (`DisplayBrightness.rewrite()`); until then the old one holds (see
+    /// docs/corebrightnessd.md, "Brightness mappings").
     @discardableResult
     public func setBrightnessMapping(_ mapping: [[Double]]) -> Bool {
         service.setObject(mapping.map { $0.map { NSNumber(value: $0) } } as NSArray, forKey: Key.brightnessMapping)
@@ -364,9 +337,7 @@ public final class LightEmitter {
     private static let speedPolls = 8
 
     /// Fades the logo to `level` (0 dark … 1 fully lit) over about `duration` seconds, and holds
-    /// it there until the next change. The logo still adapts to ambient light and to the display's
-    /// brightness, scaled by the level (`LogoAnimator` scales the level by `displayHeadroom` to
-    /// cancel the display's part).
+    /// it there until the next change. The logo still adapts to ambient light, scaled by the level.
     ///
     /// A level in between is eased onto at the end, which takes a little longer than `duration`
     /// (see `fade(following:over:sleep:)`).

@@ -207,18 +207,8 @@ final class FakeDaemon: LightEmitterService {
     /// Whether the mapping in effect is a flat one. Like the real daemon, a mapping written takes effect
     /// only at the next change of the display's nits (`displayNitsChanged()`).
     private(set) var isFlatInEffect = false
-    /// `AppliedNits` on its way to a new `maxNits` after the room got brighter, as the real one ramps
-    /// over about 0.75 s, or `nil` once it's there.
-    var rampingNits: Double?
-    /// `AppliedNits`: `appliedNits`, or with a flat mapping in effect, the most the light allows
-    /// (`rampingNits` while it's on its way there).
-    var effectiveAppliedNits: Double? {
-        if let rampingNits { return rampingNits }
-        return isFlatInEffect ? maxNits ?? appliedNits : appliedNits
-    }
-    /// `PWMNitsPreRestriction`: the display's nits through the mapping in effect, before the ambient
-    /// light's limits (the flat mapping's 1000, or `appliedNits`, taken as within the limits).
-    var preRestrictionNits: Double? { isFlatInEffect ? 1000 : appliedNits }
+    /// `AppliedNits`: `appliedNits`, or with a flat mapping in effect, the most the light allows.
+    var effectiveAppliedNits: Double? { isFlatInEffect ? maxNits ?? appliedNits : appliedNits }
 
     /// Starts the daemon with a mapping already in effect (its own, or a flat one a run left).
     func setMapping(_ mapping: [[Double]]?) {
@@ -229,6 +219,19 @@ final class FakeDaemon: LightEmitterService {
     /// The display's nits changed: the mapping last written takes effect.
     func displayNitsChanged() {
         isFlatInEffect = mapping.map(LightEmitter.isFlat) ?? false
+    }
+
+    /// How many times the display's brightness was written back as it is (`DisplayBrightness.rewrite()`).
+    private(set) var displayRewrites = 0
+    /// When false, writing the display's brightness back doesn't make the mapping take (as with no
+    /// DisplayServices); it's taken at the next `displayNitsChanged()`.
+    var rewriteAppliesMapping = true
+
+    /// The display's brightness written back as it is: like the real daemon, it takes the mapping.
+    func rewriteDisplayBrightness() -> Bool {
+        displayRewrites += 1
+        if rewriteAppliesMapping { displayNitsChanged() }
+        return rewriteAppliesMapping
     }
 
     /// When false, every change is rejected (as if the client API stopped working).
@@ -328,7 +331,6 @@ final class FakeDaemon: LightEmitterService {
             var state: [String: Any] = ["Factor": NSNumber(value: level)]
             if let applied = effectiveAppliedNits { state["AppliedNits"] = NSNumber(value: applied) }
             if let maxNits { state["MaxNitsRestriction"] = NSNumber(value: maxNits) }
-            if let preRestrictionNits { state["PWMNitsPreRestriction"] = NSNumber(value: preRestrictionNits) }
             return state
         default: return nil
         }
@@ -550,7 +552,8 @@ struct Fixture {
             },
             wait: { [timer] in try await timer.sleep($0) },
             soundSource: sound,
-            mappingStore: mappings
+            mappingStore: mappings,
+            rewriteDisplayBrightness: { [daemon] in daemon.rewriteDisplayBrightness() }
         )
     }
 }

@@ -35,6 +35,9 @@ public final class LogoController {
     private let readBatteryCharge: @MainActor () -> Double?
     private let readPowerState: @MainActor () -> Battery.PowerState?
     private let mappingStore: MappingStore
+    /// Writes the display's brightness back as it is, so corebrightnessd takes a mapping at once
+    /// (`DisplayBrightness.rewrite()`).
+    private let rewriteDisplayBrightness: @MainActor () -> Bool
     /// For waits that aren't animation (how long charging may take to start after a plug-in). Unlike
     /// `sleep`, whose fake in the tests moves the logo's clock, tests end these by hand.
     private let wait: LogoAnimator.Sleep
@@ -88,7 +91,8 @@ public final class LogoController {
         powerState: @escaping @MainActor () -> Battery.PowerState? = Battery.powerState,
         wait: @escaping LogoAnimator.Sleep = { try await Task.sleep(for: .seconds($0)) },
         soundSource: SoundLevelSource? = nil,
-        mappingStore: MappingStore = DefaultsMappingStore()
+        mappingStore: MappingStore = DefaultsMappingStore(),
+        rewriteDisplayBrightness: @escaping @MainActor () -> Bool = DisplayBrightness.rewrite
     ) {
         self.reader = reader
         self.emitter = emitter
@@ -101,6 +105,7 @@ public final class LogoController {
         readPowerState = powerState
         self.wait = wait
         self.mappingStore = mappingStore
+        self.rewriteDisplayBrightness = rewriteDisplayBrightness
         animator = emitter.map { emitter in
             LogoAnimator(emitter: emitter, isDisplayAwake: { Self.canLight(reader: reader, emitter: emitter) },
                          sleep: sleep, soundSource: soundSource)
@@ -184,9 +189,7 @@ public final class LogoController {
     /// already held at that brightness.
     private func didApply(_ target: LogoIllumination, atChosenLevel: Bool) {
         lastApplied = target
-        guard target == .on, !atChosenLevel, isDisplayAwake else { return }
-        readHeadroom()
-        animator?.resume()
+        if target == .on, !atChosenLevel, isDisplayAwake { animator?.resume() }
     }
 
     /// Flips the current setting.
@@ -410,7 +413,6 @@ public final class LogoController {
         guard let animator else { return }
         animator.brightness = brightness
         guard !isSwitching, isLitAndAwake else { return }
-        readHeadroom()
         animator.brightnessDidChange()
     }
 
@@ -423,82 +425,48 @@ public final class LogoController {
     /// Unties the logo's brightness from the display's: corebrightnessd normally maps the display's nits
     /// to the logo's (`LEPWMBrightnessNitsMapping`), so the logo dims with the display; this writes a flat
     /// mapping, so only the brightness chosen here and the ambient light set it (see docs/corebrightnessd.md,
-    /// "Keeping the brightness off the display's"). corebrightnessd takes it at the next change of the
-    /// display's nits, which auto-brightness makes often; until then, the level makes up for the display
-    /// (`displayHeadroom`). The mapping it replaces is saved (`mappingStore`), so it can be put back even
-    /// after a run that didn't quit cleanly, which leaves the flat one. `start` calls this.
+    /// "Keeping the brightness off the display's"). corebrightnessd takes a mapping at the next change of
+    /// the display's nits, so the display's brightness is then written back as it is, which makes it take
+    /// it at once; with the display asleep or the logo lent, it's taken at the next change. The mapping it
+    /// replaces is saved (`mappingStore`), so it can be put back even after a run that didn't quit
+    /// cleanly, which leaves the flat one. `start` calls this.
+    ///
+    /// Until the mapping is taken, the logo still dims with the display. The level isn't raised to make
+    /// up for that: corebrightnessd raises `AppliedNits` the moment it takes the mapping, before a look
+    /// could notice, and a raised level then flashed to 2.6 times its light for half a second.
     public func untieBrightnessFromDisplay() {
         guard let emitter, let current = emitter.brightnessMapping else { return }
         if !LightEmitter.isFlat(current) {
             mappingStore.mapping = current
-            emitter.setBrightnessMapping(LightEmitter.flatMapping)
+            if emitter.setBrightnessMapping(LightEmitter.flatMapping) { applyMapping() }
         }
         isUntiedFromDisplay = true
     }
 
     /// Ties the logo's brightness to the display's again, as macOS has it: writes back the mapping that
-    /// `untieBrightnessFromDisplay()` replaced (macOS's own if that's lost). Only a flat mapping, the one
-    /// this app writes, is replaced. `restoreNormalLighting()` calls this.
+    /// `untieBrightnessFromDisplay()` replaced (macOS's own if that's lost), and has corebrightnessd take
+    /// it at once. Only a flat mapping, the one this app writes, is replaced. `restoreNormalLighting()`
+    /// calls this.
     private func tieBrightnessToDisplay() {
         isUntiedFromDisplay = false
         guard let emitter, let current = emitter.brightnessMapping, LightEmitter.isFlat(current) else { return }
-        emitter.setBrightnessMapping(mappingStore.mapping ?? LightEmitter.defaultMapping)
+        if emitter.setBrightnessMapping(mappingStore.mapping ?? LightEmitter.defaultMapping) { applyMapping() }
     }
 
-    /// Writes the flat mapping again if corebrightnessd has gone back to its own (e.g. it restarted).
-    private func keepUntied() {
+    /// Has corebrightnessd take the mapping just written, by writing the display's brightness back as it
+    /// is, unless the display is asleep (or the logo lent): it's taken at the next change then.
+    private func applyMapping() {
+        guard isDisplayAwake else { return }
+        _ = rewriteDisplayBrightness()
+    }
+
+    /// Writes the flat mapping again if corebrightnessd has gone back to its own (e.g. it restarted). Call
+    /// now and then: the app does every 10 s, and a wake does too.
+    public func keepBrightnessUntied() {
         guard isUntiedFromDisplay, let emitter, let current = emitter.brightnessMapping,
               !LightEmitter.isFlat(current)
         else { return }
         untieBrightnessFromDisplay()
-    }
-
-    /// How many calls of `displayBrightnessMayHaveChanged()` pass between looks at the mapping
-    /// (`keepUntied()`): about 10 s at the app's 4 a second.
-    public static let mappingCheckInterval = 40
-    private var callsUntilMappingCheck = LogoController.mappingCheckInterval
-
-    /// How much the headroom (`LightEmitter.displayHeadroom`) has to change, as a share of it, before
-    /// the logo is faded to make up for it: about a twentieth of the light, which is hard to see. A
-    /// press of a brightness key changes it far more. Smaller changes, e.g. from the ambient light
-    /// sensor's noise, would only cost writes (every fade dims the keyboard a little).
-    static let headroomTolerance = 0.04
-
-    /// Reads how far the display's brightness holds the logo back (`LightEmitter.displayHeadroom`), so
-    /// the level makes up for it. At full brightness (the system's own) there's nothing to make up. A
-    /// change within `headroomTolerance` is left out, as `displayBrightnessMayHaveChanged()` leaves it:
-    /// this runs at every step of a slider drag, and the light sensor's noise would nudge the fade's
-    /// target back and forth.
-    private func readHeadroom() {
-        guard let animator else { return }
-        let headroom = currentBrightness < 1 ? emitter?.displayHeadroom ?? 1 : 1
-        if abs(headroom / animator.headroom - 1) > Self.headroomTolerance { animator.headroom = headroom }
-    }
-
-    /// Call now and then, e.g. a few times a second (the app does, 4 times). Until corebrightnessd has
-    /// taken the flat mapping (`untieBrightnessFromDisplay()`), the display's brightness still scales the
-    /// logo (see `LightEmitter.displayHeadroom`): when that has changed by more than `headroomTolerance`,
-    /// the logo fades to the level that makes up for it, and a playing effect picks it up at its next
-    /// step. Once the mapping is in effect, the headroom stays 1 and nothing changes. Every
-    /// `mappingCheckInterval` calls it also checks that the mapping is still the flat one
-    /// (`keepUntied()`); apart from that, it reads nothing while the logo is at full brightness, off,
-    /// dark or lent, or being switched.
-    public func displayBrightnessMayHaveChanged() {
-        guard let animator, let emitter, !isSwitching, !isLent else { return }
-        callsUntilMappingCheck -= 1
-        if callsUntilMappingCheck <= 0 {
-            callsUntilMappingCheck = Self.mappingCheckInterval
-            keepUntied()
-        }
-        guard knownSetting == .on, currentBrightness < 1,
-              isDisplayAwake, let headroom = emitter.displayHeadroom,
-              abs(headroom / animator.headroom - 1) > Self.headroomTolerance
-        else { return }
-        let before = animator.level
-        animator.headroom = headroom
-        // Effects and Morse code read the level at each step. A fade under way follows the new level.
-        guard activeEffect == .none, animator.morse == nil, abs(animator.level - before) >= 0.005 else { return }
-        animator.brightnessDidChange()
     }
 
     /// How brightly the logo is glowing at this moment, from 0 (dark) to 1 (fully lit), for a live
@@ -549,7 +517,7 @@ public final class LogoController {
     /// may have sent the lid state again while it slept, and leaves a held level lit by itself.
     public func displayDidWake() {
         updateLidOverride()
-        keepUntied()
+        keepBrightnessUntied()
         guard isDisplayAwake else { return }
         emitter?.displayDidChange(isAwake: true)
         // The charge may have changed while the Mac slept, with no notification since. The resume
@@ -563,17 +531,13 @@ public final class LogoController {
             readCharging()
             updateStandIn()
         }
-        guard !isSwitching, status().setting == .on else { return }
-        // And the display's brightness or the light around may have changed.
-        readHeadroom()
-        animator?.resume()
+        if !isSwitching, status().setting == .on { animator?.resume() }
     }
 
     /// Returns the logo to normal (fully lit), e.g. before quitting or after an effect was
     /// interrupted by a crash. The chosen effect and brightness are kept. With the lid closed,
     /// normal is dark, so a logo lit by `lightsWithLidClosed` goes dark. Its brightness is tied to the
-    /// display's again (`untieBrightnessFromDisplay()`), which corebrightnessd takes at the next change
-    /// of the display's nits.
+    /// display's again (`untieBrightnessFromDisplay()`).
     public func restoreNormalLighting() {
         // Handing it back first releases a held level, so the lid state then darkens it. A logo lent
         // to Codeman is left to it: Codeman returns it to normal when it's done.
@@ -686,9 +650,7 @@ public final class LogoController {
         self.breathesWhileCharging = breathesWhileCharging
         if breathesWhileCharging { readCharging() }
         updateStandIn()
-        let isLit = isLitAndAwake
-        if isLit { readHeadroom() }
-        if isLit, animator.level < 1 || activeEffect != .none {
+        if isLitAndAwake, animator.level < 1 || activeEffect != .none {
             animator.resume()
         } else if !isLent {
             animator.reset()
@@ -791,7 +753,6 @@ public final class LogoController {
         knownSetting = .on // so the live view shows the fade in
         if fade > 0, isDisplayAwake {
             // An effect or a Morse loop takes over from dark, starting with a rising step.
-            readHeadroom()
             if activeEffect != .none || morse != nil { return .applied }
             let level = animator?.level ?? 1
             await switchFade(to: level, over: fade, emitter: emitter)

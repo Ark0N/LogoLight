@@ -408,41 +408,6 @@ func landingTests(_ t: TestHarness) async {
         t.expect(abs(FadeCurve.springTime(toReach: FadeCurve.springProgress(0.154)) - 0.154) < 1e-6)
     }
 
-    await t.test("making up for the display's brightness eases onto the new level, however late the polls run") {
-        for timing in Timing.all() {
-            // Display at full, then at 40% (the level goes up), then at 80% (down): each step is one look,
-            // as the app's timer takes.
-            for (from, to) in [(1.0, 0.4), (0.4, 0.8)] {
-                let f = Fixture(direct: true, timeDriven: true)
-                timing.apply(to: f)
-                f.daemon.maxNits = 1000
-                f.daemon.appliedNits = 1000 * from
-                f.controller.setBrightness(0.5)
-                await settle()
-                try await pass(f, 1.5)
-                f.daemon.trace = []
-                f.daemon.timeline.removeAll()
-                f.daemon.appliedNits = 1000 * to
-                f.controller.displayBrightnessMayHaveChanged()
-                await settle()
-                try await pass(f, 1.5)
-                let target = LogoAnimator.level(forBrightness: 0.5, headroom: 1 / to)
-                let motion = Motion(f.daemon.trace)
-                let up = to < from
-                let back = zip(motion.trace, motion.trace.dropFirst())
-                    .map { up ? $0.level - $1.level : $1.level - $0.level }.filter { $0 > 0 }.reduce(0, +)
-                let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
-                let label = "display \(from) to \(to), \(timing)"
-                t.expect(abs(f.daemon.level - target) <= 0.01, "\(label): held at \(f.daemon.level), not \(target)")
-                t.expect(f.daemon.isHolding, "\(label): not held")
-                t.expect(back <= 0.005, "\(label): went back by \(back)")
-                t.expect(motion.speed(before: motion.stop(), over: 0.06) < 0.25 * motion.peakSpeed(),
-                         "\(label): stopped abruptly")
-                t.expect((2...7).contains(fades.count), "\(label): \(fades.count) fades")
-            }
-        }
-    }
-
     await t.test("slider clicks both ways ease onto the level, and stop slowly, however late the polls run") {
         for timing in Timing.all() {
             for (from, to) in [(1.0, 0.5), (0.5, 0.9), (0.9, 0.4), (0.3, 0.8), (0.8, 0.2), (0.2, 0.3), (0.6, 0.55)] {

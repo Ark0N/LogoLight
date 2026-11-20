@@ -129,23 +129,15 @@ public final class LogoAnimator {
         self.soundSource = soundSource
     }
 
-    /// How many times brighter the logo would be with the display at full brightness than at its
-    /// brightness now (`LightEmitter.displayHeadroom`), 1 or more. The level is scaled up by it, so the
-    /// logo's brightness doesn't follow the display's. `LogoController` keeps it up to date.
-    public var headroom: Double = 1 {
-        didSet { headroom = headroom.isFinite ? max(headroom, 1) : 1 }
-    }
-
     /// The logo's fade level for a brightness: never quite dark, and perceptually even
-    /// (the eye is more sensitive to changes when the logo is dim). With the display turned down
-    /// (`headroom` above 1), the level is raised to make up for it, up to fully lit.
-    public static func level(forBrightness brightness: Double, headroom: Double = 1) -> Double {
+    /// (the eye is more sensitive to changes when the logo is dim).
+    public static func level(forBrightness brightness: Double) -> Double {
         let b = min(max(brightness, 0), 1)
-        return b >= 1 ? 1 : min(1, (0.02 + 0.98 * b * b) * max(headroom, 1))
+        return b >= 1 ? 1 : 0.02 + 0.98 * b * b
     }
 
-    /// The fade level for the current brightness, at the display's brightness now.
-    public var level: Double { Self.level(forBrightness: brightness, headroom: headroom) }
+    /// The fade level for the current brightness.
+    public var level: Double { Self.level(forBrightness: brightness) }
 
     /// Chooses an effect without starting it.
     public func select(_ effect: LogoEffect) {

@@ -257,7 +257,7 @@ func brightnessTests(_ t: TestHarness) async {
         t.expectEqual(LogoAnimator.level(forBrightness: 0), 0.02)
         t.expectEqual(LogoAnimator.level(forBrightness: 2), 1)
         t.expectEqual((LogoAnimator.level(forBrightness: 0.5) * 1000).rounded() / 1000, 0.265)
-        let levels = stride(from: 0.0, through: 1, by: 0.1).map { LogoAnimator.level(forBrightness: $0) }
+        let levels = stride(from: 0.0, through: 1, by: 0.1).map(LogoAnimator.level(forBrightness:))
         t.expect(zip(levels, levels.dropFirst()).allSatisfy { $0 < $1 }, "should rise steadily")
     }
 
