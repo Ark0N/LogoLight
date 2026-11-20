@@ -101,7 +101,7 @@ the output back (first done 2026-11-20). So:
   Releases are tagged (`v1.0.0` is commit 76c389a, build 105; `v1.1.0` is 8b7d3b4, build 134; `v1.1.1` is e41948d, build 138) and published as GitHub Releases
   with the notarized zip (`gh release create vX.Y.Z dist/LogoLight-X.Y.Z.zip`). `v1.2.0` is e6960d1,
   build 144; `v1.3.0` is 5c25500, build 163;
-  `v1.3.1` is e859ecd, build 169.
+  `v1.3.1` is e859ecd, build 169; `v1.4.0` is ffb87f5, build 195.
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
   `git config user.name` and `git config user.email` if the new machine differs.
@@ -174,6 +174,13 @@ the output back (first done 2026-11-20). So:
   first run with it going read a peak of 1.0 and cycles of 7.5 and 3.8 s. Check for it before
   livecheck. The one line: `sound: beats at 2 Hz` counted 8, 1 and 6 of 10 beats; 1.2.0's code
   counted 7 twice the same evening, so it isn't from this release, and wasn't looked into.
+  **1.4.0 shipped 2026-11-20**: build 195 (commit ffb87f5, the merge of PR #10, tag `v1.4.0`), the
+  logo's brightness untied from the display's (issue #9), notarized with no issues ("Ready for
+  distribution"), on the site and as a GitHub Release. The user tried the ad-hoc build 194 of the
+  branch first: "I tested it, seems to work as it should". It was built, notarized and deployed by
+  the MacBook's Claude Code session over Remote Control; the zip was then downloaded from the site,
+  its sha256 checked against the MacBook's, and released from the Mac mini. Right after a deploy,
+  the edge served the old `LogoLight.zip` and `llms.txt` for about a minute.
   Not checked for 1.3.0: PR #7 with the lid closed (its author measured it), the loan with a real
   Codeman, the plug-in wait with a real charger, and the Charging row and the new name in the real
   menu and in Control Center.
@@ -557,8 +564,10 @@ to 36% of its top speed, ABRUPT; 10% in the run before, and fades are main's cod
 read up to 35% over its level once, on the first Pulse after the display steps (display at full,
 where both mappings give the same `AppliedNits`), with the `Factor` exactly at the level; not from
 this change, not looked into. With the keyboard lit, landings dipped it by 0.01-0.04 and Pulse by
-up to 0.05 (from about 0.19). 282 tests pass. The release notes for 1.4.0 should say the logo no
-longer dims with the display, and to lower the slider if it's now too bright.
+up to 0.05 (from about 0.19). 282 tests pass. The app itself (`make install`, ad-hoc build 194) had
+the flat mapping in effect 3 s after launch and the display's own in effect 3 s after a quit, with the
+display's brightness unchanged. **Shipped in 1.4.0** (2026-11-20); its notes say the logo no longer
+dims with the display, and to lower the slider if it's now too bright.
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only
