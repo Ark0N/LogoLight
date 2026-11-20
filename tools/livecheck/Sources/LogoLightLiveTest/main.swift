@@ -630,8 +630,9 @@ struct Look {
 }
 
 /// As the app does at launch, unties the logo's brightness from the display's (a flat
-/// `LEPWMBrightnessNitsMapping`, which corebrightnessd takes at the next change of the display's nits).
-/// Then, with the logo at brightness 0.5, steps the display's brightness from full down to almost dark
+/// `LEPWMBrightnessNitsMapping`, which corebrightnessd takes at the next change of the display's nits),
+/// with the logo at brightness 0.5 and the display at 0.5: the light should stay put while the mapping
+/// is taken, as it's made up for by the headroom until then. Then, with the logo at 0.5, steps the display's brightness from full down to almost dark
 /// and back, and checks the logo's light (its PWM duty, the LED's real output) against its light with
 /// the display at full: it should stay put at every step, with no cap, once the mapping is in effect.
 /// For each step it prints how far the light strayed and for how long, `AppliedNits` over the first
@@ -679,8 +680,34 @@ struct Look {
     }
     print(String(format: "display's brightness at the start: %.3f; poll every %.2f s", original, pollInterval))
     print("the display's mapping: " + (emitter.brightnessMapping ?? []).map { "[\($0.map { $0 > 1e30 ? "3.4e38" : String(format: "%g", $0) }.joined(separator: ","))]" }.joined(separator: " "))
+    // The handoff, as some time after a launch: the logo at 0.5 with the display at 0.5 and its own
+    // mapping, made up for by the headroom; then the flat mapping, taken at a change of the display's
+    // brightness. The light should stay put while corebrightnessd ramps AppliedNits up to the maximum.
+    screen.set(0.5); await wait(2.5)
+    controller.setBrightness(0.5); await wait(2)
+    let bridged = logoDuty()
+    print(line(String(format: "bridged, headroom %.2f", controller.animator?.headroom ?? 1), display: 0.5))
+    controller.untieBrightnessFromDisplay(); await wait(0.5)
+    var handoff: [Look] = []
+    let h0 = Date()
+    screen.set(0.52)
+    while Date().timeIntervalSince(h0) < 3 { handoff.append(look(since: h0)); await wait(0.01) }
+    let strays = handoff.map { $0.duty / bridged - 1 }
+    let up = strays.max() ?? 0, down = strays.min() ?? 0
+    let outside = handoff.filter { abs($0.duty / bridged - 1) > 0.06 }
+    let taken = handoff.first { $0.pre >= 999 }?.t
+    print(line("flat mapping taken", display: 0.52) + (abs(logoDuty() / bridged - 1) <= 0.06 ? " ok" : " OFF"))
+    let from = max(0, (taken ?? 0) - 0.1)
+    let handoffPath = stride(from: from, through: from + 1.3, by: 0.1).map { m in
+        let look = handoff.last { $0.t <= m } ?? handoff[0]
+        return String(format: "%.1fs %.0f/%.3f/%.4f", m, look.applied, look.factor, look.duty)
+    }
+    print(String(format: "  taken after %@; strayed %+.0f%% to %+.0f%% %@, outside 6%% from %.2f to %.2f s; applied/factor/duty: ",
+                 (taken.map { String(format: "%.2f s", $0) } ?? "(not within 3 s)") as NSString, 100 * down, 100 * up,
+                 max(up, -down) <= 0.1 ? "ok" : "OFF", outside.first?.t ?? 0, outside.last?.t ?? 0)
+          + handoffPath.joined(separator: "  "))
+
     screen.set(1); await wait(2.5)
-    controller.untieBrightnessFromDisplay()
     controller.setBrightness(0.5); await wait(2)
     let reference = logoDuty()
     print(line("reference: brightness 0.5", display: 1))
