@@ -189,6 +189,51 @@ final class FakeDaemon: LightEmitterService {
     private var isMoving = false
     /// The time-driven fade in progress: where it started, how long it takes, how long it has run.
     private var fade: (from: Double, length: Double, elapsed: Double)?
+    /// `LEPWMState.AppliedNits`: the display's brightness mapped to logo nits, kept between limits
+    /// that come from the ambient light, or `nil` for a macOS that doesn't say. Turning the display
+    /// down lowers it.
+    var appliedNits: Double?
+    /// `LEPWMState.MaxNitsRestriction`: the most `appliedNits` can be in this light, which it is with
+    /// the display at full brightness.
+    var maxNits: Double?
+    /// The light the logo gives, in nits (leaving out the daemon's fixed multiplier): the applied nits
+    /// scaled by the fade level.
+    var nits: Double { (effectiveAppliedNits ?? 1) * level }
+
+    /// `LEPWMBrightnessNitsMapping` as last written, or `nil` for a macOS without the key.
+    private(set) var mapping: [[Double]]?
+    /// Every mapping written, in order.
+    private(set) var mappingWrites: [[[Double]]] = []
+    /// Whether the mapping in effect is a flat one. Like the real daemon, a mapping written takes effect
+    /// only at the next change of the display's nits (`displayNitsChanged()`).
+    private(set) var isFlatInEffect = false
+    /// `AppliedNits`: `appliedNits`, or with a flat mapping in effect, the most the light allows.
+    var effectiveAppliedNits: Double? { isFlatInEffect ? maxNits ?? appliedNits : appliedNits }
+
+    /// Starts the daemon with a mapping already in effect (its own, or a flat one a run left).
+    func setMapping(_ mapping: [[Double]]?) {
+        self.mapping = mapping
+        isFlatInEffect = mapping.map(LightEmitter.isFlat) ?? false
+    }
+
+    /// The display's nits changed: the mapping last written takes effect.
+    func displayNitsChanged() {
+        isFlatInEffect = mapping.map(LightEmitter.isFlat) ?? false
+    }
+
+    /// How many times the display's brightness was written back as it is (`DisplayBrightness.rewrite()`).
+    private(set) var displayRewrites = 0
+    /// When false, writing the display's brightness back doesn't make the mapping take (as with no
+    /// DisplayServices); it's taken at the next `displayNitsChanged()`.
+    var rewriteAppliesMapping = true
+
+    /// The display's brightness written back as it is: like the real daemon, it takes the mapping.
+    func rewriteDisplayBrightness() -> Bool {
+        displayRewrites += 1
+        if rewriteAppliesMapping { displayNitsChanged() }
+        return rewriteAppliesMapping
+    }
+
     /// When false, every change is rejected (as if the client API stopped working).
     var acceptsChanges = true
     /// When false, changes are accepted but have no effect.
@@ -280,9 +325,13 @@ final class FakeDaemon: LightEmitterService {
         case "LEBacklightMode": return NSNumber(value: mode)
         case "DisplayLogicalState": return NSNumber(value: lastStateSent)
         case "CBClamshellState": return lidClosed.map { NSNumber(value: $0) }
+        case "LEPWMBrightnessNitsMapping": return mapping.map { $0.map { $0.map { NSNumber(value: $0) } } }
         case "LEPWMState":
             advance(by: stepPerRead)
-            return ["Factor": NSNumber(value: level)]
+            var state: [String: Any] = ["Factor": NSNumber(value: level)]
+            if let applied = effectiveAppliedNits { state["AppliedNits"] = NSNumber(value: applied) }
+            if let maxNits { state["MaxNitsRestriction"] = NSNumber(value: maxNits) }
+            return state
         default: return nil
         }
     }
@@ -327,6 +376,15 @@ final class FakeDaemon: LightEmitterService {
             keyboardToldLidClosed = value.boolValue
         default: break
         }
+    }
+
+    func setObject(_ value: AnyObject, forKey key: String) -> Bool {
+        guard key == "LEPWMBrightnessNitsMapping", mapping != nil, acceptsChanges,
+              let pairs = value as? [[NSNumber]]
+        else { return false }
+        mapping = pairs.map { $0.map(\.doubleValue) }
+        mappingWrites.append(mapping!)
+        return true
     }
 
     func setDisplaysValue(_ value: NSNumber, forKey key: String) {
@@ -413,6 +471,12 @@ final class FakeBattery {
     var chargingReads = 0
 }
 
+/// Keeps the display's own brightness mapping in memory, so tests never touch the app's preferences.
+@MainActor
+final class MemoryMappingStore: MappingStore {
+    var mapping: [[Double]]?
+}
+
 /// Holds the controller's waits that aren't animation (for charging to start after a plug-in) until
 /// `fire()`, so they neither return at once nor move the fake clock, as `FakeClock`'s sleeps do.
 @MainActor
@@ -446,6 +510,7 @@ struct Fixture {
     let battery = FakeBattery()
     let sound = FakeSound()
     let timer = FakeTimer()
+    let mappings = MemoryMappingStore()
     let controller: LogoController
 
     /// `direct: true` gives the controller a (fake) corebrightnessd to control the logo through.
@@ -486,7 +551,9 @@ struct Fixture {
                                           isFull: (battery.charge ?? 0) >= 1)
             },
             wait: { [timer] in try await timer.sleep($0) },
-            soundSource: sound
+            soundSource: sound,
+            mappingStore: mappings,
+            rewriteDisplayBrightness: { [daemon] in daemon.rewriteDisplayBrightness() }
         )
     }
 }

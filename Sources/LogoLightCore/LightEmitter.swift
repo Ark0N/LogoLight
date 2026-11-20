@@ -10,6 +10,12 @@ public protocol LightEmitterService: AnyObject {
     func setKeyboardValue(_ value: NSNumber, forKey key: String)
     /// Sends a key to the displays' own modules only (brightness and True Tone), not the logo.
     func setDisplaysValue(_ value: NSNumber, forKey key: String)
+    /// Sets a key whose value isn't a number, e.g. a mapping (an array of pairs).
+    func setObject(_ value: AnyObject, forKey key: String) -> Bool
+}
+
+public extension LightEmitterService {
+    func setObject(_ value: AnyObject, forKey key: String) -> Bool { false }
 }
 
 /// Talks to `corebrightnessd` through CoreBrightness's `BrightnessSystemClient`.
@@ -70,6 +76,10 @@ public final class CoreBrightnessService: LightEmitterService {
         setFunction(client, setSelector, value, key as NSString)
     }
 
+    public func setObject(_ value: AnyObject, forKey key: String) -> Bool {
+        setFunction(client, setSelector, value, key as NSString)
+    }
+
     public func setKeyboardValue(_ value: NSNumber, forKey key: String) {
         guard let setForKeyboardFunction else { return }
         for id in keyboardIDs {
@@ -114,6 +124,8 @@ public final class LightEmitter {
         /// Read only: whether corebrightnessd's own lid handling last saw the lid closed. A client's
         /// `ClamshellUpdate` doesn't change it.
         static let daemonLidState = "CBClamshellState"
+        /// The display's nits mapped to the logo's, as `[display nits, logo nits]` pairs.
+        static let brightnessMapping = "LEPWMBrightnessNitsMapping"
     }
 
     enum Mode {
@@ -264,6 +276,44 @@ public final class LightEmitter {
     public var fadeLevel: Double? {
         ((service.value(forKey: Key.pwmState) as? [String: Any])?["Factor"] as? NSNumber)?.doubleValue
     }
+
+    // MARK: - The display's brightness
+
+    /// A mapping of every display brightness to 1000 logo nits: with it, `AppliedNits` is the most the
+    /// ambient light allows (`MaxNitsRestriction`), whatever the display's brightness.
+    public static let flatMapping: [[Double]] = [[0, 1000], [3.402823e38, 1000]]
+
+    /// corebrightnessd's own mapping on the MacBook Pro with PROLED XDR Display (macOS 27.2), put back
+    /// when the one LogoLight replaced is lost (see `LogoController.untieBrightnessFromDisplay()`).
+    public static let defaultMapping: [[Double]] = [
+        [0, 0], [0.1, 12.5], [16.84, 12.5], [34.12, 28.62], [50, 45.37], [69.11, 65.52], [140, 150],
+        [300, 300], [600, 1000], [3.402823e38, 1000],
+    ]
+
+    /// Whether a mapping gives every display brightness the same logo nits, as `flatMapping` does.
+    public static func isFlat(_ mapping: [[Double]]) -> Bool {
+        guard let first = mapping.first, first.count == 2 else { return false }
+        return mapping.allSatisfy { $0.count == 2 && $0[1] == first[1] }
+    }
+
+    /// How corebrightnessd maps the display's nits to the logo's (`LEPWMBrightnessNitsMapping`), or `nil`
+    /// if it doesn't say.
+    public var brightnessMapping: [[Double]]? {
+        guard let pairs = service.value(forKey: Key.brightnessMapping) as? [[NSNumber]], !pairs.isEmpty
+        else { return nil }
+        return pairs.map { $0.map(\.doubleValue) }
+    }
+
+    /// Replaces the mapping of the display's nits to the logo's. corebrightnessd takes it at the next
+    /// change of the display's nits, even of one, or when the display's brightness is written again
+    /// as it is (`DisplayBrightness.rewrite()`); until then the old one holds (see
+    /// docs/corebrightnessd.md, "Brightness mappings").
+    @discardableResult
+    public func setBrightnessMapping(_ mapping: [[Double]]) -> Bool {
+        service.setObject(mapping.map { $0.map { NSNumber(value: $0) } } as NSArray, forKey: Key.brightnessMapping)
+    }
+
+    // MARK: - Fades
 
     /// How much longer than its `duration` a fade may take to reach a target that moved on
     /// (see `fade(following:over:sleep:)`) before it's started again instead.

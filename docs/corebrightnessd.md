@@ -55,7 +55,7 @@ The light emitter (LE) classes are `CBLEManager`, `CBLEPWMContainer`,
 | `LEPWMState` | dict | – | Live state, see below. |
 | `ClamshellUpdate` | `0` | yes | Whether the lid is closed, as told to every module. While the logo's module has been told it's closed, the logo is dark whatever `DisplayLogicalState` says. See "The lid". |
 | `CBClamshellState` | `0`/`1` | – | The lid as the daemon's own lid handling last saw it (`BLControl._clamshellClosed`). A client's `ClamshellUpdate` doesn't change it. |
-| `LEPWMBrightnessNitsMapping` | array | accepted, no effect seen | Screen nits → logo nits. See "Brightness mappings". |
+| `LEPWMBrightnessNitsMapping` | array | yes | Screen nits → logo nits, taken at the next change of the display's nits. See "Brightness mappings". |
 | `LEPWMLuxToMaxNitsRestrictionMapping` | array | accepted, no effect seen | Lux → maximum logo nits. |
 | `LEPWMLuxToMinNitsRestrictionMapping` | array | accepted, no effect seen | Lux → minimum logo nits. |
 | `RampSpringProfile*`, `LEPWMFollowTau`, `LEPWMStartupRampDuration`, `LEPWMRestriction{Rise,Fall}Duration`, `LEContainersInfo` | `nil` | untested | Names found in the binary. |
@@ -82,7 +82,7 @@ ChargerState = 1
   from the lux mappings, so the logo follows the screen brightness and ambient light.
 - `FinalNits = AppliedNits × Factor × NitsMultiplier` (202.77 × 0.4455 × 1.1 = 99.37).
 - `Factor` (0–1) is the fade position that `DisplayLogicalState` animates. It's the only
-  brightness input LogoLight can control.
+  brightness input LogoLight sets directly; the mapping takes the display out of `AppliedNits`.
 
 ### Brightness mappings
 
@@ -95,8 +95,36 @@ LEPWMLuxToMinNitsRestrictionMapping  [0,12.5] [190,150] [560,300] [1350,1000] [3
 ```
 
 Writing a scaled-down copy of any of them returns `YES` and reads back, but `AppliedNits`
-didn't change within 5 s. Maybe it would on the next lux or screen-brightness change; that
-wasn't pursued. The originals were written back. **LogoLight doesn't use these.**
+didn't change within 5 s. The originals were written back.
+
+**A mapping takes effect at the next change of the display's brightness.** Measured on 2026-11-16
+with `tools/probes/flatmapping` (5 lux, so `MaxNitsRestriction` 202, `MinNitsRestriction` 16), stepping
+the built-in display through DisplayServices with the logo at a `Factor` of 1:
+
+- With the original mapping, the display at 0.30 gave `DisplayNits` 15, `AppliedNits` 16 and a duty
+  of 0.026; at 0.60, 184 and 0.191; at 1.00, 202 and 0.208. **`AppliedNits` ramps** to a new value
+  over about 0.75 s (202 → 176 → 135 → 85 → 49 → 22 → 16 at 0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75 s).
+- A flat `LEPWMBrightnessNitsMapping`, `[[0,1000],[3.4e38,1000]]`, read back at once but changed
+  nothing in 2 s with the display left alone. The next display change applied it (with the same
+  ramp), and from then on `PWMNitsPreRestriction` was 1000 and `AppliedNits` the maximum, 202, at
+  display 1.00, 0.30, 0.10 and 0.60, with the duty at 0.2083 every time: **the logo no longer
+  followed the display at all**, only the ambient light (through the maximum). Meanwhile
+  `DisplayNits` read 600 whatever the display did; it moved again once the original was back.
+- The original written back likewise took effect at the next display change.
+- A fade out and back in (0.4 s, 0.6 s) with the display at 0.30 peaked at the steady duty, with
+  `AppliedNits` unchanged during the rise, so a rise from dark isn't brighter than the steady logo.
+
+A second run (`--nudge`) wrote the flat mapping 2 s after setting the display to 0.30, while its
+nits were still moving (15 → 14, with auto-brightness on): it took effect by itself within 1 s, and
+so did the original written back. So any change of the display's nits applies a mapping, even one
+of a nit. With nothing moving the display, `flatmapping --nudge` tries changes too small to see.
+A third run (2026-11-20, 57 lux, the display settled at 0.30) answered it with the smallest: **the
+display's brightness written again as it is** (`DisplayServicesSetBrightness` with the value it has)
+applied the flat mapping at once, with no change to the display. `AppliedNits` then rose from 47 to
+the maximum, 413, over about 0.75 s (72, 219, 380, 410 at 0.1, 0.3, 0.5, 0.75 s); taken at a real
+display change (0.50 → 0.52) it read 150 and then 413 within 0.1 s. The original written back took
+effect by itself 2.3 s later, with the display's nits moving, so the rewrite wasn't tried that way.
+**LogoLight uses this**: see "Keeping the brightness off the display's".
 
 ## The keyboard backlight
 
@@ -227,6 +255,53 @@ duration when the display sleeps and reapplies the level after it wakes; those t
 were only exercised by calling them directly. If LogoLight crashes while holding a level, the
 huge duration stays in the daemon until LogoLight is reopened, which replaces it: with the
 automatic duration, or with a new hold at the saved level.
+
+## Keeping the brightness off the display's
+
+A held level is a share of whatever the daemon would light the logo with, and that follows the
+display's brightness: `FinalNits = AppliedNits × Factor × NitsMultiplier`, and `AppliedNits` is the
+display's nits mapped through `LEPWMBrightnessNitsMapping`, kept between the lux limits (see
+"`LEPWMState`"). So before 1.4.0, turning the display down dimmed a logo held at 50% too (issue #9,
+"Allow logo brightness to be adjusted independently from display brightness").
+
+**What LogoLight does (1.4.0):** at launch it writes a flat `LEPWMBrightnessNitsMapping`,
+`[[0,1000],[3.4e38,1000]]`, which makes `AppliedNits` the most the ambient light allows
+(`MaxNitsRestriction`) at any display brightness (measured: "Brightness mappings"). A brightness's
+level then gives the same light whatever the display does, and still follows the ambient light
+through that maximum; 100% is as bright as macOS makes the logo with the display at full (the
+user's choice, over keeping 100% as the system's own, which would make 99% brighter than 100% with
+the display turned down). The mapping it replaced is saved in the app's preferences, and written back
+when the app quits (`LogoController.restoreNormalLighting()`), only over the flat one. A run that
+didn't quit cleanly leaves the flat one: the next launch doesn't save that as the display's own, and
+puts back the saved one, or the default above. If corebrightnessd loses the flat mapping (e.g. it
+restarts), the app writes it again within about 10 s, or at the next wake.
+
+corebrightnessd takes a written mapping only at the next change of the display's nits, so after
+writing one (the flat one at launch, or at a wake if it was lost; the display's own at quit), the app
+writes the built-in display's brightness back as it is (`DisplayBrightness.rewrite()`, through
+DisplayServices), which makes it take it at once ("Brightness mappings"). With the display asleep or
+the logo lent to Codeman, it doesn't: the mapping is taken at the next change of the display's
+nits, and until then the logo dims with the display as before, then steps up to its level.
+
+**The level isn't raised to make up for the display** while a mapping waits. The first versions did
+(`headroom = MaxNitsRestriction / AppliedNits`, read 4 times a second while lit below full), and it
+went wrong twice on the MacBook (`tools/livecheck --display`):
+
+- Without the mapping, it couldn't go past a `Factor` of 1, so with the display turned well down
+  it fell short (in a 5 lux room, brightness 0.5 was fully lit at display 0.40 and below), and since
+  `AppliedNits` ramps over about 0.75 s after a display change, the logo strayed while the app
+  caught up: display 0.08 → 0.60 lit it to about 3 times its light for 1.1 s.
+- With the mapping written at launch and taken later by a display change, `AppliedNits` went from
+  150 to the maximum (413) within 0.1 s, while the level was still raised 2.75 times: the logo
+  flashed to 2.6 times its light, for about 0.3 s until the next look and 0.3 s more to fade back.
+
+With the flat mapping in effect (2026-11-20, 34 and 44 lux), the logo's duty at brightness 0.5 was
+the same at display 1.00, 0.70, 0.40, 0.20, 0.08, 0.60 and 0.30, with no stray at any step; 100% gave
+the same light at display 0.30 as at full; Pulse peaked at the same `Factor` at display 0.30 as at
+full (its duty once read 6% high at full); and after `restoreNormalLighting()` and a display
+change, the display's own mapping was back in effect. The rewrite's handoff and quit are checked by
+`tools/livecheck --display`. Not measured: the mapping across a sleep. The live view still shows
+`Factor`.
 
 ## Following the sound
 

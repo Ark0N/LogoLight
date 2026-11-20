@@ -58,6 +58,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var batteryObserver: BatteryObserver?
     /// Lends the logo to Codeman while it blinks it, and takes it back after (see `CodemanLoan`).
     private let loanWatcher: LoanWatcher
+    /// Keeps the logo's brightness off the display's, should corebrightnessd lose the mapping that does
+    /// it (see `LogoController.keepBrightnessUntied()`).
+    private var mappingTimer: Timer?
 
     private static let effectDefaultsKey = "Effect"
     private static let brightnessDefaultsKey = "Brightness"
@@ -118,6 +121,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         scheduleRefresh(every: 10)
         loanWatcher.onChange = { [weak self] in self?.refresh() }
         loanWatcher.start()
+        // One key read from corebrightnessd every 10 s.
+        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.controller.keepBrightnessUntied() }
+        }
+        timer.tolerance = 2
+        RunLoop.main.add(timer, forMode: .common)
+        mappingTimer = timer
 
         // (A debug build run from .build has no bundle ID, and no control.)
         if let bundleID = Bundle.main.bundleIdentifier {

@@ -37,7 +37,13 @@ make install   # copy to /Applications, (re)launch
 
 Only the **MacBook Pro with PROLED XDR Display** has the logo. On any other Mac (e.g. the
 Mac mini) everything builds, the tests pass (the one live-hardware test skips), and the app
-runs but says the logo isn't available. So:
+runs but says the logo isn't available. (The Mac mini's Xcode is 26.6, and `make app` stops at
+the Control Center control there with `unknown argument: '-const-gather-protocols-list'`, also on
+a clean `main`; `swift build`, `make test` and livecheck's build work. It also has the Developer ID
+certificate but no `logolight` notarytool profile. So releases are made on the MacBook.) When the user
+turns on Remote Control in a Claude Code session on the MacBook (`/remote-control`, in this session
+too), `ListAgents` here lists it, and it runs livecheck and probes sent with `SendMessage` and sends
+the output back (first done 2026-11-20). So:
 
 - Logic changes can be made and tested anywhere. The fakes in
   `Sources/LogoLightTests/ControllerTests.swift` (`SimulatedMac`, `FakeDaemon`, which logs every
@@ -514,6 +520,45 @@ first moves the logo. Tests: `LoanTests.swift` (244 passed on the Mac mini; four
 lending doesn't pause or gate the writes). **Not checked on the MacBook**: no `tools/livecheck` run,
 and the handover with a real Codeman needs the Codeman side, which isn't released yet. Not decided:
 whether the menu should say that Codeman has the logo (the live view already shows its blinking).
+
+**The display's brightness** (2026-11-16, issue #9 from transkatgirl, "Allow logo brightness to be
+adjusted independently from display brightness"; the user: "take care of that nd make a new
+relase"; branch `display-brightness`, draft PR #10): corebrightnessd lights the logo with
+`AppliedNits × Factor`, and `AppliedNits` is the display's nits through `LEPWMBrightnessNitsMapping`,
+so a level below 100% dimmed with the display. The first version only raised the level by
+`MaxNitsRestriction / AppliedNits` (`LightEmitter.displayHeadroom`); on the MacBook
+(`tools/livecheck --display`, a 5 lux room) it held the light where it could, but was fully lit and
+still too dim at display 0.40 and below, and strayed on each display change (0.08 → 0.60 lit it to
+3 times its light for 1.1 s), since `AppliedNits` ramps over about 0.75 s. The user: "its not 100
+working like this". `tools/probes/flatmapping` then showed that a flat mapping, taken at the next
+change of the display's nits (even of one; auto-brightness, which is on there, makes them), keeps
+`AppliedNits` at the room's maximum at any display brightness: the logo's duty was the same at
+display 1.00, 0.30, 0.10 and 0.60 (docs/corebrightnessd.md, "Brightness mappings"). So the app
+writes the flat mapping at launch (`LogoController.untieBrightnessFromDisplay()`), saves the
+display's own in its preferences (`DisplayBrightnessMapping`, `DefaultsMappingStore`), writes it back
+when it quits (`restoreNormalLighting()`), and writes the flat one again if it's lost (every 10 s,
+`keepBrightnessUntied()`, and at a wake). The user chose (a): 100% is as bright as macOS makes it
+with the display at full, so anyone at 100% gets a brighter logo than before when the display isn't
+at full (also those who only switch it on and off), over (b), 100% as the system's own (with the
+display down, 99% would be far brighter than 100%). Asked first, the user had chosen it "for
+everyone, with no new switch", so the menu and the pictures are unchanged. A mapping is taken only
+at a change of the display's nits, and a first version raised the level by the headroom until then;
+when the mapping was taken, `AppliedNits` jumped to the maximum within 0.1 s and the logo flashed to
+2.6 times its light for half a second. `flatmapping --nudge` showed that writing the display's
+brightness back as it is (`DisplayBrightness.rewrite()`, DisplayServices) makes corebrightnessd take a
+mapping at once, without the display changing, so the app does that after writing either mapping,
+and the headroom is gone (until a mapping is taken, with the display asleep or the logo lent, the
+logo dims with the display as before). **Checked on the MacBook** (2026-11-20, 4ba9ab4, through the
+MacBook's Claude Code session, see "Which Mac"): `tools/livecheck --display` untied with the display at
+0.5 in 0.03 s with the light straight at its level (+0%), held the duty at every display step from
+1.00 to 0.08 with no stray, 100% gave the same light at display 0.30 as at full, and quitting put the
+display's own mapping in effect at once; the full run was all ok but one landing (0.21 → 0.5 slowed
+to 36% of its top speed, ABRUPT; 10% in the run before, and fades are main's code). Pulse's LED duty
+read up to 35% over its level once, on the first Pulse after the display steps (display at full,
+where both mappings give the same `AppliedNits`), with the `Factor` exactly at the level; not from
+this change, not looked into. With the keyboard lit, landings dipped it by 0.01-0.04 and Pulse by
+up to 0.05 (from about 0.19). 282 tests pass. The release notes for 1.4.0 should say the logo no
+longer dims with the display, and to lower the slider if it's now too bright.
 
 **Not yet verified:**
 - The live view animating in the real menu, now driven by a display link at 60 Hz. It has only

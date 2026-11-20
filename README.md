@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.1.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
+  <a href="https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.4.0.zip"><img src="docs/download-button.png" height="56" alt="Download LogoLight"></a>
   &nbsp;
   <a href="https://buymeacoffee.com/arkon"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="56" alt="Buy me a coffee"></a>
 </p>
@@ -36,7 +36,7 @@
       Your lid as it is right now, in its own finish (space black or silver), following effects and changes made elsewhere.
       <br><br>
       <b>Brightness</b><br>
-      A slider that eases the logo onto each level. It still adapts to the light around you, scaled by your setting.
+      A slider that eases the logo onto each level. Your display's brightness no longer changes it; it still adapts to the light around you.
       <br><br>
       <b>Effects</b><br>
       Breathe, Pulse and Heartbeat, made from the LED's own hardware fades, peaking at your brightness.
@@ -88,7 +88,7 @@
 
 ## Install
 
-1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.3.1.zip)**.
+1. **[Download LogoLight](https://github.com/Ark0N/LogoLight/releases/latest/download/LogoLight-1.4.0.zip)**.
    It's signed with a Developer ID and notarized by Apple.
 2. Unzip it, move **LogoLight** to your Applications folder and open it. It lives in the menu bar.
 
@@ -158,6 +158,15 @@ to a stop instead of halting at speed. Then it starts a fade the other way that'
 never visibly moves. The level lasts until the next change. While the slider is dragged, the
 running fade follows it rather than starting again at every step. Quitting LogoLight returns
 the logo to normal brightness.
+
+`corebrightnessd` also dims the logo with the display: the logo's light is `AppliedNits ×
+Factor`, and `AppliedNits` is the display's nits mapped through `LEPWMBrightnessNitsMapping`,
+within limits set by the light around. While it runs, LogoLight writes a flat mapping, so
+`AppliedNits` is the most the light around allows at any display brightness, and the slider alone
+sets the logo's brightness (100% is as bright as macOS makes it with the display at full).
+`corebrightnessd` takes a mapping only when the display's brightness changes, so LogoLight then
+writes the display's brightness back as it is, which makes it take it at once. When LogoLight
+quits, it puts the display's own mapping back the same way.
 
 The Sound effect hears what the Mac plays through a Core Audio process tap on every app's
 output (macOS 14.2 or later, with your permission under System Audio Recording Only), reduces
