@@ -164,9 +164,9 @@ Factor`, and `AppliedNits` is the display's nits mapped through `LEPWMBrightness
 within limits set by the light around. While it runs, LogoLight writes a flat mapping, so
 `AppliedNits` is the most the light around allows at any display brightness, and the slider alone
 sets the logo's brightness (100% is as bright as macOS makes it with the display at full).
-`corebrightnessd` takes the mapping at the next change of the display's brightness; until then,
-LogoLight raises the level to make up for the display. When LogoLight quits, it puts the
-display's own mapping back.
+`corebrightnessd` takes a mapping only when the display's brightness changes, so LogoLight then
+writes the display's brightness back as it is, which makes it take it at once. When LogoLight
+quits, it puts the display's own mapping back the same way.
 
 The Sound effect hears what the Mac plays through a Core Audio process tap on every app's
 output (macOS 14.2 or later, with your permission under System Audio Recording Only), reduces

@@ -412,8 +412,7 @@ public final class LogoController {
     private func apply(_ brightness: Double) {
         guard let animator else { return }
         animator.brightness = brightness
-        guard !isSwitching, isLitAndAwake else { return }
-        animator.brightnessDidChange()
+        if !isSwitching, isLitAndAwake { animator.brightnessDidChange() }
     }
 
     // MARK: - The display's brightness

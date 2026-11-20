@@ -118,6 +118,12 @@ A second run (`--nudge`) wrote the flat mapping 2 s after setting the display to
 nits were still moving (15 → 14, with auto-brightness on): it took effect by itself within 1 s, and
 so did the original written back. So any change of the display's nits applies a mapping, even one
 of a nit. With nothing moving the display, `flatmapping --nudge` tries changes too small to see.
+A third run (2026-11-20, 57 lux, the display settled at 0.30) answered it with the smallest: **the
+display's brightness written again as it is** (`DisplayServicesSetBrightness` with the value it has)
+applied the flat mapping at once, with no change to the display. `AppliedNits` then rose from 47 to
+the maximum, 413, over about 0.75 s (72, 219, 380, 410 at 0.1, 0.3, 0.5, 0.75 s); taken at a real
+display change (0.50 → 0.52) it read 150 and then 413 within 0.1 s. The original written back took
+effect by itself 2.3 s later, with the display's nits moving, so the rewrite wasn't tried that way.
 **LogoLight uses this**: see "Keeping the brightness off the display's".
 
 ## The keyboard backlight
@@ -270,22 +276,32 @@ didn't quit cleanly leaves the flat one: the next launch doesn't save that as th
 puts back the saved one, or the default above. If corebrightnessd loses the flat mapping (e.g. it
 restarts), the app writes it again within about 10 s, or at the next wake.
 
-corebrightnessd takes a written mapping at the next change of the display's nits, even of one, which
-auto-brightness makes often (with it on, it took effect within a second); a display left alone keeps
-the old one. Until then, and wherever the mapping doesn't take, the app makes up for the display
-with the level: it reads `AppliedNits` and `MaxNitsRestriction` 4 times a second while the logo is lit
-below full brightness and raises the level by `headroom = MaxNitsRestriction / AppliedNits`
-(`LightEmitter.displayHeadroom`), fading only when that moves by more than 4%. That can't go past a
-`Factor` of 1, so with the display turned well down it falls short (in a 5 lux room, brightness 0.5
-was fully lit at display 0.40 and below), and since `AppliedNits` ramps over about 0.75 s after a
-display change, the logo strayed while the app caught up: measured with `tools/livecheck --display`
-before the mapping, display 0.08 → 0.60 lit it to about 3 times its light for 1.1 s. Once the flat
-mapping is in effect, the headroom is 1 and nothing changes.
+corebrightnessd takes a written mapping only at the next change of the display's nits, so after
+writing one (the flat one at launch, or at a wake if it was lost; the display's own at quit), the app
+writes the built-in display's brightness back as it is (`DisplayBrightness.rewrite()`, through
+DisplayServices), which makes it take it at once ("Brightness mappings"). With the display asleep or
+the logo lent to Codeman, it doesn't: the mapping is taken at the next change of the display's
+nits, and until then the logo dims with the display as before, then steps up to its level.
 
-Not measured yet: the app with the flat mapping (`tools/livecheck --display` now unties as the app
-does and expects the light to stay put at every step), a quit with the display then left alone (the
-logo stays at the room's maximum until the display's nits next change), and the mapping across a
-sleep. The live view still shows `Factor`.
+**The level isn't raised to make up for the display** while a mapping waits. The first versions did
+(`headroom = MaxNitsRestriction / AppliedNits`, read 4 times a second while lit below full), and it
+went wrong twice on the MacBook (`tools/livecheck --display`):
+
+- Without the mapping, it couldn't go past a `Factor` of 1, so with the display turned well down
+  it fell short (in a 5 lux room, brightness 0.5 was fully lit at display 0.40 and below), and since
+  `AppliedNits` ramps over about 0.75 s after a display change, the logo strayed while the app
+  caught up: display 0.08 → 0.60 lit it to about 3 times its light for 1.1 s.
+- With the mapping written at launch and taken later by a display change, `AppliedNits` went from
+  150 to the maximum (413) within 0.1 s, while the level was still raised 2.75 times: the logo
+  flashed to 2.6 times its light, for about 0.3 s until the next look and 0.3 s more to fade back.
+
+With the flat mapping in effect (2026-11-20, 34 and 44 lux), the logo's duty at brightness 0.5 was
+the same at display 1.00, 0.70, 0.40, 0.20, 0.08, 0.60 and 0.30, with no stray at any step; 100% gave
+the same light at display 0.30 as at full; Pulse peaked at the same `Factor` at display 0.30 as at
+full (its duty once read 6% high at full); and after `restoreNormalLighting()` and a display
+change, the display's own mapping was back in effect. The rewrite's handoff and quit are checked by
+`tools/livecheck --display`. Not measured: the mapping across a sleep. The live view still shows
+`Factor`.
 
 ## Following the sound
 
