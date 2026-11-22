@@ -60,6 +60,15 @@ the output back (first done 2026-11-20). So:
   tests move a fade a step per read instead.)
 - Anything that changes what the LED does must be checked on the MacBook before it's called
   done, with `tools/livecheck`. Say so explicitly if it wasn't.
+  livecheck ends with a count ("N checks, M failed", the failed ones listed) and a status: 0 when
+  every check passed, 1 when any failed, 2 when it didn't start, 130 when interrupted. Before it
+  writes anything, every mode but `--hear` checks that the Mac has the logo, that the logo is on,
+  that LogoLight isn't running and that Codeman isn't blinking the logo (a blink during the run
+  fails it), and Ctrl-C or a kill puts normal lighting back in every mode (2026-11-22). **That
+  version hasn't been run on the MacBook yet**: on the Mac mini it builds and stops at "This Mac has
+  no illuminated logo". The effect samples and Breathe's cycles now have verdicts too, with
+  tolerances taken from earlier runs (a peak within 0.06 of its level, a cycle within 0.2 s of
+  6.3 s): if one says OFF where the numbers look as they always did, widen it.
 - To see the panel anywhere, without touching the logo or the screen, draw it to PNGs in each
   state from a debug build: `LOGOLIGHT_RENDER_PANEL=/some/folder .build/debug/LogoLight`. It
   prints any label that doesn't fit, so check its output after changing the layout. With
