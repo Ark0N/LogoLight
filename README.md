@@ -293,6 +293,8 @@ App Sandbox, which rules out both direct control and the admin-command fallback.
 | `Resources/Info.plist` | App bundle metadata (template) |
 | `scripts/build-app.sh` | Builds and signs `LogoLight.app` |
 | `scripts/notarize.sh` | Notarizes, staples and zips a Developer ID build (`make dist`) |
+| `scripts/deploy-site.sh` | Checks the website and its download, then publishes it (`make deploy`) |
+| `site` | The website, [logolight.app](https://logolight.app) (Cloudflare Workers static assets) |
 | `docs/corebrightnessd.md` | Research notes: the keys, the fade curve, holding a level |
 | `tools/probes` | The command-line tools used for that research |
 | `tools/livecheck` | Checks brightness and effects against the real logo |

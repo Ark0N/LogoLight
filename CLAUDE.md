@@ -153,7 +153,7 @@ the output back (first done 2026-11-20). So:
   checked. The light was still placed for the 413-point panel after the Sound row made it 450, so
   it sat 3.7 points below the logo (the user: "the lighted mac logo moves down"). **Fetch before
   deploying**: a deploy from a checkout behind `origin/main` put an older `style.css` live for a
-  few minutes (2026-11-10).
+  few minutes (2026-11-10). `make deploy` now refuses that.
   **1.3.0 shipped 2026-11-10**: build 163 (commit 5c25500, tag `v1.3.0`), asked for as "rename the
   Backlight text with LogoLight and merge all the PRs and make a new release, update ALL the
   graphics for it". It has the Charging light (PR #5), stepping aside for Codeman (PR #6), external
@@ -184,9 +184,14 @@ the output back (first done 2026-11-20). So:
   Not checked for 1.3.0: PR #7 with the lid closed (its author measured it), the loan with a real
   Codeman, the plug-in wait with a real charger, and the Charging row and the new name in the real
   menu and in Control Center.
-- The website deploys with `cd site && npx wrangler deploy` (wrangler is logged in with the
-  user's Cloudflare account on the MacBook and, since 2026-11-11, on the Mac mini; the Worker
-  "logolight" serves logolight.app and www). The user's browser may be on another device, where
+- The website deploys with `make deploy` (`scripts/deploy-site.sh`, since 2026-11-22), which runs
+  `npx wrangler deploy` in `site/` only once its checks pass: it fetches and refuses a checkout
+  behind `origin/main`, a missing `site/public/LogoLight.zip` (it isn't in git, so a Mac that didn't
+  make the release has none, and the download would be a 404), a zip that isn't the version the
+  page's JSON-LD names, and one that isn't notarized. `make deploy CHECK=1` only checks. The Mac
+  mini has 1.4.0's zip there (the GitHub release's, the same file as the site's). Wrangler is logged
+  in with the user's Cloudflare account on the MacBook and, since 2026-11-11, on the Mac mini; the Worker
+  "logolight" serves logolight.app and www. The user's browser may be on another device, where
   the usual `wrangler login` can't reach its localhost callback and times out after 2 minutes:
   run `npx wrangler login --device` in the background and give the user the link and code it
   prints (5 minutes to approve). For a new

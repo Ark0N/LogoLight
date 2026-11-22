@@ -7,7 +7,7 @@ INSTALL_DIR ?= /Applications
 # answered, so it's killed, rather than letting the new build start beside it.
 QUIT_APP = pkill -x -U "$$(id -u)" LogoLight; for i in $$(seq 20); do pgrep -x -U "$$(id -u)" LogoLight > /dev/null || break; sleep 0.1; done; if pgrep -x -U "$$(id -u)" LogoLight > /dev/null; then echo 'LogoLight did not quit (waiting for a password?); killing it'; pkill -KILL -x -U "$$(id -u)" LogoLight; sleep 0.2; fi; true
 
-.PHONY: build test app dist run install uninstall clean
+.PHONY: build test app dist deploy run install uninstall clean
 
 ## build: compile everything (debug)
 build:
@@ -26,6 +26,10 @@ dist:
 	@test -n "$(SIGN_IDENTITY)" || { echo "Set SIGN_IDENTITY to your Developer ID Application identity"; exit 1; }
 	scripts/build-app.sh
 	scripts/notarize.sh
+
+## deploy: publish the website (site/) to logolight.app, once its checks pass (CHECK=1: check only)
+deploy:
+	scripts/deploy-site.sh $(if $(CHECK),--check)
 
 ## run: build and open the app
 run: app
