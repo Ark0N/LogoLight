@@ -148,18 +148,18 @@ func passwordlessRuleTests(_ t: TestHarness) {
 // MARK: - Helpers
 
 func runSync(_ executable: String, _ arguments: [String]) -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: executable)
-    process.arguments = arguments
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    try? process.run()
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    return String(decoding: data, as: UTF8.self)
+    runSyncAll(executable, arguments).output
 }
 
-/// Runs a program and returns its exit status, standard output and standard error.
+func runSyncStatus(_ executable: String, _ arguments: [String]) -> Int32 {
+    runSyncAll(executable, arguments).status
+}
+
+/// Runs a program and returns its exit status (-1 if it couldn't be started), standard output and
+/// standard error.
+///
+/// It waits for the termination handler: `waitUntilExit()` takes about 0.2 s to notice that a program
+/// has ended, which was most of these tests' time.
 func runSyncAll(_ executable: String, _ arguments: [String]) -> (status: Int32, output: String, error: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
@@ -167,18 +167,11 @@ func runSyncAll(_ executable: String, _ arguments: [String]) -> (status: Int32, 
     let output = Pipe(), error = Pipe()
     process.standardOutput = output
     process.standardError = error
-    try? process.run()
+    let ended = DispatchSemaphore(value: 0)
+    process.terminationHandler = { _ in ended.signal() }
+    do { try process.run() } catch { return (-1, "", "\(error)") }
     let out = output.fileHandleForReading.readDataToEndOfFile()
     let err = error.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
+    ended.wait()
     return (process.terminationStatus, String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self))
-}
-
-func runSyncStatus(_ executable: String, _ arguments: [String]) -> Int32 {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: executable)
-    process.arguments = arguments
-    try? process.run()
-    process.waitUntilExit()
-    return process.terminationStatus
 }

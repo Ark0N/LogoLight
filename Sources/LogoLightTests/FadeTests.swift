@@ -1,10 +1,23 @@
 import Foundation
 import LogoLightCore
 
-/// Lets pending main-actor tasks (such as a fade's polls) run.
+/// Lets pending main-actor tasks (such as a fade's polls) run: until they've left the fixture's clock
+/// alone for 25 turns (a fade sleeps on it every turn or two), or for 500 turns, since an effect never
+/// rests. Waiting 500 turns every time took half the suite's run.
 @MainActor
-private func settle() async {
-    for _ in 0..<500 { await Task.yield() }
+private func settle(_ f: Fixture) async {
+    var turns = 0, quiet = 0
+    var sleeps = f.clock.slept.count
+    while turns < 500, quiet < 25 {
+        await Task.yield()
+        turns += 1
+        if f.clock.slept.count == sleeps {
+            quiet += 1
+        } else {
+            quiet = 0
+            sleeps = f.clock.slept.count
+        }
+    }
 }
 
 /// Lets `seconds` pass on the fixture's clock. While the logo fades, its own polls pass the time.
@@ -139,12 +152,12 @@ private func click(from: Double, to: Double, timing: Timing = Timing("exact")) a
     let f = Fixture(direct: true, timeDriven: true)
     timing.apply(to: f)
     f.controller.setBrightness(from)
-    await settle()
+    await settle(f)
     try await pass(f, 0.5)
     f.daemon.trace = []
     f.daemon.timeline.removeAll()
     f.controller.setBrightness(to)
-    await settle()
+    await settle(f)
     try await pass(f, 1.5)
     return f
 }
@@ -189,7 +202,7 @@ func fadeTests(_ t: TestHarness) async {
                 f.controller.displayDidSleep()
             }
             f.controller.setBrightness(0.5)
-            await settle()
+            await settle(f)
             guard race.ran else { break }
             tried += 1
             t.expectEqual(Array(f.daemon.log.dropFirst(race.logCount)), [])
@@ -210,7 +223,7 @@ func fadeTests(_ t: TestHarness) async {
                 f.controller.displayDidSleep()
             }
             try await f.controller.set(.on)
-            await settle()
+            await settle(f)
             guard race.ran else { break }
             tried += 1
             let after = f.daemon.log.dropFirst(race.logCount)
@@ -227,7 +240,7 @@ func fadeTests(_ t: TestHarness) async {
         f.controller.setBrightness(0)
         try await pass(f, 0.09)
         f.controller.setBrightness(0.65)
-        await settle()
+        await settle(f)
         try await pass(f, 3)
         let target = LogoAnimator.level(forBrightness: 0.65)
         t.expect(!f.controller.animator!.isAnimating, "should have settled")
@@ -243,7 +256,7 @@ func fadeTests(_ t: TestHarness) async {
                 f.controller.setBrightness(0)
                 try await pass(f, delay)
                 f.controller.setBrightness(brightness)
-                await settle()
+                await settle(f)
                 try await pass(f, 3)
                 let error = abs(f.daemon.level - LogoAnimator.level(forBrightness: brightness))
                 if error > worst.error { worst = (error, "after \(delay) s, \(brightness)") }
@@ -259,7 +272,7 @@ func fadeTests(_ t: TestHarness) async {
             f.controller.setBrightness(0.6)
             for _ in 0..<3 { await Task.yield() }
             f.controller.setBrightness(0.5)
-            await settle()
+            await settle(f)
             t.expect(!f.controller.animator!.isAnimating, "step \(step): still fading")
         }
     }
@@ -308,14 +321,14 @@ func fadeTests(_ t: TestHarness) async {
         // each one flipped the state 60 times a second, and every Blank dims the keyboard a little.
         let f = Fixture(direct: true, timeDriven: true)
         f.controller.setBrightness(0.4)
-        await settle()
+        await settle(f)
         try await pass(f, 0.5)
         f.daemon.timeline.removeAll()
         for i in 1...120 {
             f.controller.setBrightness(0.4 + 0.2 * Double(i) / 120)
             try await pass(f, 1.0 / 60)
         }
-        await settle()
+        await settle(f)
         try await pass(f, 1.5)
         // A fade starts with up to two flips (turning round, then the fade), and one holds it.
         let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }.count
@@ -332,7 +345,7 @@ func fadeTests(_ t: TestHarness) async {
                 f.controller.setBrightness(nudge)
                 try await pass(f, Double(frames) / 60)
                 f.controller.setBrightness(1)
-                await settle()
+                await settle(f)
                 f.daemon.elapse(5)
                 let label = "\(nudge) for \(frames) frames"
                 t.expect(f.daemon.level >= 0.999, "\(label): stuck at \(f.daemon.level)")
@@ -352,7 +365,7 @@ func fadeTests(_ t: TestHarness) async {
             }
             t.expect(f.clock.slept.count >= polls, "the fade polled \(f.clock.slept.count) times, not \(polls)")
             f.controller.setBrightness(1)
-            await settle()
+            await settle(f)
             f.daemon.elapse(5)
             t.expect(f.daemon.level >= 0.999, "after \(polls) polls: stuck at \(f.daemon.level)")
             t.expect(!f.daemon.isHolding, "after \(polls) polls: left at the hold's duration")
@@ -376,7 +389,7 @@ func stoppingTests(_ t: TestHarness) async {
         f.controller.setEffect(.none)
         f.controller.displayDidSleep()
         let count = f.daemon.log.count
-        await settle()
+        await settle(f)
         t.expectEqual(f.daemon.log.count, count)
     }
 
@@ -388,7 +401,7 @@ func stoppingTests(_ t: TestHarness) async {
             f.controller.displayDidSleep()
         }
         try await f.controller.set(.on)
-        await settle()
+        await settle(f)
         t.expect(race.ran)
         t.expectEqual(f.daemon.keyboardState, 1)
         // Nothing after the setting changes starts a fade toward the level: no Unblank, and no
@@ -476,7 +489,7 @@ func landingTests(_ t: TestHarness) async {
     await t.test("a drag follows without easing on until the slider stops") {
         let f = Fixture(direct: true, timeDriven: true)
         f.controller.setBrightness(0.9)
-        await settle()
+        await settle(f)
         try await pass(f, 0.5)
         f.daemon.timeline.removeAll()
         var lastChange = 0.0
@@ -485,7 +498,7 @@ func landingTests(_ t: TestHarness) async {
             f.controller.setBrightness(0.9 - 0.6 * Double(i) / 45)
             try await pass(f, 1.0 / 60)
         }
-        await settle()
+        await settle(f)
         try await pass(f, 1.5)
         let fades = f.daemon.timeline.filter { $0.entry.hasPrefix("fade=") && $0.entry != "fade=1000000000.0" }
         let during = fades.filter { $0.time <= lastChange }.count
@@ -527,7 +540,7 @@ func landingTests(_ t: TestHarness) async {
         for change in 1...4 {
             let f = Fixture(direct: true, timeDriven: true)
             f.controller.setBrightness(0.9)
-            await settle()
+            await settle(f)
             try await pass(f, 0.5)
             f.daemon.timeline.removeAll()
             f.daemon.trace = []
@@ -538,7 +551,7 @@ func landingTests(_ t: TestHarness) async {
             t.expect(fades().count == 1 + change, "only \(fades().count - 1) segments")
             let changedAt = (time: f.daemon.time, level: f.daemon.level)
             f.controller.setBrightness(0.6)
-            await settle()
+            await settle(f)
             try await pass(f, 1.5)
             let target = LogoAnimator.level(forBrightness: 0.6)
             t.expect(!f.controller.animator!.isAnimating, "after segment \(change): still fading")
@@ -555,7 +568,7 @@ func landingTests(_ t: TestHarness) async {
                 let f = Fixture(direct: true, timeDriven: true)
                 timing.apply(to: f)
                 f.controller.setBrightness(0.5)
-                await settle()
+                await settle(f)
                 try await pass(f, 0.5)
                 f.daemon.trace = []
                 f.daemon.timeline.removeAll()
