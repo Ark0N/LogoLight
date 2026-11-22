@@ -18,8 +18,13 @@ BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)
 BUNDLE_ID="${BUNDLE_ID:-app.logolight.LogoLight}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
-APP="build/LogoLight.app"
+# The app is put together in build/staging and moved to build/ only once it's whole and signed, and the
+# last build is removed first. So a build that fails leaves no app there, rather than a half-made one
+# or the one before it, for `open` or notarize.sh to pick up.
+FINAL="build/LogoLight.app"
+APP="build/staging/LogoLight.app"
 APPEX="$APP/Contents/PlugIns/LogoLightControls.appex"
+rm -rf "$FINAL" build/staging
 
 # Fills in a template's $(BUNDLE_ID), $(VERSION) and $(BUILD_NUMBER).
 fill() {
@@ -41,8 +46,7 @@ swift build -c release --product LogoLight \
 BIN="$(swift build -c release --product LogoLight --show-bin-path)/LogoLight"
 vtool -show-build "$BIN" | grep -q "sdk $SDK_VERSION" || { echo "error: $BIN doesn't record SDK $SDK_VERSION" >&2; exit 1; }
 
-echo "==> Assembling $APP"
-rm -rf "$APP"
+echo "==> Assembling $FINAL"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LogoLight"
 fill Resources/Info.plist "$APP/Contents/Info.plist"
@@ -99,6 +103,7 @@ if [ -n "$PROCESSOR" ] && [ "${SDK_MAJOR:-0}" -ge 26 ]; then
         -Xlinker -application_extension -Xlinker -e -Xlinker _NSExtensionMain \
         -o "$APPEX/Contents/MacOS/LogoLightControls" $SOURCES
     fill Controls/Info.plist "$APPEX/Contents/Info.plist"
+    # shellcheck disable=SC2086 # one source per line
     printf '%s\n' $SOURCES > "$OBJ/sources.txt"
     echo "$OBJ/LogoLightControls.swiftconstvalues" > "$OBJ/constvalues.txt"
     : > "$OBJ/none.txt"
@@ -133,5 +138,7 @@ if [ -d "$APPEX" ]; then
 fi
 codesign --force --sign "$SIGN_IDENTITY" --options runtime "$TIMESTAMP" "$APP"
 codesign --verify --strict --deep "$APP"
+mv "$APP" "$FINAL"
+rmdir build/staging
 
-echo "==> Built $APP ($VERSION, build $BUILD_NUMBER)"
+echo "==> Built $FINAL ($VERSION, build $BUILD_NUMBER)"
