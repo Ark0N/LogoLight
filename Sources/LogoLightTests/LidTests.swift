@@ -159,7 +159,7 @@ func lidTests(_ t: TestHarness) async {
         t.expect(!f.daemon.isKeyboardLit)
     }
 
-    await t.test("turned on or off with the lid open, writes nothing") {
+    t.test("turned on or off with the lid open, writes nothing") {
         let f = Fixture(direct: true, timeDriven: true)
         f.controller.start(brightness: nil, effect: .none)
         f.daemon.log.removeAll()
@@ -257,7 +257,7 @@ func lidTests(_ t: TestHarness) async {
         t.expect(!f.controller.animator!.isAnimating, "nothing should play while no display is on")
     }
 
-    await t.test("at launch with the lid closed and the option off, ends an override a previous run left") {
+    t.test("at launch with the lid closed and the option off, ends an override a previous run left") {
         let f = Fixture(direct: true, timeDriven: true)
         f.closeLid()
         _ = f.daemon.setValue(false, forKey: "ClamshellUpdate") // left by a run that crashed

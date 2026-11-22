@@ -83,7 +83,7 @@ func morseTests(_ t: TestHarness) async {
         t.expect(!fallback.isSendingMorse, "no Morse without direct control")
     }
 
-    await t.test("won't start with the logo off, or with nothing to send") {
+    t.test("won't start with the logo off, or with nothing to send") {
         let off = Fixture(backlightMode: 0, direct: true)
         t.expect(!off.controller.playMorse("SOS", loops: false))
         t.expectEqual(off.controller.morse, nil)
@@ -235,7 +235,7 @@ func morseTests(_ t: TestHarness) async {
         t.expectEqual(rises, 10)
     }
 
-    await t.test("choosing an effect stops a message") {
+    t.test("choosing an effect stops a message") {
         let f = Fixture(direct: true, timeDriven: true)
         f.clock.budget = 50
         f.controller.playMorse("SOS", loops: true)

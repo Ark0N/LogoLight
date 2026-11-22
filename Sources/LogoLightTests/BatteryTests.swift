@@ -107,7 +107,7 @@ func batteryTests(_ t: TestHarness) async {
         t.expectEqual(f.controller.brightness, 0.5)
     }
 
-    await t.test("a charge that can't be read leaves the brightness as it was") {
+    t.test("a charge that can't be read leaves the brightness as it was") {
         let f = Fixture(direct: true, timeDriven: true)
         f.controller.setBrightness(0.4)
         f.battery.charge = nil
