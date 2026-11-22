@@ -143,6 +143,59 @@ func loanTests(_ t: TestHarness) async {
         t.expect(f.controller.animator?.isAnimating == false, "an effect shouldn't play with the logo off")
     }
 
+    await t.test("switching the logo on while lent changes only the setting, and the effect comes back with the logo") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.start(brightness: nil, effect: .breathe)
+        try await f.controller.set(.off)
+        await settle()
+        f.controller.lend()
+        f.daemon.log.removeAll()
+        let status = try await f.controller.set(.on)
+        await settle()
+        f.daemon.elapse(3)
+        await settle()
+        t.expectEqual(status.setting, .on)
+        t.expectEqual(f.daemon.log, ["mode=2"])
+        t.expect(f.controller.animator?.isAnimating == false, "nothing should be animating while lent")
+
+        f.controller.takeBack()
+        await settle()
+        t.expect(f.controller.animator?.isPlaying == true, "Breathe should play once the logo is back")
+    }
+
+    await t.test("lending while the logo fades on stops the fade at once") {
+        let f = Fixture(direct: true, timeDriven: true)
+        f.controller.start(brightness: 0.5, effect: .none)
+        try await f.controller.set(.off)
+        await settle()
+        let level = LogoAnimator.level(forBrightness: 0.5)
+        let switching = Task { try await f.controller.set(.on) }
+        // Into the fade up to the brightness, which polls the level every 10 ms.
+        var turns = 0
+        while f.daemon.level < level / 3, turns < 100_000 {
+            await Task.yield()
+            turns += 1
+        }
+        t.expect(f.daemon.level >= level / 3 && f.daemon.level < level * 0.6,
+                 "should be on its way up, but is at \(f.daemon.level)")
+        let lentAt = f.daemon.time
+        f.controller.lend()
+        _ = try await switching.value
+        await settle()
+        // The fade's polls are what moves the clock: left running, it writes for another half second,
+        // into Codeman's first blink.
+        t.expect(f.daemon.time - lentAt <= 0.02, "the fade ran on for \(f.daemon.time - lentAt) s")
+        let late = f.daemon.timeline.filter { $0.time > lentAt + 0.02 }.map(\.entry)
+        t.expectEqual(late, [])
+        t.expect(f.controller.animator?.isAnimating == false, "nothing should be animating while lent")
+
+        f.daemon.setHeld(at: 1, state: 2) // as Codeman leaves it
+        f.daemon.fadeDuration = 0
+        f.controller.takeBack()
+        await run(f, for: 5)
+        t.expect(abs(f.daemon.level - level) <= 0.02, "at \(f.daemon.level), not \(level)")
+    }
+
     // MARK: - LoanWatcher
 
     t.test("lends while Codeman blinks, and takes the logo back once it has been free for a moment") {

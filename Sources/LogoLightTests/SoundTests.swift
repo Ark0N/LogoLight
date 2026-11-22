@@ -231,6 +231,56 @@ func soundTests(_ t: TestHarness) async {
         t.expect(f.controller.effect == .sound, "kept for next time")
     }
 
+    await t.test("a wake while it follows the sound carries on listening, with no gap") {
+        let f = soundFixture()
+        f.sound.level = 1
+        f.controller.setEffect(.sound)
+        try await pass(f, 0.5)
+        // A system wake posts more than one notification, and each one resumes the effect.
+        f.controller.displayDidWake()
+        t.expectEqual(f.sound.stops, 0)
+        t.expect(f.sound.isListening)
+        t.expect(f.controller.animator!.isPlaying)
+    }
+
+    await t.test("when the display goes away without a sleep notification, it stops, and stops listening") {
+        let f = soundFixture()
+        f.sound.level = 1
+        f.controller.setEffect(.sound)
+        try await pass(f, 0.5)
+        // E.g. the lid is closed with an external display attached.
+        f.mac.displayAwake = false
+        try await pass(f, 0.2)
+        t.expect(!f.controller.animator!.isPlaying, "the effect should stop until the next wake")
+        t.expect(!f.sound.isListening, "the sound shouldn't be listened to with nothing to light")
+        t.expectEqual(f.sound.stops, 1)
+        f.mac.displayAwake = true
+        f.controller.displayDidWake()
+        t.expect(f.sound.isListening)
+    }
+
+    await t.test("asks the app for a new frame when a sound lifts the logo from dark, and only then") {
+        let f = soundFixture()
+        var rises = 0
+        f.controller.onRiseFromDark = { rises += 1 }
+        f.sound.level = 0
+        f.controller.setEffect(.sound)
+        try await pass(f, 1)
+        t.expect(f.daemon.level <= 0.001, "at \(f.daemon.level)")
+        t.expectEqual(rises, 0) // only a fall so far
+        f.sound.level = 1
+        try await pass(f, 0.3)
+        t.expectEqual(rises, 1)
+        // A rise from a level in between isn't held back, so it asks for nothing.
+        f.sound.level = 0.5
+        try await pass(f, 1)
+        t.expect(f.daemon.level > 0.1 && f.daemon.level < 0.5, "at \(f.daemon.level)")
+        f.sound.level = 1
+        try await pass(f, 0.3)
+        t.expect(f.daemon.level > 0.9, "at \(f.daemon.level)")
+        t.expectEqual(rises, 1)
+    }
+
     await t.test("a brightness change while following moves the peak") {
         let f = soundFixture(brightness: 1)
         f.sound.level = 1
