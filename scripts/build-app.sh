@@ -95,11 +95,19 @@ if [ -n "$PROCESSOR" ] && [ "${SDK_MAJOR:-0}" -ge 26 ]; then
     rm -rf "$OBJ"
     mkdir -p "$OBJ" "$APPEX/Contents/MacOS" "$APPEX/Contents/Resources"
     SOURCES="Controls/BacklightControl.swift Sources/LogoLightCore/ControlLink.swift"
-    # shellcheck disable=SC2086 # SOURCES is a list
+    # Xcode 27's swiftc takes the protocol list as its own option. Xcode 26's doesn't know that one
+    # ("unknown argument"), but its frontend takes the same list under another name.
+    PROTOCOLS="-const-gather-protocols-list Controls/const_extract_protocols.json"
+    # shellcheck disable=SC2086 # PROTOCOLS is an option and its value
+    if xcrun swiftc $PROTOCOLS -typecheck - < /dev/null 2>&1 \
+        | grep -q "unknown argument: '-const-gather-protocols-list'"; then
+        PROTOCOLS="-Xfrontend -const-gather-protocols-file -Xfrontend Controls/const_extract_protocols.json"
+    fi
+    # shellcheck disable=SC2086 # SOURCES is a list, PROTOCOLS an option and its value
     xcrun swiftc -module-name LogoLightControls -O -whole-module-optimization -swift-version 6 \
         -sdk "$SDK" -target "$TARGET" -application-extension -parse-as-library \
         -emit-const-values-path "$OBJ/LogoLightControls.swiftconstvalues" \
-        -const-gather-protocols-list Controls/const_extract_protocols.json \
+        $PROTOCOLS \
         -Xlinker -application_extension -Xlinker -e -Xlinker _NSExtensionMain \
         -o "$APPEX/Contents/MacOS/LogoLightControls" $SOURCES
     fill Controls/Info.plist "$APPEX/Contents/Info.plist"
