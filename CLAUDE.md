@@ -16,6 +16,10 @@ make install   # copy to /Applications, (re)launch
 - **The app builds with the Command Line Tools alone.** XCTest and swift-testing aren't available
   there, so the tests are an executable target with a tiny harness
   (`Sources/LogoLightTests/Harness.swift`). Add new suites to `Sources/LogoLightTests/main.swift`.
+  The harness ends the run, naming the test, when one takes over 60 s (they wait on a fake clock by
+  yielding, so a wait for something that never happens would spin forever), and output is
+  line-buffered, so a log is complete up to where a run stopped. Warnings in the tests only show in
+  a build that recompiles them (`touch Sources/LogoLightTests/*.swift` first).
   Only the Control Center control (`Controls/`) needs Xcode 26+ (this MacBook has Xcode 27.2):
   `build-app.sh` builds it with `swiftc` and Xcode's `appintentsmetadataprocessor`, the way Xcode
   builds a widget extension, and leaves it out when that tool or the macOS 26 SDK is missing.
@@ -37,10 +41,11 @@ make install   # copy to /Applications, (re)launch
 
 Only the **MacBook Pro with PROLED XDR Display** has the logo. On any other Mac (e.g. the
 Mac mini) everything builds, the tests pass (the one live-hardware test skips), and the app
-runs but says the logo isn't available. (The Mac mini's Xcode is 26.6, and `make app` stops at
-the Control Center control there with `unknown argument: '-const-gather-protocols-list'`, also on
-a clean `main`; `swift build`, `make test` and livecheck's build work. It also has the Developer ID
-certificate but no `logolight` notarytool profile. So releases are made on the MacBook.) When the user
+runs but says the logo isn't available. (The Mac mini's Xcode is 26.6, whose swiftc doesn't know
+`-const-gather-protocols-list`; since 2026-11-22 `build-app.sh` then passes the frontend's
+`-const-gather-protocols-file`, so `make app` builds there too, and the control's App Intents
+metadata came out the same as in the 1.4.0 release but for the tool's version. It also has the
+Developer ID certificate but no `logolight` notarytool profile. So releases are made on the MacBook.) When the user
 turns on Remote Control in a Claude Code session on the MacBook (`/remote-control`, in this session
 too), `ListAgents` here lists it, and it runs livecheck and probes sent with `SendMessage` and sends
 the output back (first done 2026-11-20). So:
@@ -54,7 +59,8 @@ the output back (first done 2026-11-20). So:
   late, and frames come 12–19 ms apart. So timing-sensitive tests also run under the `Timing`
   variations in `FadeTests.swift` (polls up to 15 ms late, frames 12–19 ms apart); a landing that
   counted its sleeps instead of reading the clock passed with exact timing and bounced with late
-  polls. The full suite takes about 20 s. `LightEmitter` takes the clock (the fake's `daemon.time` in tests). The fake can trace
+  polls. The test binary takes about 5 s (11 s until 2026-11-22, when `settle()` in `FadeTests.swift`
+  stopped waiting 500 turns every time). `LightEmitter` takes the clock (the fake's `daemon.time` in tests). The fake can trace
   the level every millisecond, and `FakeClock.returnsWhenCancelledLate`
   makes a sleep that's cancelled once its time is up return normally, as `Task.sleep` does. (The older
   tests move a fade a step per read instead.)
