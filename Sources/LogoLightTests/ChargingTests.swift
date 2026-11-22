@@ -50,8 +50,11 @@ private func levelRange(_ f: Fixture) -> (low: Double, high: Double) {
     return (levels.min() ?? -1, levels.max() ?? -1)
 }
 
-/// Everything sent to corebrightnessd over 8 s of the logo playing, with `change` made 2 s in.
-/// `setUp` runs first, on a fixture with the logo lit at normal brightness.
+/// Everything sent to corebrightnessd over 8 s of the logo playing, each with the time it was sent, with
+/// `change` made 2 s in. `setUp` runs first, on a fixture with the logo lit at normal brightness.
+///
+/// The times matter: 2 s in is the end of Breathe's fall, where a restarted Breathe sends what the steady
+/// one sends next, only at other times.
 @MainActor
 private func log(setUp: @MainActor (Fixture) -> Void, change: (@MainActor (Fixture) -> Void)? = nil) async -> [String] {
     let f = Fixture(direct: true, timeDriven: true)
@@ -60,7 +63,7 @@ private func log(setUp: @MainActor (Fixture) -> Void, change: (@MainActor (Fixtu
     change?(f)
     await run(f, for: 6)
     f.controller.restoreNormalLighting()
-    return f.daemon.log
+    return f.daemon.timeline.map { String(format: "%.3f %@", $0.time, $0.entry) }
 }
 
 /// Turns the charging light on with the Mac unplugged and the battery at `charge`, then plugs it in, with
