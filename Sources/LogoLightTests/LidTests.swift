@@ -78,10 +78,14 @@ func lidTests(_ t: TestHarness) async {
         f.daemon.peak = 0
         var lowest = 1.0
         let start = f.clock.now
-        while f.clock.now - start < 6 {
+        // Only the effect moves the clock, so this gives up if it isn't playing.
+        var turns = 0
+        while f.clock.now - start < 6, turns < 200_000 {
             lowest = min(lowest, f.daemon.level)
             await Task.yield()
+            turns += 1
         }
+        t.expect(f.clock.now - start >= 6, "the effect stopped after \(f.clock.now - start) s")
         t.expect(f.controller.animator!.isPlaying, "the effect should still be playing")
         let level = LogoAnimator.level(forBrightness: 0.5)
         t.expect(abs(f.daemon.peak - level) <= 0.03, "peaked at \(f.daemon.peak), not \(level)")

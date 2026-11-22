@@ -345,7 +345,12 @@ func fadeTests(_ t: TestHarness) async {
         for polls in 1...6 {
             let f = Fixture(direct: true, timeDriven: true)
             f.controller.setBrightness(0.68)
-            while f.clock.slept.count < polls { await Task.yield() }
+            var turns = 0
+            while f.clock.slept.count < polls, turns < 100_000 {
+                await Task.yield()
+                turns += 1
+            }
+            t.expect(f.clock.slept.count >= polls, "the fade polled \(f.clock.slept.count) times, not \(polls)")
             f.controller.setBrightness(1)
             await settle()
             f.daemon.elapse(5)

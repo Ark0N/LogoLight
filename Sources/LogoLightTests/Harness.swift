@@ -4,6 +4,10 @@ import Foundation
 /// (XCTest and swift-testing ship only with Xcode).
 @MainActor
 final class TestHarness {
+    /// Ends the run if one test takes longer than this (the slowest takes a few seconds).
+    static let testTimeout = 60.0
+
+    private let watchdog = Watchdog(limit: TestHarness.testTimeout)
     private var passed = 0
     private var skipped = 0
     private var failed = 0
@@ -55,15 +59,18 @@ final class TestHarness {
     private func begin(_ name: String) {
         currentTest = name
         currentTestFailed = false
+        watchdog.watch(name)
     }
 
     private func end() {
+        watchdog.rest()
         guard !currentTestFailed else { return }
         passed += 1
         print("  ✓ \(currentTest)")
     }
 
     private func handle(_ error: Error) {
+        watchdog.rest()
         if let skip = error as? Skip {
             skipped += 1
             print("  - \(currentTest) (skipped: \(skip.reason))")
@@ -77,5 +84,38 @@ final class TestHarness {
         currentTestFailed = true
         failures.append("\(currentTest): \(message)")
         print("  ✗ \(currentTest): \(message)")
+    }
+}
+
+/// Ends the run when a test doesn't finish, and says which one. The tests wait on a fake clock by
+/// yielding, so one that waits for something that never happens spins forever on the main actor; this
+/// watches from its own queue.
+private final class Watchdog: @unchecked Sendable {
+    private let limit: Double
+    private let lock = NSLock()
+    private var running: (name: String, since: DispatchTime)?
+    private let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "watchdog"))
+
+    init(limit: Double) {
+        self.limit = limit
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [self] in check() }
+        timer.resume()
+    }
+
+    func watch(_ name: String) {
+        lock.withLock { running = (name, .now()) }
+    }
+
+    func rest() {
+        lock.withLock { running = nil }
+    }
+
+    private func check() {
+        guard let running = lock.withLock({ running }) else { return }
+        let seconds = Double(DispatchTime.now().uptimeNanoseconds - running.since.uptimeNanoseconds) / 1e9
+        guard seconds > limit else { return }
+        print("  ✗ \(running.name): still running after \(Int(limit)) s. Stopping the run here.")
+        exit(1)
     }
 }

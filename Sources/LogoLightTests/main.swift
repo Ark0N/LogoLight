@@ -1,5 +1,11 @@
 // Run with: swift run LogoLightTests
 
+import Foundation
+
+// Sent to a file or a pipe, output would otherwise wait in a buffer, and a run that hangs or crashes
+// would leave a log that stops in an earlier suite.
+setvbuf(stdout, nil, _IOLBF, 0)
+
 let harness = TestHarness()
 statusReaderTests(harness)
 macFinishTests(harness)
