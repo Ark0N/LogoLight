@@ -492,6 +492,32 @@ the site and as a GitHub Release, and installed on the MacBook; the README, site
 second line). Still not seen: the lid opening again, unplugging with the lid closed, and
 whether `screensDidSleep` arrives there.
 
+**Lid sleep didn't stay off** (issue #11, momorious, 2026-11-21: with 1.3.1 and 1.4.0 the light went
+off at a closed lid on power "until setting gets disabled and re-enabled", and again "the next
+time"; the user, 2026-11-24: "take care of that"). The kernel has one bit for lid sleep, and it's
+powerd's: powerd turns lid sleep off before the Mac sleeps and back on 5 s after every wake, by what
+it wrote last, and the app wrote the bit once (docs/corebrightnessd.md, "Lid sleep"; read from
+xnu's and powerd's sources; powerd's own way of keeping lid sleep off for a process, an assertion
+with `kIOPMAssertionAppliesOnLidClose`, needs an Apple entitlement). `LidSleepBlocker` moved to LogoLightCore
+(`LidSleep.swift`, tests in `LidSleepTests.swift` against `FakePowerManagement`, a fake kernel and
+powerd). It writes the bit again on every menu update, every 2 s while it holds, when the lid moves
+or a display comes or goes, and after a wake, when it takes its assertions anew first so powerd's
+write comes before its own. It also no longer turns lid sleep back on while an external display is
+connected: powerd has it off then with the same bit, for clamshell mode, and by the sources 1.3.1
+and 1.4.0 put a Mac with its lid closed in front of a display to sleep when the logo or the option
+was switched off or the app quit (not reported, not tried). The app logs "lid sleep was back on
+while keeping awake" when the kernel says so at a lid event. Branch `lid-sleep-kept-off`, draft PR #12, 301 tests.
+**Not checked on the MacBook** (its session was offline on 2026-11-24): on the Mac mini, which has
+no lid, the real assertions, kernel call and guard were run once from a scratch program. To check:
+install the build, sleep the Mac from the Apple menu, wake it, wait 10 s, then close the lid on
+power with no display (the logo should stay lit, where 1.4.0 goes dark); and with an external
+display and the lid closed, switch the logo off and on and quit LogoLight (the Mac should stay
+awake). An executable that uses `SystemLidSleep` has to hand `--lid-guard` to `LidSleep.runGuard`
+first thing, as the app's `main.swift` does: the guard is the same executable, and a scratch program
+that didn't started itself over and over. Not looked at: plugged in while asleep behind a closed
+lid, the app starts holding in a dark wake, where the Mac would then stay, logo dark (read from the
+code).
+
 **Morse code** (PR #1 from johnseth97, 2026-11-07, built on a Mac without the logo; merged
 2026-11-08): `MorseCode` (LogoLightCore) turns a message into
 `FadeStep`s with standard timing (dot 1 unit, dash 3, gaps 1/3/7, unit 0.2 s = 6 wpm), and
