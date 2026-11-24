@@ -1,4 +1,5 @@
 import AppKit
+import LogoLightCore
 
 // The lid guard (see `LidSleepBlocker`): no app, it only waits for the app that started it to exit.
 if let index = CommandLine.arguments.firstIndex(of: LidSleep.guardArgument),

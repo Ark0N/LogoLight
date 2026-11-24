@@ -99,7 +99,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         controller.autoEnablesPasswordless = !defaults.bool(forKey: Self.keepsPasswordDefaultsKey)
         controller.willPromptForPassword = { [weak self] in await self?.closeMenuForPasswordDialog() }
         observeDisplay()
-        lidObserver = LidObserver { [weak self] in self?.lidDidChange() }
+        lidObserver = LidObserver { [weak self] causesSleep in self?.lidDidChange(causesSleep: causesSleep) }
+        sleepBlocker.startKeeping()
         // About once a minute, and when the Mac is plugged in or unplugged. The controller only reads the
         // battery while it's followed, or while the logo breathes when it charges, and only changes the
         // logo when the percentage, or whether it's charging, has changed; the panel's slider then shows
@@ -523,7 +524,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
             observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.scheduleWake() }
+                MainActor.assumeIsolated {
+                    // powerd turns lid sleep back on after a wake (see `LidSleepBlocker`).
+                    self?.sleepBlocker.renew()
+                    self?.scheduleWake()
+                }
             })
         }
         wasBuiltInDisplayAwake = displayReader.isDisplayAwake()
@@ -538,6 +543,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// so connecting an external display doesn't restart an effect. `wasBuiltInDisplayAwake` is what
     /// was handled last, by this or by a sleep or wake.
     private func screensDidChange() {
+        // An external display coming or going changes what powerd does about lid sleep.
+        updateSleepBlocker()
         guard let isAwake = displayReader.isDisplayAwake() else { return }
         defer { wasBuiltInDisplayAwake = isAwake }
         guard let wasAwake = wasBuiltInDisplayAwake, wasAwake != isAwake else { return }
@@ -550,11 +557,21 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// The lid closed or opened. Without an external display nothing else says so: the app keeps the
-    /// Mac awake (`updateSleepBlocker()`), and the built-in display stays online. It's handled as the
-    /// built-in display going away or coming back.
-    private func lidDidChange() {
-        Self.log.info("lid \(self.displayReader.isLidClosed() == true ? "closed" : "open", privacy: .public), keeping awake: \(self.sleepBlocker.isHolding)")
+    /// The lid closed or opened (or the Mac was plugged in or unplugged, which the kernel reports the
+    /// same way). Without an external display nothing else says so: the app keeps the Mac awake
+    /// (`updateSleepBlocker()`), and the built-in display stays online. It's handled as the built-in
+    /// display going away or coming back.
+    ///
+    /// `causesSleep` is what the kernel made of lid sleep just then. If it was on while the app keeps
+    /// the Mac awake, something turned it back on since the app last turned it off: with the lid
+    /// closing, the Mac is going to sleep. The log says so (issue #11).
+    private func lidDidChange(causesSleep: Bool) {
+        let isClosed = displayReader.isLidClosed() == true
+        if sleepBlocker.isHolding, causesSleep {
+            Self.log.notice("lid \(isClosed ? "closed" : "open", privacy: .public): lid sleep was back on while keeping awake\(isClosed ? ", the Mac sleeps" : "", privacy: .public)")
+        } else {
+            Self.log.info("lid \(isClosed ? "closed" : "open", privacy: .public), keeping awake: \(self.sleepBlocker.isHolding)")
+        }
         screensDidChange()
     }
 
@@ -567,7 +584,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Keeps the Mac awake when the lid closes, while Lit with Lid Closed is on, the logo is on and
     /// the Mac is on power: without an external display a closed lid puts it to sleep, and the logo
     /// goes dark with it. On battery it's left to sleep. Unplugged with the lid closed, lid sleep comes back
-    /// on, and the Mac sleeps.
+    /// on, and the Mac sleeps. Called on every menu update, which also turns lid sleep off again if
+    /// something has turned it on meanwhile.
     private func updateSleepBlocker() {
         sleepBlocker.set(controller.lightsWithLidClosed && controller.canLightWithLidClosed
             && status.setting == .on && Battery.powerState()?.isPluggedIn == true)
