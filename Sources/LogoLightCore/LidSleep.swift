@@ -11,6 +11,8 @@ public protocol LidSleepSystem: AnyObject {
     /// Takes the assertions that keep the Mac awake, then releases any it took before.
     func takeAssertions()
     func releaseAssertions()
+    /// Whether an external display is connected, awake or asleep.
+    func hasExternalDisplay() -> Bool
     /// Starts the process that turns lid sleep back on when this one exits. Returns whether it started.
     func startGuard() -> Bool
 }
@@ -32,7 +34,10 @@ public protocol LidSleepSystem: AnyObject {
 /// - writes it again every time it's asked to hold (`set(true)`, which the app calls on every menu
 ///   update), every `keepInterval` (`keep()`), and after a wake (`renew()`);
 /// - takes its assertions before it writes, and again after a wake. powerd looks at lid sleep as an
-///   assertion is taken, so it turns lid sleep back on before the write, not 5 s after it.
+///   assertion is taken, so it turns lid sleep back on before the write, not 5 s after it;
+/// - turns lid sleep back on only once no external display is connected. With one, powerd has it
+///   off with the same bit, for clamshell mode, and doesn't write it again: the Mac would go to
+///   sleep behind its display. powerd turns it on itself when the display goes.
 ///
 /// The kernel keeps the setting after the process that made it has gone, so a LogoLight that
 /// crashed or was killed would leave a Mac that stays awake in a bag. A second process, the guard
@@ -45,6 +50,8 @@ public final class LidSleepBlocker {
     private let system: LidSleepSystem
     /// Whether the Mac is kept awake behind a closed lid.
     public private(set) var isHolding = false
+    /// Whether lid sleep is off because of this, and still has to be turned back on.
+    private var owesLidSleep = false
     private var hasGuard = false
     private var keepsTime = false
     private var timer: Timer?
@@ -67,12 +74,13 @@ public final class LidSleepBlocker {
         keep()
     }
 
-    /// Turns lid sleep off again while the Mac is kept awake, whatever turned it on.
+    /// Writes lid sleep again as it should be: off while the Mac is kept awake, and back on once the
+    /// external display that held that up has gone.
     public func keep() {
         set(isHolding)
     }
 
-    /// Has `keep()` run every `keepInterval` from now on, while the Mac is kept awake.
+    /// Has `keep()` run every `keepInterval` from now on, while there's anything to keep.
     public func startKeeping() {
         keepsTime = true
         updateTimer()
@@ -85,6 +93,7 @@ public final class LidSleepBlocker {
         }
         if system.setLidSleepDisabled(true) {
             isHolding = true
+            owesLidSleep = true
         } else if !isHolding {
             // The kernel didn't take it: tried again the next time.
             system.releaseAssertions()
@@ -92,14 +101,16 @@ public final class LidSleepBlocker {
     }
 
     private func letGo() {
-        guard isHolding else { return }
-        isHolding = false
-        system.releaseAssertions()
-        _ = system.setLidSleepDisabled(false)
+        if isHolding {
+            isHolding = false
+            system.releaseAssertions()
+        }
+        guard owesLidSleep, !system.hasExternalDisplay() else { return }
+        if system.setLidSleepDisabled(false) { owesLidSleep = false }
     }
 
     private func updateTimer() {
-        let isNeeded = keepsTime && isHolding
+        let isNeeded = keepsTime && (isHolding || owesLidSleep)
         guard isNeeded != (timer != nil) else { return }
         timer?.invalidate()
         timer = nil
@@ -141,6 +152,10 @@ public final class SystemLidSleep: LidSleepSystem {
         assertions = []
     }
 
+    public func hasExternalDisplay() -> Bool {
+        LidSleep.hasExternalDisplay()
+    }
+
     /// The guard outlives this process by a moment, whatever ends it. It's this executable, which has
     /// to hand `LidSleep.guardArgument` to `LidSleep.runGuard(for:)` before anything else, as the
     /// app's main.swift does: one that doesn't runs as itself again, and starts a guard of its own.
@@ -172,8 +187,15 @@ public enum LidSleep {
         return IOConnectCallScalarMethod(connection, UInt32(kPMSetClamshellSleepState), &input, 1, nil, nil) == KERN_SUCCESS
     }
 
+    /// Whether an external display is connected: powerd then has lid sleep off itself, with the bit
+    /// `setDisabled(_:)` writes.
+    public static func hasExternalDisplay() -> Bool {
+        SystemHardware().hasExternalDisplay() == true
+    }
+
     /// The guard process: waits for the app (`pid`) to exit, turns lid sleep back on, and exits.
-    /// The app has done that itself if it quit normally; doing it twice does no harm.
+    /// The app has done that itself if it quit normally; doing it twice does no harm. Like the app,
+    /// it leaves lid sleep to powerd while an external display is connected.
     public static func runGuard(for pid: pid_t) -> Never {
         let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
         source.setEventHandler { finishGuard() }
@@ -184,7 +206,7 @@ public enum LidSleep {
     }
 
     private static func finishGuard() -> Never {
-        _ = setDisabled(false)
+        if !hasExternalDisplay() { _ = setDisabled(false) }
         exit(0)
     }
 }

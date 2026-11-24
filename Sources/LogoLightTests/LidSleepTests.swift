@@ -71,18 +71,21 @@ final class FakePowerManagement: LidSleepSystem {
         isFullWake = true
     }
 
-    func connectDisplay() {
-        isDesktopMode = true
+    func connectDisplay(desktopMode: Bool = true) {
+        isDisplayConnected = true
+        isDesktopMode = desktopMode
         powerdLooks()
     }
 
     func disconnectDisplay() {
+        isDisplayConnected = false
         isDesktopMode = false
         powerdLooks()
     }
 
     // MARK: What the app asks
 
+    private var isDisplayConnected = false
     /// Every call the app made, in order.
     private(set) var calls: [String] = []
 
@@ -103,6 +106,8 @@ final class FakePowerManagement: LidSleepSystem {
         calls.append("release")
         powerdLooks()
     }
+
+    func hasExternalDisplay() -> Bool { isDisplayConnected }
 
     func startGuard() -> Bool {
         calls.append("guard")
@@ -225,6 +230,41 @@ func lidSleepTests(_ t: TestHarness) {
         blocker.set(false)
         t.expect(mac.isAsleep)
         t.expectEqual(Array(mac.calls.suffix(2)), ["release", "lid sleep on"])
+    }
+
+    t.test("leaves lid sleep off for an external display's clamshell mode") {
+        let mac = FakePowerManagement()
+        let blocker = LidSleepBlocker(system: mac)
+        mac.connectDisplay()
+        blocker.set(true)
+        mac.closeLid()
+        t.expect(!mac.isAsleep)
+        // The logo is switched off, or the app quits: powerd still has lid sleep off, with the same bit.
+        blocker.set(false)
+        t.expect(!mac.isAsleep, "the Mac should stay awake behind its display")
+        t.expect(mac.isLidSleepDisabled)
+        // The display goes: powerd turns lid sleep on itself, and the Mac sleeps as it does anyway.
+        mac.disconnectDisplay()
+        t.expect(mac.isAsleep)
+    }
+
+    t.test("turns lid sleep back on once the display has gone, if powerd doesn't") {
+        let mac = FakePowerManagement()
+        let blocker = LidSleepBlocker(system: mac)
+        // A display powerd doesn't keep the Mac awake for.
+        mac.connectDisplay(desktopMode: false)
+        blocker.set(true)
+        blocker.set(false)
+        t.expect(mac.isLidSleepDisabled)
+        blocker.keep()
+        t.expect(mac.isLidSleepDisabled, "lid sleep should stay off while the display is connected")
+        mac.disconnectDisplay()
+        t.expect(mac.isLidSleepDisabled, "the fake's powerd shouldn't write here: it never had lid sleep off")
+        blocker.keep()
+        t.expect(!mac.isLidSleepDisabled)
+        t.expectEqual(mac.calls.filter { $0 == "lid sleep on" }.count, 1)
+        blocker.keep()
+        t.expectEqual(mac.calls.filter { $0 == "lid sleep on" }.count, 1)
     }
 
     t.test("writes nothing while it hasn't held") {
