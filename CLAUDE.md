@@ -506,8 +506,10 @@ write comes before its own. It also no longer turns lid sleep back on while an e
 connected: powerd has it off then with the same bit, for clamshell mode, and by the sources 1.3.1
 and 1.4.0 put a Mac with its lid closed in front of a display to sleep when the logo or the option
 was switched off or the app quit (not reported, not tried). The app logs "lid sleep was back on
-while keeping awake" when the kernel says so at a lid event. Branch `lid-sleep-kept-off`, draft PR #12, 301 tests.
-**Not checked on the MacBook** (its session was offline on 2026-11-24): on the Mac mini, which has
+while keeping awake" when the kernel says so at a lid event. PR #12 (branch `lid-sleep-kept-off`),
+301 tests, merged 2026-11-25 (4a5a26f) at the user's word ("merge the PR and make a new release"),
+with its checks still open.
+**Not checked on the MacBook** (its session was offline on 2026-11-24 and 25): on the Mac mini, which has
 no lid, the real assertions, kernel call and guard were run once from a scratch program. To check:
 install the build, sleep the Mac from the Apple menu, wake it, wait 10 s, then close the lid on
 power with no display (the logo should stay lit, where 1.4.0 goes dark); and with an external
@@ -517,6 +519,17 @@ first thing, as the app's `main.swift` does: the guard is the same executable, a
 that didn't started itself over and over. Not looked at: plugged in while asleep behind a closed
 lid, the app starts holding in a dark wake, where the Mac would then stay, logo dark (read from the
 code).
+**1.4.1, the release with this fix, isn't out** (2026-11-25): nothing could make the notarized build.
+The MacBook's session was offline (the user was travelling with the MacBook), and on the Mac mini
+the login keychain can't be used from a Codeman session ("User interaction is not allowed"), so
+neither the Developer ID nor a notarytool profile. The version bump waits on the branch
+`release-1.4.1`, one commit on `main` ("Make it 1.4.1": the README's download links, `build-app.sh`,
+the site's JSON-LD, `llms.txt`, the sitemap). It's kept off `main` until the zip exists: the README
+links `releases/latest/download/LogoLight-1.4.1.zip`, a 404 while the latest release is 1.4.0. To
+finish, on the MacBook: check out that branch on top of `main`, set its two dates (2026-11-25) to
+the day, do the two checks above, `make dist`, then go on as "For a new version" says, fast-forward
+`main` to the commit that was built and tag it. The notes are to say what the fix is and name
+issue #11, and that it also covers the external display case.
 
 **Morse code** (PR #1 from johnseth97, 2026-11-07, built on a Mac without the logo; merged
 2026-11-08): `MorseCode` (LogoLightCore) turns a message into
