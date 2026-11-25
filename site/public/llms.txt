@@ -5,7 +5,7 @@
 - Works only on the MacBook Pro with PROLED XDR Display, the model with the illuminated Apple logo on the back of the lid. Needs macOS 14 or later (these Macs ship with macOS 27). On other Macs it opens but says the logo isn't available.
 - Free: every feature, with no purchase or subscription. An optional Buy Me a Coffee link unlocks nothing.
 - Signed with a Developer ID and notarized by Apple. It isn't on the Mac App Store, because it uses system interfaces that Store apps aren't allowed to use, and Store apps must run in a sandbox.
-- Current version: 1.4.0, released 2026-11-20. Made by Ark0N.
+- Current version: 1.4.1, released 2026-11-25. Made by Ark0N.
 - Not affiliated with or endorsed by Apple Inc.
 
 ## Features
