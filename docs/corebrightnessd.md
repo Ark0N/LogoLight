@@ -413,10 +413,76 @@ how LogoLight's Lit with Lid Closed works.
   notification). The `PreventSystemSleep` assertion alone isn't enough: with only that, the Mac
   entered a dark wake when the lid closed and the logo stayed dark. LogoLight holds all three, and
   a guard process turns lid sleep back on when the app exits, since the kernel keeps the setting.
+  The setting doesn't last by itself, though: see "Lid sleep" below.
 - **A client's `DisplayPowerStateEvent = 4` (DidSleep) darkens the logo until a DidWake.** The
   probe wrote it at its end, and the logo stayed dark with the lid open (`Factor` 0, with
   `DisplayLogicalState` 2, `CBClamshellState` 0 and `ClamshellUpdate = 0` written again) until
   `DisplayPowerStateEvent = 2` was written, which lit it within 3 s. LogoLight never writes this key.
+
+## Lid sleep
+
+Lit with Lid Closed keeps the Mac awake behind its lid, on power with no external display, by
+turning lid sleep off: `kPMSetClamshellSleepState` on `IOPMrootDomain`'s user client, which needs
+no privileges. That setting isn't LogoLight's to keep. **Read on 2026-11-24 from Apple's sources**,
+for issue #11: xnu's `iokit/Kernel/IOPMrootDomain.cpp` and `RootDomainUserClient.cpp`, and powerd's
+`pmconfigd/PMAssertions.c`, `pmconfigd.m` and `PMDisplay.m` (PowerManagement-1846). macOS 27.2's
+powerd has the same log messages among its strings. **None of it has been measured on the MacBook
+yet.**
+
+- **The kernel has one bit for every caller.** `clamshellSleepDisableMask` has a bit the kernel
+  uses itself, around a wake, and `kClamshellSleepDisablePowerd`, which every
+  `kPMSetClamshellSleepState` call sets or clears, whoever makes it. A closed lid puts the Mac to
+  sleep only while the mask is 0 (`shouldSleepOnClamshellClosed()`). Clearing the bit with the lid
+  closed puts the Mac to sleep at once (`setClamShellSleepDisable`).
+- **The bit can't be read back.** The root domain's `AppleClamshellCausesSleep` property, and
+  `kClamshellSleepBit` in the argument of `kIOPMMessageClamshellStateChange`, say what a closed lid
+  would do. Both are only brought up to date when the lid moves or the Mac is plugged in or
+  unplugged (`sendClientClamshellNotification()`), not when the bit is written. LogoLight logs what
+  the message said when it disagrees with what the app is doing.
+- **The bit is powerd's.** On Apple silicon, powerd's `setClamshellSleepState()` wants lid sleep
+  off in desktop mode (WindowServer tells it that an external display is there, which is clamshell
+  mode; on battery only if WindowServer says so) and while an assertion with the lid modifier is
+  active (`kIOPMAssertionAppliesOnLidClose`, which needs an Apple entitlement, and WindowServer's
+  own while a display is plugged in or out). It writes the bit only when that goes from wanted to
+  not wanted or back, compared with what it wrote last (`gPrevClamshellSleepState`), not with the
+  bit.
+- **powerd looks** when an assertion against system sleep (`PreventSystemSleep`) or a user activity
+  assertion is taken or released, when desktop mode changes, and **5 s after every wake**
+  (`kClamshellEvaluateDelay`, on `kIOMessageSystemWillPowerOn`). macOS 27.2's powerd also has a
+  message for a look when the power source changes.
+- **Before the Mac sleeps, powerd turns lid sleep off** (`disableClamshellSleepState()`, on
+  `kIOMessageSystemWillSleep`) and notes that it did; a look during a dark wake writes nothing and
+  notes the same. So its first look after a full wake turns lid sleep back on, unless a display is
+  connected. That undid LogoLight's write, which was made once (issue #11: with 1.3.1 and 1.4.0,
+  once the Mac had slept, a closed lid put it to sleep until the option was switched off and on,
+  which wrote the bit again).
+- **In desktop mode powerd doesn't write again.** An app that clears the bit then leaves a Mac
+  with its lid closed in front of a display to go to sleep, at once and after each wake, until the
+  display is plugged in anew. LogoLight 1.3.1 and 1.4.0 cleared it whenever they stopped keeping
+  the Mac awake (the logo or the option switched off, unplugged, quit). Nobody reported that.
+
+What `LidSleepBlocker` (LogoLightCore) does about it:
+
+- It writes the bit again every time it's asked to hold (on every menu update), every 2 s while it
+  holds, when the lid moves or a display comes or goes, and after a wake.
+- It takes its assertions before it writes, and anew after a wake. powerd looks as the
+  `PreventSystemSleep` one is taken, so its write comes then, before LogoLight's, and its look 5 s
+  after the wake finds nothing to change.
+- It turns lid sleep back on only with no external display connected, or once the display has
+  gone. Its guard process does the same.
+
+What that leaves: when powerd turns lid sleep on with the lid already closed, the Mac sleeps before
+anything can be written (a display unplugged from a Mac in clamshell mode, as without LogoLight).
+Another app that writes the bit undoes LogoLight's write for up to 2 s, and LogoLight's undoes
+that app's for good, unless it writes again too. (Codeman's `keepAwake.lid` keeps the Mac awake
+behind a closed lid as well; how hasn't been looked at here.) And any connected display counts as
+one powerd has lid sleep off for, also one it doesn't keep the Mac awake for: if LogoLight quits
+while such a display is connected, lid sleep stays off until powerd next turns it on, 5 s after
+the next wake at the latest.
+
+To watch powerd at it:
+`/usr/bin/log stream --info --predicate 'process == "powerd" AND eventMessage CONTAINS[c] "clamshell"'`
+("EvaluateClamshell. Disable : 0" is lid sleep turned back on).
 
 ## Reading the LED without corebrightnessd
 
