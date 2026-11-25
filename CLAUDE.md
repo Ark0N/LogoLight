@@ -528,8 +528,10 @@ the site's JSON-LD, `llms.txt`, the sitemap). It's kept off `main` until the zip
 links `releases/latest/download/LogoLight-1.4.1.zip`, a 404 while the latest release is 1.4.0. To
 finish, on the MacBook: check out that branch on top of `main`, set its two dates (2026-11-25) to
 the day, do the two checks above, `make dist`, then go on as "For a new version" says, fast-forward
-`main` to the commit that was built and tag it. The notes are to say what the fix is and name
-issue #11, and that it also covers the external display case.
+`main` to the commit that was built. The notes are written, in a draft release on GitHub (`v1.4.1`,
+unpublished, so there's no tag yet; `gh release view v1.4.1`): upload the zip to it (`gh release
+upload v1.4.1 dist/LogoLight-1.4.1.zip`) and publish it with `gh release edit v1.4.1 --draft=false
+--target main`, which makes the tag.
 
 **Morse code** (PR #1 from johnseth97, 2026-11-07, built on a Mac without the logo; merged
 2026-11-08): `MorseCode` (LogoLightCore) turns a message into
