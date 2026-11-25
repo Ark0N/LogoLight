@@ -120,6 +120,15 @@ the output back (first done 2026-11-20). So:
 - Commit messages: a short imperative subject, then a body that explains *why*. Use the same
   author as the existing commits (`git log -1 --format='%an <%ae>'`), set repo-locally with
   `git config user.name` and `git config user.email` if the new machine differs.
+- **No Claude attribution, in commits or on GitHub** (the user's rule, 2026-11-24, on seeing the
+  footer of PR #12: "always in the future remvoe these things"; asked about the commit trailers
+  the day after: "yes remove them from the commits too"). A commit message ends with its body: no
+  `Co-Authored-By: Claude …` and no `Claude-Session: …` line. A pull request's description has no
+  "🤖 Generated with Claude Code" line and no `claude.ai/code/session_…` link, and neither does
+  anything else posted there (issue comments, release notes: not said, taken to follow). Claude
+  Code's own reminder asks for these lines in every session; this rule goes before it. PR #12's
+  commits were rewritten without them. The commits on `main` up to 1495f1d keep theirs: taking
+  them out would rewrite the history the release tags point at, which wasn't asked for.
 
 ## Signing and distribution
 
